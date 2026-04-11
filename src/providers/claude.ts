@@ -321,6 +321,8 @@ function remainingMetric(
     label,
     name,
     value: Math.round(remaining),
+    numericValue: remaining,
+    numericUnit: "percent",
     unit: "%",
     ratio: remaining / 100,
     direction: "up",
@@ -394,16 +396,19 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
     });
   }
 
-  // Prepaid balance (from the speculative probe). Only emitted
-  // when we successfully discovered the balance endpoint AND it
-  // returned a non-negative number.
-  if (typeof extra.balanceCents === "number" && extra.balanceCents >= 0) {
+  // Prepaid balance from /api/organizations/{orgId}/prepaid/credits.
+  // Rendered as a dollar amount with the raw numericValue attached
+  // so the render layer can apply threshold-based colors (orange
+  // when low, red when negative) without parsing the display string.
+  if (typeof extra.balanceCents === "number") {
     const bal = extra.balanceCents / 100;
     out.push({
       id: "extra-usage-balance",
       label: "BALANCE",
       name: "Extra usage prepaid balance",
       value: `$${bal.toFixed(2)}`,
+      numericValue: bal,
+      numericUnit: "dollars",
       updatedAt: now,
     });
   }
@@ -443,6 +448,8 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       label: "EXTRA",
       name: "Extra usage headroom",
       value: Math.round(remPct),
+      numericValue: remPct,
+      numericUnit: "percent",
       unit: "%",
       ratio: remPct / 100,
       direction: "up",
@@ -453,6 +460,8 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       label: "EXTRA",
       name: `Extra usage remaining (${currency})`,
       value: `$${remaining.toFixed(2)}`,
+      numericValue: remaining,
+      numericUnit: "dollars",
       ratio: remPct / 100,
       direction: "up",
       updatedAt: now,
@@ -462,6 +471,8 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       label: "EXTRA$",
       name: `Extra usage spent (${currency})`,
       value: `$${spent.toFixed(2)}`,
+      numericValue: spent,
+      numericUnit: "dollars",
       ratio: usedPct / 100,
       direction: "up",
       updatedAt: now,
@@ -609,12 +620,20 @@ export class ClaudeProvider implements Provider {
     const cs = getClaudeSettings();
     const oauthExtra = normaliseExtraUsage(response.extra_usage);
     let extraSource: ExtraUsageSource | undefined;
-    let extraSourceLabel: "oauth" | "web" | "none" = "none";
+    let extraSourceLabel: "oauth" | "web" | "cache" | "none" = "none";
 
     const oauthUsable =
       !!oauthExtra &&
       oauthExtra.isEnabled &&
       (oauthExtra.monthlyLimit ?? 0) > 0;
+
+    // Policy: do we actually need to hit claude.ai's web endpoint
+    // this tick, or can we reuse last-fetched extras? keyDown
+    // force=true always re-fetches, bypassing the policy.
+    const policy = shouldRefreshExtras(response, ctx?.force === true);
+    debugLogSink?.(
+      `claude: extras policy → ${policy.refresh ? "REFRESH" : "REUSE"} (${policy.reason})`,
+    );
 
     function useOauthExtras(): void {
       if (!oauthExtra) return;
@@ -625,6 +644,7 @@ export class ClaudeProvider implements Provider {
         currency: oauthExtra.currency ?? "USD",
       };
       extraSourceLabel = "oauth";
+      cachedExtras = { source: extraSource, capturedAt: Date.now() };
     }
 
     async function tryWebExtras(why: string): Promise<void> {
@@ -633,6 +653,7 @@ export class ClaudeProvider implements Provider {
       if (web) {
         extraSource = web;
         extraSourceLabel = "web";
+        cachedExtras = { source: web, capturedAt: Date.now() };
         debugLogSink?.(
           `claude: web path returned monthlyLimit=${web.monthlyLimitCents}c used=${web.usedCreditsCents}c isEnabled=${web.isEnabled}`,
         );
@@ -641,18 +662,15 @@ export class ClaudeProvider implements Provider {
       }
     }
 
-    if (cs.source === "oauth") {
-      // OAuth-only: no web call, even if OAuth extras are missing.
+    if (!policy.refresh && cachedExtras) {
+      // Reuse cached extras from a prior fetch — no claude.ai call.
+      extraSource = cachedExtras.source;
+      extraSourceLabel = "cache";
+    } else if (cs.source === "oauth") {
       if (oauthUsable) useOauthExtras();
     } else if (cs.source === "cookie") {
-      // Cookie-primary: always call the web endpoint, skip OAuth
-      // extras entirely even when they would be usable. The user
-      // is explicitly telling us cookie is the authoritative
-      // source for this data.
       await tryWebExtras("source=cookie");
     } else {
-      // "both" (default): OAuth first, cookie fallback when OAuth
-      // has nothing usable.
       if (oauthUsable) {
         useOauthExtras();
       } else {
@@ -672,7 +690,7 @@ export class ClaudeProvider implements Provider {
       ? Object.keys(rawExtra).sort().join(",")
       : "(missing)";
     const extraValues = extraSource
-      ? `source=${extraSourceLabel} isEnabled=${extraSource.isEnabled} monthlyLimitCents=${extraSource.monthlyLimitCents} usedCreditsCents=${extraSource.usedCreditsCents}`
+      ? `source=${extraSourceLabel} isEnabled=${extraSource.isEnabled} monthlyLimitCents=${extraSource.monthlyLimitCents} usedCreditsCents=${extraSource.usedCreditsCents} balanceCents=${extraSource.balanceCents ?? "—"}`
       : "(none)";
     debugLogSink?.(
       `claude response: topKeys=[${topKeys}] extra_usage keys=[${extraKeys}] values=${extraValues}`,

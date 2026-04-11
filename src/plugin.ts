@@ -25,6 +25,26 @@ import {
 interface KeySettings {
   providerId?: string;
   metricId?: string;
+  /**
+   * Threshold at which to paint the fill in the "warning" color
+   * (default orange) because the value is getting low.
+   *
+   * Interpretation depends on the metric's `numericUnit`:
+   *   - "percent" → warn when numericValue ≤ this (e.g. 20 = warn at 20%)
+   *   - "dollars" → warn when numericValue ≤ this (e.g. 10 = warn below $10)
+   *   - "cents"   → warn when numericValue ≤ this
+   *   - "count"   → warn when numericValue ≤ this
+   *
+   * Default handled at render time if omitted — 20 for percent,
+   * 10 for dollars.
+   */
+  warnBelow?: number;
+  /** Same semantic as `warnBelow` but for the critical/red threshold. */
+  criticalBelow?: number;
+  /** Hex color for the warning state. Default "#f59e0b" (amber). */
+  warnColor?: string;
+  /** Hex color for the critical state. Default "#ef4444" (red). */
+  criticalColor?: string;
   /** Optional override for the label rendered inside the SVG. Blank = use the metric's default. Multi-line OK. */
   labelOverride?: string;
   /** Hide the inner SVG label entirely (e.g. when using the Stream Deck native title). */
@@ -251,6 +271,39 @@ function isRateLimit(errorMessage: string): boolean {
 }
 
 /**
+ * Compute whether a metric should render in its warn / critical
+ * color based on per-button threshold settings.
+ *
+ * Returns "normal" when no thresholds apply (metric lacks a
+ * `numericValue`, or thresholds are unset / out of range).
+ *
+ * Default thresholds (applied when the user hasn't set their own):
+ *   - percent metrics: warn at 20, critical at 10
+ *   - dollar metrics : warn at 10, critical at 0 (negative)
+ */
+function computeThresholdState(
+  metric: MetricValue,
+  settings: KeySettings,
+): "normal" | "warn" | "critical" {
+  if (typeof metric.numericValue !== "number") return "normal";
+  const n = metric.numericValue;
+
+  const defaults =
+    metric.numericUnit === "dollars" || metric.numericUnit === "cents"
+      ? { warn: 10, critical: 0 }
+      : metric.numericUnit === "percent"
+        ? { warn: 20, critical: 10 }
+        : undefined;
+
+  const warn = settings.warnBelow ?? defaults?.warn;
+  const critical = settings.criticalBelow ?? defaults?.critical;
+
+  if (typeof critical === "number" && n <= critical) return "critical";
+  if (typeof warn === "number" && n <= warn) return "warn";
+  return "normal";
+}
+
+/**
  * Render a "loading" face for a brand-new key that hasn't had its
  * first fetch yet. Picks the provider's brand color when we can
  * identify the provider from the key settings, otherwise falls
@@ -331,11 +384,26 @@ function renderMetric(
     input.direction = metric.direction;
   }
 
-  // Fill color priority: user override > provider brand color.
-  // Provider brand colors are borrowed from CodexBar's
-  // ProviderBranding.color so the buttons feel visually consistent
-  // with that app (warm coral for Claude, teal for Codex, etc.).
-  if (settings.fillColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.fillColor)) {
+  // Fill color priority:
+  //   1. critical threshold hit (numericValue ≤ criticalBelow)
+  //   2. warn threshold hit (numericValue ≤ warnBelow)
+  //   3. user fillColor override
+  //   4. provider brand color
+  //
+  // Thresholds compare against the metric's raw numericValue so
+  // the display format ($204.80 / 42% / "OUT") doesn't need to be
+  // parsed. If a metric has no numericValue (e.g. ON/OFF), the
+  // threshold check is skipped and we fall through to 3/4.
+  const thresholdState = computeThresholdState(metric, settings);
+  if (thresholdState === "critical") {
+    input.fill = settings.criticalColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.criticalColor)
+      ? settings.criticalColor
+      : "#ef4444";
+  } else if (thresholdState === "warn") {
+    input.fill = settings.warnColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.warnColor)
+      ? settings.warnColor
+      : "#f59e0b";
+  } else if (settings.fillColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.fillColor)) {
     input.fill = settings.fillColor;
   } else {
     input.fill = provider.brandColor;

@@ -24,7 +24,15 @@ export interface MetricValue {
   name: string;
   /** Current value (number or preformatted string). */
   value: number | string;
-  /** Optional unit string, e.g. `"%"`, `" credits"`. */
+  /**
+   * Raw numeric value — useful when `value` is preformatted
+   * (e.g. `"$204.80"`). Lets the render layer compare thresholds
+   * (warn/critical colors) without parsing the display string.
+   */
+  numericValue?: number;
+  /** Unit the `numericValue` is expressed in, one of a known set. */
+  numericUnit?: "percent" | "dollars" | "cents" | "count";
+  /** Optional unit string for display, e.g. `"%"`, `" credits"`. */
   unit?: string;
   /** Optional 0..1 ratio driving the button fill. */
   ratio?: number;

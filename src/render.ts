@@ -266,11 +266,20 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
   let glyphElementFront = "";
   if (showGlyph && input.glyph) {
     if (glyphMode === "watermark") {
-      const gSize = 88;
+      // 76px centered watermark BEHIND the fill rect at 0.40
+      // opacity. White-on-dark is highly visible at 40%; the
+      // brand-colored fill rect covers the bottom portion as the
+      // meter rises.
+      const gSize = 76;
       const gOff = (CANVAS - gSize) / 2;
-      glyphElementBack = `<g transform="translate(${gOff} ${gOff}) scale(${gSize / 100})" fill="${fg}" fill-opacity="0.22"><path d="${input.glyph.d}"/></g>`;
+      glyphElementBack = `<g transform="translate(${gOff} ${gOff}) scale(${gSize / 100})" fill="${fg}" fill-opacity="0.40"><path d="${input.glyph.d}"/></g>`;
     } else if (glyphMode === "centered") {
-      const gSize = 88;
+      // 60px focal logo. Smaller than the watermark so it doesn't
+      // crowd the border + label + countdown around it. Currently
+      // unused (the MAX'D face was replaced by a synthesized
+      // normal-looking metric in plugin.ts) but kept for any
+      // future render path that wants the focal logo treatment.
+      const gSize = 60;
       const gOff = (CANVAS - gSize) / 2;
       glyphElementFront = `<g transform="translate(${gOff} ${gOff}) scale(${gSize / 100})" fill="${fg}" fill-opacity="0.92"><path d="${input.glyph.d}"/></g>`;
     } else if (glyphMode === "corner") {

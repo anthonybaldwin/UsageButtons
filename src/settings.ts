@@ -93,6 +93,13 @@ export interface GlobalSettings {
    * babysit on every key individually.
    */
   invertFill?: boolean;
+  /**
+   * Plugin-wide "show provider glyph watermark on every button"
+   * toggle. Default true. Per-button `showGlyph: false` can opt
+   * out individually; setting this to false hides every glyph
+   * globally regardless of per-button settings.
+   */
+  showGlyphs?: boolean;
   /** Per-provider source preferences + credentials. */
   providers?: ProviderSettingsMap;
 }
@@ -102,6 +109,7 @@ let current: GlobalSettings = {
   defaultValueSize: "large",
   defaultSubvalueSize: "large",
   invertFill: false,
+  showGlyphs: true,
   providers: {},
 };
 
@@ -144,6 +152,7 @@ export function setGlobalSettings(next: GlobalSettings): void {
     defaultValueSize: normaliseTextSize(next.defaultValueSize, "large"),
     defaultSubvalueSize: normaliseTextSize(next.defaultSubvalueSize, "large"),
     invertFill: next.invertFill === true,
+    showGlyphs: next.showGlyphs !== false,
     providers,
   };
 }
@@ -156,6 +165,9 @@ export function getDefaultSubvalueSize(): TextSize {
 }
 export function getInvertFill(): boolean {
   return current.invertFill === true;
+}
+export function getShowGlyphs(): boolean {
+  return current.showGlyphs !== false;
 }
 
 export function getGlobalSettings(): Readonly<GlobalSettings> {

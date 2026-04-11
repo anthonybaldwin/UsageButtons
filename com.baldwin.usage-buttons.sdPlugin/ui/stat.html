@@ -177,6 +177,11 @@
       <label for="showBorder">Draw border around the tile</label>
     </div>
 
+    <div class="checkbox-row">
+      <input id="showGlyph" type="checkbox" checked>
+      <label for="showGlyph">Show provider logo on this button</label>
+    </div>
+
     <div class="group-heading">Warn / critical thresholds</div>
     <p class="hint" style="margin: 0 0 8px">
       When the metric's value drops below these thresholds, the
@@ -224,6 +229,10 @@
     <div class="checkbox-row">
       <input id="invertFill" type="checkbox">
       <label for="invertFill">Invert fill — show "% used" instead of "% remaining"</label>
+    </div>
+    <div class="checkbox-row">
+      <input id="showGlyphs" type="checkbox" checked>
+      <label for="showGlyphs">Show provider logo watermark on every button</label>
     </div>
     <p class="hint">
       Applies to every button. CodexBar's menu bar shows "N% used"
@@ -387,6 +396,7 @@
       document.getElementById("hideLabel").checked = !!settings.hideLabel;
       document.getElementById("showResetTimer").checked = settings.showResetTimer !== false;
       document.getElementById("showBorder").checked = settings.showBorder !== false;
+      document.getElementById("showGlyph").checked = settings.showGlyph !== false;
       document.getElementById("valueSize").value = settings.valueSize || "";
       document.getElementById("subvalueSize").value = settings.subvalueSize || "";
       document.getElementById("fillDirection").value = settings.fillDirection || "up";
@@ -415,6 +425,7 @@
       document.getElementById("defaultSubvalueSize").value =
         validSize(globals.defaultSubvalueSize);
       document.getElementById("invertFill").checked = globals.invertFill === true;
+      document.getElementById("showGlyphs").checked = globals.showGlyphs !== false;
       const claude = (globals.providers && globals.providers.claude) || {};
       const src =
         claude.source === "oauth" || claude.source === "cookie"
@@ -465,6 +476,7 @@
         hideLabel:      document.getElementById("hideLabel").checked,
         showResetTimer: document.getElementById("showResetTimer").checked,
         showBorder:     document.getElementById("showBorder").checked,
+        showGlyph:      document.getElementById("showGlyph").checked,
         // Empty-string "Use plugin default" omits the field so it
         // falls through to the global default at render time.
         ...(valueRaw ? { valueSize: valueRaw } : {}),
@@ -495,6 +507,7 @@
         defaultValueSize:      document.getElementById("defaultValueSize").value,
         defaultSubvalueSize:   document.getElementById("defaultSubvalueSize").value,
         invertFill:            document.getElementById("invertFill").checked,
+        showGlyphs:            document.getElementById("showGlyphs").checked,
         providers: {
           claude: {
             source,
@@ -522,7 +535,8 @@
     });
     for (const id of [
       "metric", "refreshMinutes", "labelOverride", "hideLabel",
-      "showResetTimer", "showBorder", "valueSize", "subvalueSize",
+      "showResetTimer", "showBorder", "showGlyph",
+      "valueSize", "subvalueSize",
       "fillDirection", "fillColor", "bgColor", "textColor",
       "warnBelow", "criticalBelow", "warnColor", "criticalColor",
     ]) {
@@ -533,7 +547,8 @@
       }
     }
     for (const id of [
-      "defaultRefresh", "defaultValueSize", "defaultSubvalueSize", "invertFill",
+      "defaultRefresh", "defaultValueSize", "defaultSubvalueSize",
+      "invertFill", "showGlyphs",
       "claudeSource", "claudeCookie",
     ]) {
       const el = document.getElementById(id);

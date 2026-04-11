@@ -375,7 +375,7 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
   // all — even if the monthly limit is zero / not set.
   out.push({
     id: "extra-usage-enabled",
-    label: "EXTRAS",
+    label: "EXTRA USAGE",
     name: "Extra usage enabled",
     value: extra.isEnabled ? "ON" : "OFF",
     ratio: extra.isEnabled ? 1 : 0,

@@ -19,6 +19,7 @@ import {
   getDefaultSubvalueSize,
   getDefaultValueSize,
   getInvertFill,
+  getShowGlyphs,
   resolveRefreshMs,
   setGlobalSettings,
   type GlobalSettings,
@@ -311,35 +312,41 @@ async function refreshKey(
     // Look for an "exhausted" companion metric on the same
     // provider — i.e. any *-percent metric whose remaining ratio
     // is at or near zero. If we find one, the requested metric is
-    // missing not because of an unrelated bug but because the
-    // provider has run out of headroom on a related quota
-    // (e.g. Codex weekly hit 100%, so its session window is also
-    // unusable; Claude sonnet maxed with no extras enabled).
+    // almost certainly missing because the provider has run out
+    // of headroom on a related quota (Codex weekly hit 100% so
+    // its session window is also unusable; Claude sonnet maxed
+    // with no extras enabled, etc.).
     //
-    // Render a "blocked" face dominated by the provider's logo
-    // (glyphMode: "centered") with the exhausted companion's
-    // reset countdown as the subvalue. The big logo on a red
-    // background communicates "this provider is capped" at a
-    // glance — matches the user's explicit request to put the
-    // logo there rather than a text label.
+    // Synthesize a fake "0% remaining" metric using the requested
+    // id and render it through the normal renderMetric path. With
+    // invertFill ON the meter shows a full bar at "100%" used;
+    // with invertFill OFF it shows an empty bar at "0%" remaining.
+    // Either way it's a normal-looking button — the user can read
+    // "this is capped" from the value text alone. No red overlay,
+    // no big logo: matches the user's preference to keep
+    // threshold colors on money metrics only.
     const exhausted = snapshot.metrics.find(
       (m) => /-percent$/.test(m.id) && (m.ratio ?? 1) <= 0.01,
     );
     if (exhausted) {
-      const maxdInput: Parameters<typeof renderButtonSvg>[0] = {
-        label: provider.name.toUpperCase(),
-        value: "",
-        ratio: 1,
+      const fake: MetricValue = {
+        id: metricId,
+        label: deriveLabelFromMetricId(metricId),
+        name: `${deriveLabelFromMetricId(metricId)} (capped)`,
+        value: 0,
+        numericValue: 0,
+        numericUnit: "percent",
+        unit: "%",
+        ratio: 0,
         direction: "up",
-        fill: "#ef4444",
-        glyphMode: "centered",
       };
       if (exhausted.resetInSeconds !== undefined) {
-        maxdInput.subvalue = formatCountdown(exhausted.resetInSeconds);
+        fake.resetInSeconds = exhausted.resetInSeconds;
       }
-      const glyph = PROVIDER_ICONS[provider.id];
-      if (glyph) maxdInput.glyph = glyph;
-      conn.setImage(context, renderButtonSvg(maxdInput));
+      conn.setImage(
+        context,
+        renderMetric(provider, snapshot.providerName, fake, key.settings),
+      );
       return;
     }
 
@@ -363,6 +370,34 @@ async function refreshKey(
 
 function isRateLimit(errorMessage: string): boolean {
   return /429|rate.?limit/i.test(errorMessage);
+}
+
+/**
+ * Pick a button label for a metric id when the metric isn't in
+ * the snapshot (e.g. provider hid it because a sibling quota was
+ * exhausted). Used by the synth-metric fallback in refreshKey so
+ * a "blocked" SESSION button still shows "SESSION" rather than
+ * the provider name.
+ */
+function deriveLabelFromMetricId(metricId: string): string {
+  const KNOWN: Record<string, string> = {
+    "session-percent": "SESSION",
+    "weekly-percent": "WEEKLY",
+    "weekly-sonnet-percent": "SONNET",
+    "weekly-opus-percent": "OPUS",
+    "extra-usage-percent": "EXTRA USAGE",
+    "extra-usage-limit": "LIMIT",
+    "extra-usage-remaining": "LEFT",
+    "extra-usage-spent": "SPENT",
+    "extra-usage-balance": "BALANCE",
+    "extra-usage-enabled": "EXTRA USAGE",
+    "credits-balance": "CREDITS",
+    "credits": "CREDITS",
+  };
+  if (KNOWN[metricId]) return KNOWN[metricId];
+  // Fallback: first hyphen-segment uppercase.
+  const first = metricId.split("-")[0] ?? metricId;
+  return first.toUpperCase();
 }
 
 /**
@@ -400,6 +435,17 @@ function computeThresholdState(
   settings: KeySettings,
 ): "normal" | "warn" | "critical" {
   if (typeof metric.numericValue !== "number") return "normal";
+
+  // Threshold colors are restricted to MONEY metrics only.
+  // Percent / count metrics communicate "low headroom" via their
+  // own value text — a 5% session window is already obviously
+  // low without us painting it red. Money metrics get colors
+  // because $ approaching a budget cap is a thing users want a
+  // visual alarm for.
+  if (metric.numericUnit !== "dollars" && metric.numericUnit !== "cents") {
+    return "normal";
+  }
+
   const n = metric.numericValue;
   const direction = metric.numericGoodWhen ?? "high";
 
@@ -407,23 +453,12 @@ function computeThresholdState(
   let defaultCritical: number | undefined;
 
   if (direction === "high") {
-    if (metric.numericUnit === "percent") {
-      defaultWarn = 20;
-      defaultCritical = 10;
-    } else if (metric.numericUnit === "dollars" || metric.numericUnit === "cents") {
-      defaultWarn = 10;
-      defaultCritical = 0;
-    }
+    // High balance / remaining is good — warn / red as it drops.
+    defaultWarn = 10;
+    defaultCritical = 0;
   } else {
-    // low-is-good
-    if (metric.numericUnit === "percent") {
-      defaultWarn = 80;
-      defaultCritical = 95;
-    } else if (
-      (metric.numericUnit === "dollars" || metric.numericUnit === "cents") &&
-      typeof metric.numericMax === "number" &&
-      metric.numericMax > 0
-    ) {
+    // Low spend is good — warn / red as it climbs toward the cap.
+    if (typeof metric.numericMax === "number" && metric.numericMax > 0) {
       defaultWarn = metric.numericMax * 0.8;
       defaultCritical = metric.numericMax;
     }

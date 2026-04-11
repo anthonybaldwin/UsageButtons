@@ -235,10 +235,29 @@ function renderMetric(
   metric: MetricValue,
   settings: KeySettings,
 ): string {
+  // Inverted view: the user wants "X% used" instead of "X% remaining"
+  // (or vice versa). Flip BOTH the displayed number and the fill
+  // ratio together — flipping just the ratio would render a 2% bar
+  // with "98%" text, which is nonsense.
+  //
+  // We only flip the numeric value when the metric looks like a
+  // percentage (unit === "%"). For dollar or count metrics we can't
+  // sensibly compute a complement — those still flip the ratio only.
+  let effectiveValue: number | string = metric.value;
+  let effectiveRatio = metric.ratio;
+  if (settings.invertFill) {
+    if (typeof effectiveValue === "number" && metric.unit === "%") {
+      effectiveValue = Math.max(0, Math.min(100, 100 - effectiveValue));
+    }
+    if (effectiveRatio !== undefined) {
+      effectiveRatio = 1 - effectiveRatio;
+    }
+  }
+
   const valueStr =
-    typeof metric.value === "number"
-      ? `${metric.value}${metric.unit ?? ""}`
-      : metric.value;
+    typeof effectiveValue === "number"
+      ? `${effectiveValue}${metric.unit ?? ""}`
+      : effectiveValue;
 
   const input: Parameters<typeof renderButtonSvg>[0] = { value: valueStr };
 
@@ -252,9 +271,8 @@ function renderMetric(
     }
   }
 
-  // Ratio: apply invertFill flip if the user asked for "used" display.
-  if (metric.ratio !== undefined) {
-    input.ratio = settings.invertFill ? 1 - metric.ratio : metric.ratio;
+  if (effectiveRatio !== undefined) {
+    input.ratio = effectiveRatio;
   }
 
   if (settings.fillDirection) {

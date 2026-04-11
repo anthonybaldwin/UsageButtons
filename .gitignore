@@ -9,6 +9,8 @@ bun.lockb.bak
 dist/
 build/
 *.tsbuildinfo
+*.bun-build
+.*.bun-build
 com.baldwin.usage-buttons.sdPlugin/bin/
 com.baldwin.usage-buttons.sdPlugin/logs/
 

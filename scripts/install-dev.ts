@@ -1,0 +1,172 @@
+/**
+ * Dev-install: link the repo's .sdPlugin folder into the Stream Deck
+ * software's plugin directory so a `bun run build` is picked up on
+ * the next Stream Deck restart without copying files around.
+ *
+ * Windows: uses a directory junction (`mklink /J`) — no admin needed.
+ * macOS:   uses a symlink (`ln -s`).
+ *
+ * This does NOT restart Stream Deck automatically. Stream Deck being
+ * open is visible shared state — we warn and tell the user to quit +
+ * relaunch themselves, unless `--restart` is passed.
+ *
+ * Usage:
+ *   bun run install:dev            # link only
+ *   bun run install:dev --restart  # also kill + relaunch Stream Deck
+ */
+
+import { $ } from "bun";
+import { existsSync, mkdirSync, rmSync, lstatSync } from "node:fs";
+import { homedir, platform } from "node:os";
+import { resolve } from "node:path";
+
+const ROOT = resolve(import.meta.dir, "..");
+const PLUGIN_NAME = "com.baldwin.usage-buttons.sdPlugin";
+const SDPLUGIN = resolve(ROOT, PLUGIN_NAME);
+
+const restart = process.argv.includes("--restart");
+
+function log(line: string): void {
+  // eslint-disable-next-line no-console
+  console.log(line);
+}
+
+function pluginsDir(): string {
+  const os = platform();
+  if (os === "win32") {
+    const appdata = process.env["APPDATA"];
+    if (!appdata) throw new Error("%APPDATA% is not set");
+    return resolve(appdata, "Elgato", "StreamDeck", "Plugins");
+  }
+  if (os === "darwin") {
+    return resolve(
+      homedir(),
+      "Library",
+      "Application Support",
+      "com.elgato.StreamDeck",
+      "Plugins",
+    );
+  }
+  throw new Error(`unsupported host platform: ${os}`);
+}
+
+async function isStreamDeckRunning(): Promise<boolean> {
+  if (platform() === "win32") {
+    const res = await $`tasklist /FI "IMAGENAME eq StreamDeck.exe"`
+      .nothrow()
+      .quiet()
+      .text();
+    return res.toLowerCase().includes("streamdeck.exe");
+  }
+  const res = await $`pgrep -x "Stream Deck"`.nothrow().quiet().text();
+  return res.trim().length > 0;
+}
+
+async function killStreamDeck(): Promise<void> {
+  if (platform() === "win32") {
+    await $`taskkill /F /IM StreamDeck.exe`.nothrow().quiet();
+  } else {
+    await $`pkill -x "Stream Deck"`.nothrow().quiet();
+  }
+}
+
+async function startStreamDeck(): Promise<void> {
+  if (platform() === "win32") {
+    // The Start Menu shortcut is the most reliable entry point.
+    // We use `cmd /c start "" <target>` so the launched process
+    // detaches from our bun invocation.
+    const candidate = resolve(
+      process.env["ProgramFiles"] ?? "C:/Program Files",
+      "Elgato",
+      "StreamDeck",
+      "StreamDeck.exe",
+    );
+    if (existsSync(candidate)) {
+      await $`cmd /c start "" ${candidate}`.nothrow();
+    } else {
+      log(
+        "! could not locate StreamDeck.exe under Program Files — relaunch it yourself",
+      );
+    }
+  } else {
+    await $`open -a "Stream Deck"`.nothrow();
+  }
+}
+
+function linkPlugin(): void {
+  const target = pluginsDir();
+  mkdirSync(target, { recursive: true });
+  const dest = resolve(target, PLUGIN_NAME);
+
+  // Clean up anything already at the destination (prior install,
+  // stale symlink, etc.). rmSync on a junction unlinks it; on a real
+  // directory it recursively deletes. We only touch *our* subfolder.
+  if (existsSync(dest)) {
+    try {
+      const stat = lstatSync(dest);
+      if (stat.isSymbolicLink() || stat.isDirectory()) {
+        rmSync(dest, { recursive: true, force: true });
+      }
+    } catch (err) {
+      log(`! could not remove existing ${dest}: ${String(err)}`);
+    }
+  }
+
+  if (platform() === "win32") {
+    // Directory junction — no admin, no dev-mode toggle required.
+    const result = Bun.spawnSync({
+      cmd: ["cmd", "/c", "mklink", "/J", dest, SDPLUGIN],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (result.exitCode !== 0) {
+      throw new Error(
+        `mklink /J failed: ${result.stderr.toString() || result.stdout.toString()}`,
+      );
+    }
+  } else {
+    Bun.spawnSync({ cmd: ["ln", "-s", SDPLUGIN, dest] });
+  }
+
+  log(`✓ linked ${dest} → ${SDPLUGIN}`);
+}
+
+async function main(): Promise<void> {
+  // Sanity: the binary the manifest points to must exist, otherwise
+  // Stream Deck will fail to start the plugin and silently hide it.
+  const binName = platform() === "win32" ? "plugin-win.exe" : "plugin-mac";
+  const bin = resolve(SDPLUGIN, "bin", binName);
+  if (!existsSync(bin)) {
+    log(`✗ missing ${bin}`);
+    log("  run \`bun run build\` first.");
+    process.exit(1);
+  }
+
+  const running = await isStreamDeckRunning();
+  if (running && !restart) {
+    log(
+      "! Stream Deck is currently running. It will keep its current plugin cache",
+    );
+    log(
+      "  until you quit + relaunch it. Pass --restart to this script to do that",
+    );
+    log("  automatically, or quit Stream Deck yourself after the link.");
+  }
+  if (running && restart) {
+    log("→ stopping Stream Deck");
+    await killStreamDeck();
+  }
+
+  log("→ linking plugin");
+  linkPlugin();
+
+  if (restart) {
+    log("→ starting Stream Deck");
+    await startStreamDeck();
+    log("✓ done — Stream Deck will pick up the plugin on launch");
+  } else {
+    log("✓ link created. Quit + relaunch Stream Deck to load the plugin.");
+  }
+}
+
+await main();

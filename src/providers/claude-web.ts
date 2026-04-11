@@ -167,10 +167,14 @@ export function setClaudeWebLogSink(fn: (message: string) => void): void {
  * Resolve a cookie header for claude.ai according to global settings:
  *
  *   cookieSource === "off"    → never use cookies, return undefined
- *   cookieSource === "manual" → use the user-pasted cookieHeader if valid
- *   cookieSource === "auto"   → auto-import from installed browsers;
- *                               fall back to pasted header if the scan
- *                               finds nothing (the paste is a safety net)
+ *   cookieSource === "manual" → use the user-pasted cookieHeader ONLY
+ *   cookieSource === "auto"   → scan installed browsers ONLY; the
+ *                               paste field is ignored in this mode
+ *                               (it's even hidden in the PI). The
+ *                               user's mental model is "Auto means
+ *                               I never have to paste anything", so
+ *                               we honour that strictly rather than
+ *                               silently using a stale pasted value.
  */
 async function resolveCookieHeader(): Promise<string | undefined> {
   const cs = getClaudeSettings();
@@ -180,17 +184,11 @@ async function resolveCookieHeader(): Promise<string | undefined> {
     return normalizeCookieHeader(cs.cookieHeader ?? "") ?? undefined;
   }
 
-  // "auto": scan browsers first, fall back to pasted header.
+  // "auto": browser scan only. No fallback to pasted header.
   const scanned = await findClaudeCookie({
     onLog: (msg) => logSink?.(msg),
   });
   if (scanned) return `sessionKey=${scanned}`;
-
-  const pasted = normalizeCookieHeader(cs.cookieHeader ?? "");
-  if (pasted) {
-    logSink?.("cookies: falling back to manually-pasted cookie header");
-    return pasted;
-  }
   return undefined;
 }
 

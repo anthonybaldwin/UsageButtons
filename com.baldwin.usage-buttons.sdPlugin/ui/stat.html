@@ -69,10 +69,9 @@
       <label for="claudeCookie">Claude session cookie (claude.ai)</label>
       <textarea id="claudeCookie" rows="2" placeholder="sessionKey=sk-ant-sid01-...    (paste the Cookie: header from claude.ai DevTools)" autocomplete="off" spellcheck="false"></textarea>
       <p class="hint">
-        In Auto mode this is a safety net — used only if the browser scan
-        finds nothing. Open claude.ai in your browser, DevTools → Network →
-        any request → copy the <code>Cookie:</code> header value. Only
-        <code>sessionKey=</code> is required.
+        Open claude.ai in your browser, DevTools → Network → any request →
+        copy the <code>Cookie:</code> header value. Only <code>sessionKey=</code>
+        is required.
       </p>
     </div>
   </div>
@@ -229,11 +228,11 @@
           : "auto";
       document.getElementById("claudeCookieSource").value = cookieSrc;
       document.getElementById("claudeCookie").value = claude.cookieHeader || "";
-      // Hide the manual-paste block entirely when Off — the paste
-      // is pointless. In Auto mode keep it visible as a safety net
-      // hint so users know they can still paste if the scan fails.
+      // The paste field is only meaningful in Manual mode. Auto
+      // ignores it entirely (browser scan only), and Off doesn't
+      // make cookie calls at all — so hide it everywhere else.
       document.getElementById("claudeCookieManualRow").style.display =
-        cookieSrc === "off" ? "none" : "";
+        cookieSrc === "manual" ? "" : "none";
     }
 
     function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
@@ -305,7 +304,7 @@
       }));
       // Toggle the manual-paste visibility to match the new source.
       document.getElementById("claudeCookieManualRow").style.display =
-        cookieSrc === "off" ? "none" : "";
+        cookieSrc === "manual" ? "" : "none";
     }
 
     document.getElementById("provider").addEventListener("change", () => {

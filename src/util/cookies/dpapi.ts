@@ -39,12 +39,23 @@ export async function dpapiDecrypt(encrypted: Uint8Array): Promise<Uint8Array> {
   }
 
   const b64 = Buffer.from(encrypted).toString("base64");
-  // The PowerShell one-liner: decode input base64, Unprotect with
-  // CurrentUser scope, re-encode as base64 to stdout. `-OutputFormat
-  // Text` + a bare `[Convert]::ToBase64String(...)` keeps the output
-  // to a single line we can trim + parse without worrying about
-  // console width wrapping.
-  const script = `[Convert]::ToBase64String([System.Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String('${b64}'), $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser))`;
+  // Windows PowerShell 5.1 (the one shipped with Windows 10/11 by
+  // default) does NOT auto-load System.Security.dll, so the
+  // ProtectedData type is missing unless we explicitly load it via
+  // Add-Type. PowerShell 7+ has it pre-loaded, but we can't assume
+  // the user has pwsh installed. The Add-Type call is a no-op on
+  // newer versions, so it's safe to always include it.
+  //
+  // After that, the usual: decode the input base64, Unprotect under
+  // CurrentUser scope, re-encode as base64 to stdout. The whole
+  // thing is written as a semicolon-joined one-liner so we can pipe
+  // it via PowerShell's -Command flag without temp files.
+  const script = [
+    `Add-Type -AssemblyName System.Security`,
+    `$enc = [Convert]::FromBase64String('${b64}')`,
+    `$dec = [System.Security.Cryptography.ProtectedData]::Unprotect($enc, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)`,
+    `[Convert]::ToBase64String($dec)`,
+  ].join("; ");
 
   const result = Bun.spawnSync({
     cmd: [

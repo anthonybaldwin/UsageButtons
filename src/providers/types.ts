@@ -32,6 +32,25 @@ export interface MetricValue {
   numericValue?: number;
   /** Unit the `numericValue` is expressed in, one of a known set. */
   numericUnit?: "percent" | "dollars" | "cents" | "count";
+  /**
+   * Which direction is "good" for the threshold logic.
+   *
+   *   - "high" (default): high value = good, low = bad. Used for
+   *     "% remaining", balance, available credits, etc. Warn/
+   *     critical thresholds fire when value ≤ thresholds.
+   *   - "low": low value = good, high = bad. Used for "amount
+   *     spent", "% used", requests consumed, etc. Warn/critical
+   *     fire when value ≥ thresholds.
+   */
+  numericGoodWhen?: "high" | "low";
+  /**
+   * The "100%" reference for this metric, when applicable. For
+   * dollar metrics that are bounded by a limit (spent vs. monthly
+   * limit), setting `numericMax` lets the renderer pick sensible
+   * default thresholds as percentages of the max (80% warn, 100%
+   * critical for "low-is-good" metrics).
+   */
+  numericMax?: number;
   /** Optional unit string for display, e.g. `"%"`, `" credits"`. */
   unit?: string;
   /** Optional 0..1 ratio driving the button fill. */

@@ -375,7 +375,7 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
   // all — even if the monthly limit is zero / not set.
   out.push({
     id: "extra-usage-enabled",
-    label: "EXTRA",
+    label: "EXTRAS",
     name: "Extra usage enabled",
     value: extra.isEnabled ? "ON" : "OFF",
     ratio: extra.isEnabled ? 1 : 0,
@@ -400,6 +400,7 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
   // Rendered as a dollar amount with the raw numericValue attached
   // so the render layer can apply threshold-based colors (orange
   // when low, red when negative) without parsing the display string.
+  // numericGoodWhen defaults to "high" — a low balance = bad.
   if (typeof extra.balanceCents === "number") {
     const bal = extra.balanceCents / 100;
     out.push({
@@ -409,6 +410,7 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       value: `$${bal.toFixed(2)}`,
       numericValue: bal,
       numericUnit: "dollars",
+      numericGoodWhen: "high",
       updatedAt: now,
     });
   }
@@ -418,7 +420,7 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
   if (extra.autoReloadEnabled !== undefined) {
     out.push({
       id: "extra-usage-auto-reload",
-      label: "AUTO↻",
+      label: "RELOAD",
       name: "Extras auto-reload",
       value: extra.autoReloadEnabled ? "ON" : "OFF",
       ratio: extra.autoReloadEnabled ? 1 : 0,
@@ -445,11 +447,12 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
   out.push(
     {
       id: "extra-usage-percent",
-      label: "EXTRA",
+      label: "HEADROOM",
       name: "Extra usage headroom",
       value: Math.round(remPct),
       numericValue: remPct,
       numericUnit: "percent",
+      numericGoodWhen: "high",
       unit: "%",
       ratio: remPct / 100,
       direction: "up",
@@ -457,22 +460,28 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
     },
     {
       id: "extra-usage-remaining",
-      label: "EXTRA",
+      label: "LEFT",
       name: `Extra usage remaining (${currency})`,
       value: `$${remaining.toFixed(2)}`,
       numericValue: remaining,
       numericUnit: "dollars",
+      numericGoodWhen: "high",
+      numericMax: limit,
       ratio: remPct / 100,
       direction: "up",
       updatedAt: now,
     },
     {
       id: "extra-usage-spent",
-      label: "EXTRA$",
+      label: "SPENT",
       name: `Extra usage spent (${currency})`,
       value: `$${spent.toFixed(2)}`,
       numericValue: spent,
       numericUnit: "dollars",
+      // Low-is-good: we WANT spent to be close to $0. Warn when
+      // spent climbs to 80% of the monthly limit, red at the cap.
+      numericGoodWhen: "low",
+      numericMax: limit,
       ratio: usedPct / 100,
       direction: "up",
       updatedAt: now,

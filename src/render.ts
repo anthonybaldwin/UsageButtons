@@ -23,6 +23,14 @@ export type FillDirection =
   /** Fill grows right → left. */
   | "left";
 
+/** Single-path provider glyph — see providers/provider-icons.generated.ts. */
+export interface ProviderGlyph {
+  /** SVG viewBox for the path, e.g. "0 0 100 100". */
+  viewBox: string;
+  /** Raw path `d` attribute. */
+  d: string;
+}
+
 export type ValueSize = "small" | "medium" | "large";
 
 export interface ButtonRenderInput {
@@ -53,6 +61,10 @@ export interface ButtonRenderInput {
   subvalueSize?: ValueSize;
   /** Render the outer rounded-rect border stroke. Default on. */
   border?: boolean;
+  /** Optional provider glyph to overlay as a small corner badge. */
+  glyph?: ProviderGlyph;
+  /** Hide the corner glyph when false. Default true (visible). */
+  showGlyph?: boolean;
 }
 
 const CANVAS = 144;
@@ -100,6 +112,37 @@ const VALUE_FONT_SIZE: Record<ValueSize, number> = {
   medium: 40,
   large: 48,
 };
+
+/**
+ * Estimate how many pixels wide a string renders at a given
+ * font-size in Helvetica Bold. 0.58em per character is the
+ * average across digits, currency glyphs, and the few letters we
+ * use. Good enough for auto-fit decisions — we only use the
+ * estimate to decide whether to shrink the font, never to position
+ * anything precisely.
+ */
+function estimateTextWidth(text: string, fontSize: number): number {
+  return text.length * fontSize * 0.58;
+}
+
+/**
+ * Pick a font size that fits `text` within `maxWidth` pixels,
+ * starting from `preferredSize` and shrinking down to `minSize`
+ * only if needed. Used so that "$204.80" at Large doesn't overflow
+ * the 144px canvas while "42%" at Large still renders at full size.
+ */
+function fitFontSize(
+  text: string,
+  maxWidth: number,
+  preferredSize: number,
+  minSize = 14,
+): number {
+  if (!text) return preferredSize;
+  if (estimateTextWidth(text, preferredSize) <= maxWidth) return preferredSize;
+  // Solve for the size that fits exactly, clamped to minSize.
+  const solved = Math.floor(maxWidth / (text.length * 0.58));
+  return Math.max(minSize, Math.min(preferredSize, solved));
+}
 const LABEL_FONT_SIZE = 16;
 const LABEL_LINE_HEIGHT = 17;
 /**
@@ -122,7 +165,17 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
   const opacity = input.stale ? "0.45" : "1";
   const rect = fillRect(ratio, direction);
   const valueSize: ValueSize = input.valueSize ?? "large";
-  const valueFontSize = VALUE_FONT_SIZE[valueSize];
+  const preferredValueFont = VALUE_FONT_SIZE[valueSize];
+  // Auto-fit the big-number text to the canvas width. Leave ~12px
+  // of horizontal padding on each side (to account for the
+  // rounded-corner inset + border stroke). This shrinks long
+  // strings like "$1,234.56" at Large from 48px to whatever fits
+  // without clipping, while leaving short strings ("42%") at full size.
+  const valueFontSize = fitFontSize(
+    input.value,
+    CANVAS - 24,
+    preferredValueFont,
+  );
   const subvalueSize: ValueSize = input.subvalueSize ?? "large";
   const subvalueFontSize = SUBVALUE_FONT_SIZE[subvalueSize];
   const showBorder = input.border !== false;
@@ -170,6 +223,17 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
     ? `<text x="${CANVAS / 2}" y="${subvalueBaselineY}" font-family="Helvetica,Arial,sans-serif" font-size="${subvalueFontSize}" font-weight="700" text-anchor="middle" fill="${fg}" fill-opacity="0.85">${subvalue}</text>`
     : "";
 
+  // Optional top-right glyph badge: 20×20 px at (CANVAS-26, 6),
+  // same foreground color at 0.7 opacity so it reads as a
+  // watermark without competing with the big value text.
+  const glyphSize = 20;
+  const glyphX = CANVAS - glyphSize - 6;
+  const glyphY = 6;
+  const glyphElement =
+    input.showGlyph !== false && input.glyph
+      ? `<g transform="translate(${glyphX} ${glyphY}) scale(${glyphSize / 100})" fill="${fg}" fill-opacity="0.7"><path d="${input.glyph.d}"/></g>`
+      : "";
+
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CANVAS} ${CANVAS}" opacity="${opacity}">
   <defs>
     <clipPath id="card">
@@ -181,6 +245,7 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
     <rect x="${rect.x}" y="${rect.y}" width="${rect.w}" height="${rect.h}" fill="${fill}"/>
   </g>
   ${borderElement}
+  ${glyphElement}
   ${labelElements}
   <text x="${CANVAS / 2}" y="${valueY}" font-family="Helvetica,Arial,sans-serif" font-size="${valueFontSize}" font-weight="800" text-anchor="middle" fill="${fg}">${value}</text>
   ${subvalueElement}
@@ -188,30 +253,36 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
 }
 
 /**
- * Render a "loading" face — what a button should show between
- * first willAppear and the first successful provider fetch. Clean
- * and professional: bg + border + provider brand-colored accent
- * strip + a three-dot centered glyph at reduced opacity. No
- * animation (Stream Deck rasterises SVG client-side; animation
- * tags aren't reliably preserved). The visual signals "waiting"
- * without being noisy.
+ * Render a "loading" face — what a button shows between willAppear
+ * and the first successful provider fetch. Minimal: bg + border +
+ * the provider's glyph centered at about 40% of canvas size.
+ * No label, no value text, no "···" glyph. The logo is the signal.
  */
 export function renderLoadingSvg(opts: {
-  label?: string;
+  glyph?: ProviderGlyph;
   fill?: string;
   bg?: string;
   fg?: string;
   border?: boolean;
 }): string {
   const fg = opts.fg ?? "#f9fafb";
-  const fill = opts.fill ?? "#3b82f6";
   const bg = opts.bg ?? "#111827";
   const showBorder = opts.border !== false;
-  const label = opts.label ? escapeXml(opts.label) : "";
 
-  // A 4px accent strip of the provider brand color at the bottom
-  // so users can still identify the provider visually, plus a
-  // centered ··· glyph that reads unambiguously as "pending".
+  // Glyph sized at 56×56 px centered on the 144×144 canvas. Scales
+  // the upstream 100×100 viewBox down to 56. Rendered in the
+  // provider brand color (if known via `fill`) at 0.85 opacity so
+  // it's clearly visible but reads as a "placeholder" state rather
+  // than active data.
+  const glyphSize = 56;
+  const glyphOffset = (CANVAS - glyphSize) / 2;
+  const glyphColor = opts.fill ?? fg;
+  const glyphElement = opts.glyph
+    ? `<g transform="translate(${glyphOffset} ${glyphOffset}) scale(${glyphSize / 100})" fill="${glyphColor}" fill-opacity="0.85"><path d="${opts.glyph.d}"/></g>`
+    : // Fallback when no glyph is available for the provider: a
+      // simple centered dot so the user still sees *something*.
+      `<circle cx="${CANVAS / 2}" cy="${CANVAS / 2}" r="4" fill="${fg}" fill-opacity="0.4"/>`;
+
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CANVAS} ${CANVAS}">
   <defs>
     <clipPath id="card-loading">
@@ -220,11 +291,9 @@ export function renderLoadingSvg(opts: {
   </defs>
   <g clip-path="url(#card-loading)">
     <rect width="${CANVAS}" height="${CANVAS}" fill="${bg}"/>
-    <rect y="${CANVAS - 4}" width="${CANVAS}" height="4" fill="${fill}" fill-opacity="0.85"/>
   </g>
   ${showBorder ? `<rect x="0.75" y="0.75" width="${CANVAS - 1.5}" height="${CANVAS - 1.5}" rx="16" ry="16" fill="none" stroke="${fg}" stroke-opacity="0.18" stroke-width="1.5"/>` : ""}
-  ${label ? `<text x="${CANVAS / 2}" y="30" font-family="Helvetica,Arial,sans-serif" font-size="${LABEL_FONT_SIZE}" font-weight="700" text-anchor="middle" fill="${fg}" fill-opacity="0.6">${label}</text>` : ""}
-  <text x="${CANVAS / 2}" y="86" font-family="Helvetica,Arial,sans-serif" font-size="44" font-weight="800" text-anchor="middle" fill="${fg}" fill-opacity="0.35" letter-spacing="4">···</text>
+  ${glyphElement}
 </svg>`;
 }
 

@@ -9,6 +9,7 @@
 import { parseArgs, StreamDeckConnection } from "./streamdeck.ts";
 import type { InboundEvent, WillAppearEvent } from "./streamdeck.ts";
 import { renderButtonSvg, renderLoadingSvg } from "./render.ts";
+import { PROVIDER_ICONS } from "./providers/provider-icons.generated.ts";
 import { getProvider } from "./providers/registry.ts";
 import { getSnapshot, setCacheLogSink } from "./providers/cache.ts";
 import { setClaudeDebugLogSink } from "./providers/claude.ts";
@@ -64,6 +65,8 @@ interface KeySettings {
   subvalueSize?: "small" | "medium" | "large";
   /** Render the outer rounded-rect border. Default true. */
   showBorder?: boolean;
+  /** Render the provider logo as a top-right corner badge. Default true. */
+  showGlyph?: boolean;
   /** Show the reset countdown as a subvalue under the big number. Default true. */
   showResetTimer?: boolean;
   /**
@@ -333,9 +336,28 @@ function isRateLimit(errorMessage: string): boolean {
  * Returns "normal" when no thresholds apply (metric lacks a
  * `numericValue`, or thresholds are unset / out of range).
  *
- * Default thresholds (applied when the user hasn't set their own):
- *   - percent metrics: warn at 20, critical at 10
- *   - dollar metrics : warn at 10, critical at 0 (negative)
+ * Direction:
+ *   - metric.numericGoodWhen === "high" (default) — value is
+ *     "good" when high. Warn/critical fire when value <=
+ *     threshold. E.g. a balance or "% remaining" dropping toward
+ *     zero.
+ *   - metric.numericGoodWhen === "low" — value is "good" when low.
+ *     Warn/critical fire when value >= threshold. E.g. an "amount
+ *     spent" or "% used" climbing toward a cap.
+ *
+ * Default thresholds depend on direction + unit:
+ *   - "high" + percent → warn ≤ 20, critical ≤ 10
+ *   - "high" + dollars → warn ≤ 10, critical ≤ 0  (negative balance)
+ *   - "low"  + percent → warn ≥ 80, critical ≥ 95
+ *   - "low"  + dollars, numericMax known → warn ≥ 80% of max,
+ *                                          critical ≥ 100% of max
+ *   - "low"  + dollars, no numericMax → no color change (can't
+ *                                       guess without a budget)
+ *
+ * The user's per-key `warnBelow` / `criticalBelow` settings still
+ * override these — they're interpreted as threshold numbers in the
+ * metric's natural unit, applied with whichever direction the
+ * metric declares.
  */
 function computeThresholdState(
   metric: MetricValue,
@@ -343,36 +365,62 @@ function computeThresholdState(
 ): "normal" | "warn" | "critical" {
   if (typeof metric.numericValue !== "number") return "normal";
   const n = metric.numericValue;
+  const direction = metric.numericGoodWhen ?? "high";
 
-  const defaults =
-    metric.numericUnit === "dollars" || metric.numericUnit === "cents"
-      ? { warn: 10, critical: 0 }
-      : metric.numericUnit === "percent"
-        ? { warn: 20, critical: 10 }
-        : undefined;
+  let defaultWarn: number | undefined;
+  let defaultCritical: number | undefined;
 
-  const warn = settings.warnBelow ?? defaults?.warn;
-  const critical = settings.criticalBelow ?? defaults?.critical;
+  if (direction === "high") {
+    if (metric.numericUnit === "percent") {
+      defaultWarn = 20;
+      defaultCritical = 10;
+    } else if (metric.numericUnit === "dollars" || metric.numericUnit === "cents") {
+      defaultWarn = 10;
+      defaultCritical = 0;
+    }
+  } else {
+    // low-is-good
+    if (metric.numericUnit === "percent") {
+      defaultWarn = 80;
+      defaultCritical = 95;
+    } else if (
+      (metric.numericUnit === "dollars" || metric.numericUnit === "cents") &&
+      typeof metric.numericMax === "number" &&
+      metric.numericMax > 0
+    ) {
+      defaultWarn = metric.numericMax * 0.8;
+      defaultCritical = metric.numericMax;
+    }
+    // else: no defaults — without a max we can't tell "high" from
+    // "runaway". User can still set explicit thresholds in settings.
+  }
 
-  if (typeof critical === "number" && n <= critical) return "critical";
-  if (typeof warn === "number" && n <= warn) return "warn";
+  const warn = settings.warnBelow ?? defaultWarn;
+  const critical = settings.criticalBelow ?? defaultCritical;
+
+  if (direction === "high") {
+    if (typeof critical === "number" && n <= critical) return "critical";
+    if (typeof warn === "number" && n <= warn) return "warn";
+  } else {
+    if (typeof critical === "number" && n >= critical) return "critical";
+    if (typeof warn === "number" && n >= warn) return "warn";
+  }
   return "normal";
 }
 
 /**
  * Render a "loading" face for a brand-new key that hasn't had its
- * first fetch yet. Picks the provider's brand color when we can
- * identify the provider from the key settings, otherwise falls
- * back to the user-configured fill color.
+ * first fetch yet. Shows just the provider's logo glyph (CodexBar's
+ * MIT-licensed SVG paths) centered on the canvas, in the provider's
+ * brand color. Falls back to a neutral dot if the provider has no
+ * known glyph.
  */
 function loadingFaceFor(settings: KeySettings): string {
   const providerId = settings.providerId ?? DEFAULT_PROVIDER;
   const provider = getProvider(providerId);
-  const label = settings.hideLabel
-    ? undefined
-    : (settings.labelOverride?.trim() || provider?.name.toUpperCase());
+  const glyph = PROVIDER_ICONS[providerId];
   const input: Parameters<typeof renderLoadingSvg>[0] = {};
-  if (label) input.label = label;
+  if (glyph) input.glyph = glyph;
   if (settings.fillColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.fillColor)) {
     input.fill = settings.fillColor;
   } else if (provider?.brandColor) {

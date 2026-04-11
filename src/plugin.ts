@@ -12,6 +12,7 @@ import { renderButtonSvg } from "./render.ts";
 import { getProvider } from "./providers/registry.ts";
 import { getSnapshot, setCacheLogSink } from "./providers/cache.ts";
 import { setClaudeDebugLogSink } from "./providers/claude.ts";
+import { setClaudeWebLogSink } from "./providers/claude-web.ts";
 import type { MetricValue } from "./providers/types.ts";
 import {
   resolveRefreshMs,
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
   // %APPDATA%/Elgato/StreamDeck/logs/com.baldwin.usage-buttons*.log.
   setCacheLogSink((msg) => connection.log(msg));
   setClaudeDebugLogSink((msg) => connection.log(msg));
+  setClaudeWebLogSink((msg) => connection.log(msg));
 
   connection.onEvent((event) => handleEvent(connection, event));
 

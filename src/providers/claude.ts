@@ -458,11 +458,12 @@ export class ClaudeProvider implements Provider {
       };
     } else {
       // OAuth didn't give us usable extras — try the claude.ai cookie
-      // path as a supplement. Best-effort: if cookie is missing, or
-      // the web call fails, we just don't render extras at all.
+      // path as a supplement. The fetcher reads its own cookie source
+      // from global settings (auto-import from browsers, manual paste,
+      // or off) so we just call it with no args.
       const cs = getClaudeSettings();
       if (cs.source !== "oauth") {
-        const web = await fetchClaudeExtraUsage(cs.cookieHeader);
+        const web = await fetchClaudeExtraUsage();
         if (web) {
           extraSource = web;
         }

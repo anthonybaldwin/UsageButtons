@@ -35,9 +35,23 @@ export const DEFAULT_REFRESH_MINUTES: RefreshMinutes = 15;
  */
 export type ProviderSource = "auto" | "oauth" | "web";
 
+/**
+ * Where claude.ai session cookies come from, mirroring CodexBar's
+ * "Cookie source" picker:
+ *   - "auto" (default): scan installed browsers on this machine
+ *     (Chrome/Edge/Brave/Vivaldi/Opera/Firefox) and auto-import the
+ *     claude.ai sessionKey cookie. No paste required.
+ *   - "manual": only use the cookie header the user pasted into the
+ *     `cookieHeader` field. Useful if the user runs a browser we
+ *     don't know about or the decryption fails.
+ *   - "off": don't use cookies at all. OAuth-only.
+ */
+export type CookieSource = "auto" | "manual" | "off";
+
 /** Per-provider config, keyed by provider id. */
 export interface ClaudeProviderSettings {
   source?: ProviderSource;
+  cookieSource?: CookieSource;
   /** Raw cookie header pasted from claude.ai DevTools. Normalised on read. */
   cookieHeader?: string;
 }
@@ -64,6 +78,11 @@ function normaliseSource(raw: unknown): ProviderSource {
   return "auto";
 }
 
+function normaliseCookieSource(raw: unknown): CookieSource {
+  if (raw === "manual" || raw === "off") return raw;
+  return "auto";
+}
+
 export function setGlobalSettings(next: GlobalSettings): void {
   const minutes = next.defaultRefreshMinutes;
   const refresh: RefreshMinutes =
@@ -79,6 +98,7 @@ export function setGlobalSettings(next: GlobalSettings): void {
   if (claude) {
     const entry: ClaudeProviderSettings = {
       source: normaliseSource(claude.source),
+      cookieSource: normaliseCookieSource(claude.cookieSource),
     };
     const cookie =
       typeof claude.cookieHeader === "string"
@@ -100,7 +120,9 @@ export function getGlobalSettings(): Readonly<GlobalSettings> {
 
 /** Convenience: Claude provider settings with defaults applied. */
 export function getClaudeSettings(): Readonly<ClaudeProviderSettings> {
-  return current.providers?.claude ?? { source: "auto" };
+  return (
+    current.providers?.claude ?? { source: "auto", cookieSource: "auto" }
+  );
 }
 
 /**

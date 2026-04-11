@@ -31,6 +31,8 @@
  */
 
 import { HttpError, httpJson } from "../util/http.ts";
+import { findClaudeCookie } from "../util/cookies/index.ts";
+import { getClaudeSettings } from "../settings.ts";
 
 const BASE_URL = "https://claude.ai/api";
 
@@ -153,6 +155,46 @@ async function fetchOrgId(cookieHeader: string): Promise<string> {
 }
 
 /**
+ * Optional debug log sink. Wired by the plugin on startup so cookie
+ * auto-import decisions show up in Stream Deck's per-plugin log.
+ */
+let logSink: ((message: string) => void) | undefined;
+export function setClaudeWebLogSink(fn: (message: string) => void): void {
+  logSink = fn;
+}
+
+/**
+ * Resolve a cookie header for claude.ai according to global settings:
+ *
+ *   cookieSource === "off"    → never use cookies, return undefined
+ *   cookieSource === "manual" → use the user-pasted cookieHeader if valid
+ *   cookieSource === "auto"   → auto-import from installed browsers;
+ *                               fall back to pasted header if the scan
+ *                               finds nothing (the paste is a safety net)
+ */
+async function resolveCookieHeader(): Promise<string | undefined> {
+  const cs = getClaudeSettings();
+  if (cs.cookieSource === "off") return undefined;
+
+  if (cs.cookieSource === "manual") {
+    return normalizeCookieHeader(cs.cookieHeader ?? "") ?? undefined;
+  }
+
+  // "auto": scan browsers first, fall back to pasted header.
+  const scanned = await findClaudeCookie({
+    onLog: (msg) => logSink?.(msg),
+  });
+  if (scanned) return `sessionKey=${scanned}`;
+
+  const pasted = normalizeCookieHeader(cs.cookieHeader ?? "");
+  if (pasted) {
+    logSink?.("cookies: falling back to manually-pasted cookie header");
+    return pasted;
+  }
+  return undefined;
+}
+
+/**
  * Call `/organizations/{orgId}/overage_spend_limit` and normalize
  * the result. Returns `undefined` on any error (missing cookie,
  * 401, 404, network fail, etc.) — extras are best-effort, we never
@@ -162,12 +204,18 @@ async function fetchOrgId(cookieHeader: string): Promise<string> {
  * their snapshot. If `is_enabled === false`, we still return the
  * block — the user wants to SEE the limit/balance even when the
  * overage feature is toggled off in claude.ai.
+ *
+ * The `rawCookieHeader` parameter is kept for back-compat and
+ * direct injection (tests); when omitted, we resolve a cookie from
+ * global settings via `resolveCookieHeader()`.
  */
 export async function fetchClaudeExtraUsage(
-  rawCookieHeader: string | undefined,
+  rawCookieHeader?: string | undefined,
 ): Promise<WebExtraUsage | undefined> {
-  if (!rawCookieHeader) return undefined;
-  const cookieHeader = normalizeCookieHeader(rawCookieHeader);
+  const cookieHeader =
+    rawCookieHeader !== undefined
+      ? normalizeCookieHeader(rawCookieHeader)
+      : await resolveCookieHeader();
   if (!cookieHeader) return undefined;
 
   let orgId: string;

@@ -459,15 +459,27 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       updatedAt: now,
     },
     {
-      id: "extra-usage-remaining",
-      label: "LEFT",
-      name: `Extra usage remaining (${currency})`,
-      value: `$${remaining.toFixed(2)}`,
-      numericValue: remaining,
+      // The "limit" view: display the constant monthly cap
+      // ($50.00 in the user's case) with the meter showing
+      // usage PROGRESS against it. The meter fills as the user
+      // spends — opposite direction from the percent-headroom
+      // metric, which drains as headroom shrinks.
+      //
+      // numericValue carries the SPENT amount (not the limit) so
+      // threshold logic can compare spent vs. numericMax (the
+      // limit). With numericGoodWhen: "low" + numericMax = limit,
+      // the default thresholds are warn at 80% of limit, critical
+      // at 100% — the button stays in brand color until spending
+      // approaches the cap.
+      id: "extra-usage-limit",
+      label: "LIMIT",
+      name: `Extra usage monthly limit (${currency})`,
+      value: `$${limit.toFixed(2)}`,
+      numericValue: spent,
       numericUnit: "dollars",
-      numericGoodWhen: "high",
+      numericGoodWhen: "low",
       numericMax: limit,
-      ratio: remPct / 100,
+      ratio: usedPct / 100,
       direction: "up",
       updatedAt: now,
     },
@@ -499,7 +511,7 @@ export class ClaudeProvider implements Provider {
     "weekly-percent",
     "weekly-sonnet-percent",
     "extra-usage-percent",
-    "extra-usage-remaining",
+    "extra-usage-limit",
     "extra-usage-spent",
     "extra-usage-enabled",
     "extra-usage-balance",

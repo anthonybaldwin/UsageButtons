@@ -479,21 +479,25 @@ function renderMetric(
   settings: KeySettings,
 ): string {
   // Inverted view: when the plugin-wide `invertFill` setting is on,
-  // every percentage metric renders as "X% used" instead of
+  // every PERCENT metric renders as "X% used" instead of
   // "X% remaining" (or vice versa) across the entire plugin. Flip
   // BOTH the displayed number and the fill ratio together —
   // flipping just the ratio would render a 2% bar with "98%" text,
   // which is nonsense.
   //
-  // This used to be a per-button setting but users want one
-  // consistent view across their whole Stream Deck, not to
-  // babysit every key individually. Now a single toggle in Plugin
-  // settings flips the whole plugin.
+  // CRITICAL: invert applies only to percent metrics (unit === "%"),
+  // never to dollar / count metrics. A "$50 LIMIT" button with a
+  // usage-progress meter should NOT have its meter flipped just
+  // because the user wants percent metrics to read as "used" — the
+  // dollar metric's ratio is already the right semantic at rest
+  // and inverting it would either drain the bar as you spend more
+  // (wrong direction) or display "$50" with a full bar at $0
+  // spent (also wrong).
   const invert = getInvertFill();
   let effectiveValue: number | string = metric.value;
   let effectiveRatio = metric.ratio;
-  if (invert) {
-    if (typeof effectiveValue === "number" && metric.unit === "%") {
+  if (invert && metric.unit === "%") {
+    if (typeof effectiveValue === "number") {
       effectiveValue = Math.max(0, Math.min(100, 100 - effectiveValue));
     }
     if (effectiveRatio !== undefined) {

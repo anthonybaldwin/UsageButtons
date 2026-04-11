@@ -30,9 +30,9 @@
       "States": [
         {
           "Image": "assets/action-stat-key",
-          "TitleAlignment": "middle",
-          "FontSize": "10",
-          "ShowTitle": false
+          "TitleAlignment": "top",
+          "TitleColor": "#f9fafb",
+          "FontSize": "10"
         }
       ]
     }

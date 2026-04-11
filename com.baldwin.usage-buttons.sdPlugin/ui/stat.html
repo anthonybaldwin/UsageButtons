@@ -11,10 +11,17 @@
     }
     body { margin: 8px 12px; color: #e5e7eb; background: transparent; }
     label { display: block; margin: 10px 0 4px; font-weight: 600; }
-    select, input { width: 100%; box-sizing: border-box; padding: 4px 6px;
+    select, input[type=text] { width: 100%; box-sizing: border-box; padding: 4px 6px;
       background: #111827; color: #f9fafb; border: 1px solid #374151;
       border-radius: 4px; font-size: 13px; }
+    input[type=color] { width: 44px; height: 26px; padding: 0; border: 1px solid #374151;
+      border-radius: 4px; background: transparent; cursor: pointer; }
+    .row { display: flex; align-items: center; gap: 8px; }
+    .row > label { margin: 0; flex: 1; font-weight: 600; }
+    .checkbox-row { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+    .checkbox-row label { margin: 0; font-weight: 600; }
     p.hint { margin: 10px 0 0; opacity: 0.65; font-size: 11px; }
+    hr { border: none; border-top: 1px solid #374151; margin: 14px 0 0; }
   </style>
 </head>
 <body>
@@ -28,16 +35,45 @@
   <label for="metric">Metric</label>
   <select id="metric"></select>
 
+  <hr>
+
+  <label for="labelOverride">Label override (blank = provider default)</label>
+  <input id="labelOverride" type="text" placeholder="e.g. CLAUDE">
+
+  <div class="checkbox-row">
+    <input id="hideLabel" type="checkbox">
+    <label for="hideLabel">Hide built-in label</label>
+  </div>
+
+  <div class="checkbox-row">
+    <input id="invertFill" type="checkbox">
+    <label for="invertFill">Invert fill (show "used" instead of "remaining")</label>
+  </div>
+
+  <label for="fillDirection">Fill direction</label>
+  <select id="fillDirection">
+    <option value="up">Up (default)</option>
+    <option value="down">Down</option>
+    <option value="right">Right</option>
+    <option value="left">Left</option>
+  </select>
+
+  <div class="row">
+    <label for="fillColor">Fill color</label>
+    <input id="fillColor" type="color" value="#3b82f6">
+  </div>
+
+  <div class="row">
+    <label for="bgColor">Background color</label>
+    <input id="bgColor" type="color" value="#111827">
+  </div>
+
   <p class="hint">
-    More providers unlock as they ship. See <code>docs/codexbar-reference.md</code>
-    in the repo for the implementation order.
+    Click the key on your Stream Deck to force an immediate refresh.
+    Set a title in the box at the top of this panel to add overlay text.
   </p>
 
   <script>
-    // Provider → list of (metric id, human label) pairs. Used to
-    // repopulate the metric dropdown whenever the provider changes.
-    // Keep this in sync with each provider's `metricIds` in
-    // src/providers/*.ts.
     const METRICS = {
       mock: [
         ["session-percent", "Session % remaining"],
@@ -73,34 +109,44 @@
       metric.replaceChildren(...options);
     }
 
-    // Stream Deck calls this global with registration args when the
-    // Property Inspector loads. Protocol:
-    //   https://docs.elgato.com/streamdeck/sdk/references/property-inspector/
     let websocket = null;
     let uuid = null;
     let actionInfo = null;
+
+    function applySettings(settings) {
+      const providerId = settings.providerId || "mock";
+      const metricId = settings.metricId || "session-percent";
+      document.getElementById("provider").value = providerId;
+      populateMetrics(providerId, metricId);
+      document.getElementById("labelOverride").value = settings.labelOverride || "";
+      document.getElementById("hideLabel").checked = !!settings.hideLabel;
+      document.getElementById("invertFill").checked = !!settings.invertFill;
+      document.getElementById("fillDirection").value = settings.fillDirection || "up";
+      if (settings.fillColor) document.getElementById("fillColor").value = settings.fillColor;
+      if (settings.bgColor)   document.getElementById("bgColor").value   = settings.bgColor;
+    }
 
     function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
       uuid = inUUID;
       actionInfo = JSON.parse(inActionInfo);
       websocket = new WebSocket("ws://127.0.0.1:" + port);
-
       websocket.onopen = () => {
         websocket.send(JSON.stringify({ event: registerEvent, uuid: inUUID }));
       };
-
-      const settings = actionInfo.payload.settings || {};
-      const providerId = settings.providerId || "mock";
-      const metricId = settings.metricId || "session-percent";
-      document.getElementById("provider").value = providerId;
-      populateMetrics(providerId, metricId);
+      applySettings(actionInfo.payload.settings || {});
     }
 
     function pushSettings() {
       if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
       const payload = {
-        providerId: document.getElementById("provider").value,
-        metricId: document.getElementById("metric").value,
+        providerId:    document.getElementById("provider").value,
+        metricId:      document.getElementById("metric").value,
+        labelOverride: document.getElementById("labelOverride").value,
+        hideLabel:     document.getElementById("hideLabel").checked,
+        invertFill:    document.getElementById("invertFill").checked,
+        fillDirection: document.getElementById("fillDirection").value,
+        fillColor:     document.getElementById("fillColor").value,
+        bgColor:       document.getElementById("bgColor").value,
       };
       websocket.send(JSON.stringify({
         event: "setSettings",
@@ -113,12 +159,14 @@
       populateMetrics(document.getElementById("provider").value);
       pushSettings();
     });
-    document.getElementById("metric").addEventListener("change", pushSettings);
+    for (const id of [
+      "metric", "labelOverride", "hideLabel", "invertFill",
+      "fillDirection", "fillColor", "bgColor",
+    ]) {
+      document.getElementById(id).addEventListener("change", pushSettings);
+    }
 
-    // Initialise even if Stream Deck hasn't called connectElgato yet
-    // (so the dropdown isn't empty when opened in a browser for dev).
-    populateMetrics("mock", "session-percent");
-
+    applySettings({});
     window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
   </script>
 </body>

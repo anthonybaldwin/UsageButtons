@@ -15,6 +15,18 @@ import type { MetricValue } from "./providers/types.ts";
 interface KeySettings {
   providerId?: string;
   metricId?: string;
+  /** Optional override for the label rendered inside the SVG. Blank = use the metric's default. */
+  labelOverride?: string;
+  /** Hide the inner SVG label entirely (e.g. when using the Stream Deck native title). */
+  hideLabel?: boolean;
+  /** Fill color hex, e.g. "#10b981". Blank = metric default. */
+  fillColor?: string;
+  /** Background color hex. Blank = dark default. */
+  bgColor?: string;
+  /** Direction the fill grows in as the value climbs toward 100%. */
+  fillDirection?: "up" | "down" | "right" | "left";
+  /** Flip the fill ratio (remaining ↔ used). Useful when the metric is "used %". */
+  invertFill?: boolean;
 }
 
 interface VisibleKey {
@@ -30,7 +42,12 @@ const POLL_INTERVAL_MS = 10_000;
 const visibleKeys = new Map<string, VisibleKey>();
 
 async function main(): Promise<void> {
-  const args = parseArgs(Bun.argv.slice(2));
+  // Do NOT slice(2) — when `bun build --compile` produces a standalone
+  // binary, Bun.argv is [exePath, ...cliArgs] (single leading entry,
+  // not bun+script), so slicing past the program name would eat the
+  // first flag. parseArgs uses indexOf so it doesn't care about the
+  // leading exe path.
+  const args = parseArgs(Bun.argv);
   const connection = new StreamDeckConnection(args);
   await connection.connect();
 
@@ -124,7 +141,7 @@ async function refreshKey(
       );
       return;
     }
-    conn.setImage(context, renderMetric(provider.name, metric));
+    conn.setImage(context, renderMetric(provider.name, metric, key.settings));
   } catch (err) {
     conn.log(`fetch failed ${providerId}/${metricId}: ${String(err)}`);
     conn.setImage(
@@ -138,18 +155,46 @@ async function refreshKey(
   }
 }
 
-function renderMetric(providerName: string, metric: MetricValue): string {
+function renderMetric(
+  providerName: string,
+  metric: MetricValue,
+  settings: KeySettings,
+): string {
   const valueStr =
     typeof metric.value === "number"
       ? `${metric.value}${metric.unit ?? ""}`
       : metric.value;
 
-  const input: Parameters<typeof renderButtonSvg>[0] = {
-    label: (metric.label ?? providerName).toUpperCase(),
-    value: valueStr,
-  };
-  if (metric.ratio !== undefined) input.ratio = metric.ratio;
-  if (metric.direction !== undefined) input.direction = metric.direction;
+  const input: Parameters<typeof renderButtonSvg>[0] = { value: valueStr };
+
+  // Label: blank override = provider default; explicit hide = drop it.
+  if (!settings.hideLabel) {
+    const override = settings.labelOverride?.trim();
+    if (override && override.length > 0) {
+      input.label = override;
+    } else {
+      input.label = (metric.label ?? providerName).toUpperCase();
+    }
+  }
+
+  // Ratio: apply invertFill flip if the user asked for "used" display.
+  if (metric.ratio !== undefined) {
+    input.ratio = settings.invertFill ? 1 - metric.ratio : metric.ratio;
+  }
+
+  if (settings.fillDirection) {
+    input.direction = settings.fillDirection;
+  } else if (metric.direction !== undefined) {
+    input.direction = metric.direction;
+  }
+
+  if (settings.fillColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.fillColor)) {
+    input.fill = settings.fillColor;
+  }
+  if (settings.bgColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.bgColor)) {
+    input.bg = settings.bgColor;
+  }
+
   if (metric.resetInSeconds !== undefined) {
     input.subvalue = formatCountdown(metric.resetInSeconds);
   }

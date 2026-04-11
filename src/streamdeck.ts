@@ -203,14 +203,20 @@ export class StreamDeckConnection {
 
   send(event: OutboundEvent): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      this.log(`drop outbound (socket not open): ${event.event}`);
+      // Can't call this.log() here — log() in turn calls send() to
+      // emit a logMessage event, which would recurse forever when the
+      // socket isn't open yet. Write straight to stderr instead.
+      // eslint-disable-next-line no-console
+      console.error(
+        `[usage-buttons] drop outbound (socket not open): ${event.event}`,
+      );
       return;
     }
     this.ws.send(JSON.stringify(event));
   }
 
   setImage(context: string, svg: string): void {
-    const dataUri = `data:image/svg+xml;charset=utf8,${encodeURIComponent(svg)}`;
+    const dataUri = `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
     this.send({
       event: "setImage",
       context,
@@ -227,8 +233,9 @@ export class StreamDeckConnection {
   }
 
   log(message: string): void {
-    // Stream Deck writes logMessage payloads to its own log file.
-    // Also mirror to stderr so `bun run` shows it locally.
+    // Stream Deck writes logMessage payloads to its own log file when
+    // the socket is open; the send() guard downgrades to stderr when
+    // it's not, so we can call this safely during startup too.
     this.send({ event: "logMessage", payload: { message } });
     // eslint-disable-next-line no-console
     console.error(`[usage-buttons] ${message}`);

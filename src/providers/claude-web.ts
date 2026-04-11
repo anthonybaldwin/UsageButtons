@@ -97,7 +97,16 @@ export function normalizeCookieHeader(raw: string): string | null {
   // Strip leading `Cookie:` header name.
   value = value.replace(/^\s*cookie\s*:\s*/i, "").trim();
 
-  // Must contain a sessionKey=sk-ant-... pair to be usable.
+  // Forgiving input: users often paste just the raw session key
+  // without the `sessionKey=` prefix. If the whole input looks
+  // like a bare `sk-ant-sid01-...` token with no `=` anywhere,
+  // wrap it into a proper cookie pair so downstream code can use
+  // it as a Cookie header unchanged.
+  if (/^sk-ant-[A-Za-z0-9_-]+$/.test(value)) {
+    return `sessionKey=${value}`;
+  }
+
+  // Otherwise it must contain a sessionKey=sk-ant-... pair.
   if (!/sessionKey=sk-ant-[^;\s]+/i.test(value)) return null;
 
   return value;

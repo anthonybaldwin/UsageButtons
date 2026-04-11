@@ -4,6 +4,7 @@
  */
 
 import { ClaudeProvider } from "./claude.ts";
+import { CodexProvider } from "./codex.ts";
 import { MockProvider } from "./mock.ts";
 import type { Provider } from "./types.ts";
 
@@ -15,6 +16,7 @@ function register(provider: Provider): void {
 
 register(new MockProvider());
 register(new ClaudeProvider());
+register(new CodexProvider());
 
 export function getProvider(id: string): Provider | undefined {
   return providers.get(id);

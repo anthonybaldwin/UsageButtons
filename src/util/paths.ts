@@ -17,8 +17,15 @@ export function claudeCredentialsPath(): string {
   return userHome(".claude", ".credentials.json");
 }
 
-/** ~/.codex/auth.json (OpenAI Codex CLI OAuth credentials). */
+/**
+ * ~/.codex/auth.json (OpenAI Codex CLI OAuth credentials).
+ * Respects `CODEX_HOME` the same way the `codex` CLI does.
+ */
 export function codexAuthPath(): string {
+  const override = process.env["CODEX_HOME"];
+  if (override && override.trim() !== "") {
+    return resolve(override, "auth.json");
+  }
   return userHome(".codex", "auth.json");
 }
 

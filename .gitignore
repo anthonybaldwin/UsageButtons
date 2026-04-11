@@ -1,0 +1,24 @@
+# Reference clones (not part of our source)
+tmp/
+
+# Dependencies
+node_modules/
+bun.lockb.bak
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+com.baldwin.usage-buttons.sdPlugin/bin/plugin-*
+com.baldwin.usage-buttons.sdPlugin/logs/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Secrets / user config
+.env
+.env.local

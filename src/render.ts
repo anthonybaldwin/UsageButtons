@@ -164,8 +164,8 @@ function fitFontSize(
   const solved = Math.floor(maxWidth / (text.length * 0.58));
   return Math.max(minSize, Math.min(preferredSize, solved));
 }
-const LABEL_FONT_SIZE = 16;
-const LABEL_LINE_HEIGHT = 17;
+const LABEL_FONT_MAX = 16;
+const LABEL_FONT_MIN = 10;
 /**
  * Subvalue (reset countdown / supplementary text) font sizes.
  * Default bumped to "large" because the old fixed 16px rendered
@@ -201,11 +201,33 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
   const subvalueFontSize = SUBVALUE_FONT_SIZE[subvalueSize];
   const showBorder = input.border !== false;
 
-  const labelLines = input.label
+  const labelLinesRaw = input.label
     ? input.label.split(/\r?\n/).map((line) => escapeXml(line))
     : [];
   const value = escapeXml(input.value);
   const subvalue = input.subvalue ? escapeXml(input.subvalue) : "";
+
+  // Auto-fit the label font so long titles (e.g. "EXTRA USAGE") and
+  // user-entered multi-line overrides don't overflow the 144px
+  // canvas. We compute a shrunk font size that fits the longest
+  // line within (CANVAS - 20)px and use it for every line — then
+  // the value text below doesn't jump around as wildly as it
+  // would if we let line count alone drive the block height.
+  const longestLabelLen = labelLinesRaw.reduce(
+    (m, line) => Math.max(m, line.length),
+    0,
+  );
+  const labelFontSize =
+    longestLabelLen > 0
+      ? fitFontSize(
+          "M".repeat(longestLabelLen),
+          CANVAS - 20,
+          LABEL_FONT_MAX,
+          LABEL_FONT_MIN,
+        )
+      : LABEL_FONT_MAX;
+  const labelLineHeight = Math.round(labelFontSize * 1.08);
+  const labelLines = labelLinesRaw;
 
   // Layout: compute the vertical center for the value block based on
   // which surrounding elements are present. When both label and
@@ -215,7 +237,7 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
   // title, numbers should shift up/center more".
   const hasLabel = labelLines.length > 0;
   const hasSub = subvalue.length > 0;
-  const labelBlockHeight = hasLabel ? labelLines.length * LABEL_LINE_HEIGHT : 0;
+  const labelBlockHeight = hasLabel ? labelLines.length * labelLineHeight : 0;
   const labelBottom = hasLabel ? 14 + labelBlockHeight : 0;
   // Subvalue baseline needs more room when the text is larger.
   // Leave `subvalueFontSize * 0.85` pixels of bottom padding so
@@ -231,8 +253,8 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
 
   const labelElements = labelLines
     .map((line, i) => {
-      const y = 14 + LABEL_FONT_SIZE + i * LABEL_LINE_HEIGHT;
-      return `<text x="${CANVAS / 2}" y="${y}" font-family="Helvetica,Arial,sans-serif" font-size="${LABEL_FONT_SIZE}" font-weight="700" text-anchor="middle" fill="${fg}" fill-opacity="0.85">${line}</text>`;
+      const y = 14 + labelFontSize + i * labelLineHeight;
+      return `<text x="${CANVAS / 2}" y="${y}" font-family="Helvetica,Arial,sans-serif" font-size="${labelFontSize}" font-weight="700" text-anchor="middle" fill="${fg}" fill-opacity="0.85">${line}</text>`;
     })
     .join("");
 

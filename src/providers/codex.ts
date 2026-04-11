@@ -384,17 +384,27 @@ export class CodexProvider implements Provider {
     );
     if (weekly) metrics.push(weekly);
 
+    // Credits metric: only emit for accounts that ACTUALLY have a
+    // credits-based plan with a positive balance. Free-plan users
+    // see `has_credits === false` (or unset) and the credits
+    // button rendering "$0" / "100%" / similar makes no sense in
+    // their context. Plus-tier users get `unlimited === true` and
+    // also shouldn't see a credits readout. Both gated out.
+    //
+    // We require BOTH: an explicit `has_credits: true` AND a
+    // numeric balance > 0. Anything else → no credits metric.
     const balance = parseBalance(response.credits?.balance);
-    if (
-      balance !== undefined &&
-      response.credits?.unlimited !== true &&
-      response.credits?.has_credits !== false
-    ) {
+    const hasCredits = response.credits?.has_credits === true;
+    const unlimited = response.credits?.unlimited === true;
+    if (balance !== undefined && balance > 0 && hasCredits && !unlimited) {
       metrics.push({
         id: "credits-balance",
         label: "CREDITS",
         name: "Credits remaining",
-        value: balance.toFixed(2).replace(/\.00$/, ""),
+        value: `$${balance.toFixed(2)}`,
+        numericValue: balance,
+        numericUnit: "dollars",
+        numericGoodWhen: "high",
         updatedAt: new Date(),
       });
     }

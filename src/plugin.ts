@@ -200,6 +200,9 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
       // async fetch resolves. This is what the user sees for ~1-2s
       // on plugin start / key drag — had to be clean.
       conn.setImage(e.context, loadingFaceFor(settings));
+      conn.log(
+        `key appeared (now tracking ${visibleKeys.size} visible key(s))`,
+      );
       // Kick off the real fetch. refreshKey will overwrite the
       // loading face with the real data (or an error face) when
       // the snapshot arrives.
@@ -207,8 +210,20 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
       return;
     }
     case "willDisappear": {
+      // Stream Deck fires willDisappear when a key leaves the
+      // currently-visible page (profile switch, page swap, app
+      // hide). Removing it from visibleKeys is what stops the
+      // poll scheduler from touching it — the scheduler only
+      // iterates visibleKeys, so off-page keys never poll. This
+      // is the page-aware-refresh behaviour the user explicitly
+      // asked for.
       const ctx = event.context;
-      if (ctx) visibleKeys.delete(ctx);
+      if (ctx && visibleKeys.has(ctx)) {
+        visibleKeys.delete(ctx);
+        conn.log(
+          `key disappeared (now tracking ${visibleKeys.size} visible key(s))`,
+        );
+      }
       return;
     }
     case "didReceiveSettings": {

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Usage Stat — Property Inspector</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: -apple-system, "Segoe UI", sans-serif;
+      font-size: 13px;
+    }
+    body { margin: 8px 12px; color: #e5e7eb; background: transparent; }
+    label { display: block; margin: 10px 0 4px; font-weight: 600; }
+    select, input { width: 100%; box-sizing: border-box; padding: 4px 6px;
+      background: #111827; color: #f9fafb; border: 1px solid #374151;
+      border-radius: 4px; font-size: 13px; }
+    p.hint { margin: 10px 0 0; opacity: 0.65; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <label for="provider">Provider</label>
+  <select id="provider">
+    <option value="mock">Mock (dev)</option>
+  </select>
+
+  <label for="metric">Metric</label>
+  <select id="metric">
+    <option value="session-percent">Session % remaining</option>
+    <option value="weekly-percent">Weekly % remaining</option>
+    <option value="credits">Credits remaining</option>
+  </select>
+
+  <p class="hint">
+    More providers unlock as they ship. See <code>docs/codexbar-reference.md</code>
+    in the repo for the implementation order.
+  </p>
+
+  <script>
+    // Stream Deck calls this global with registration args when the
+    // Property Inspector loads. We use it to read current settings and
+    // to push updates back as the user picks options.
+    //
+    // Protocol: https://docs.elgato.com/streamdeck/sdk/references/property-inspector/
+    let websocket = null;
+    let uuid = null;
+    let actionInfo = null;
+
+    function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
+      uuid = inUUID;
+      actionInfo = JSON.parse(inActionInfo);
+      websocket = new WebSocket("ws://127.0.0.1:" + port);
+
+      websocket.onopen = () => {
+        websocket.send(JSON.stringify({ event: registerEvent, uuid: inUUID }));
+      };
+
+      const settings = actionInfo.payload.settings || {};
+      if (settings.providerId) {
+        document.getElementById("provider").value = settings.providerId;
+      }
+      if (settings.metricId) {
+        document.getElementById("metric").value = settings.metricId;
+      }
+    }
+
+    function pushSettings() {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      const payload = {
+        providerId: document.getElementById("provider").value,
+        metricId: document.getElementById("metric").value,
+      };
+      websocket.send(JSON.stringify({
+        event: "setSettings",
+        context: uuid,
+        payload,
+      }));
+    }
+
+    document.getElementById("provider").addEventListener("change", pushSettings);
+    document.getElementById("metric").addEventListener("change", pushSettings);
+
+    // Expose the Stream Deck callback in the global scope where the app expects it.
+    window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
+  </script>
+</body>
+</html>

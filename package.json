@@ -1,0 +1,19 @@
+{
+  "name": "usage-buttons",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Stream Deck plugin that shows AI-coding-assistant usage stats as live buttons.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "bun run scripts/build.ts",
+    "build:win": "bun run scripts/build.ts win",
+    "build:mac": "bun run scripts/build.ts mac",
+    "sync:codexbar": "bash scripts/sync-codexbar.sh",
+    "dev": "bun --watch src/plugin.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  }
+}

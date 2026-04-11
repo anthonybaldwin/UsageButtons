@@ -187,6 +187,47 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
 </svg>`;
 }
 
+/**
+ * Render a "loading" face — what a button should show between
+ * first willAppear and the first successful provider fetch. Clean
+ * and professional: bg + border + provider brand-colored accent
+ * strip + a three-dot centered glyph at reduced opacity. No
+ * animation (Stream Deck rasterises SVG client-side; animation
+ * tags aren't reliably preserved). The visual signals "waiting"
+ * without being noisy.
+ */
+export function renderLoadingSvg(opts: {
+  label?: string;
+  fill?: string;
+  bg?: string;
+  fg?: string;
+  border?: boolean;
+}): string {
+  const fg = opts.fg ?? "#f9fafb";
+  const fill = opts.fill ?? "#3b82f6";
+  const bg = opts.bg ?? "#111827";
+  const showBorder = opts.border !== false;
+  const label = opts.label ? escapeXml(opts.label) : "";
+
+  // A 4px accent strip of the provider brand color at the bottom
+  // so users can still identify the provider visually, plus a
+  // centered ··· glyph that reads unambiguously as "pending".
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CANVAS} ${CANVAS}">
+  <defs>
+    <clipPath id="card-loading">
+      <rect width="${CANVAS}" height="${CANVAS}" rx="16" ry="16"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#card-loading)">
+    <rect width="${CANVAS}" height="${CANVAS}" fill="${bg}"/>
+    <rect y="${CANVAS - 4}" width="${CANVAS}" height="4" fill="${fill}" fill-opacity="0.85"/>
+  </g>
+  ${showBorder ? `<rect x="0.75" y="0.75" width="${CANVAS - 1.5}" height="${CANVAS - 1.5}" rx="16" ry="16" fill="none" stroke="${fg}" stroke-opacity="0.18" stroke-width="1.5"/>` : ""}
+  ${label ? `<text x="${CANVAS / 2}" y="30" font-family="Helvetica,Arial,sans-serif" font-size="${LABEL_FONT_SIZE}" font-weight="700" text-anchor="middle" fill="${fg}" fill-opacity="0.6">${label}</text>` : ""}
+  <text x="${CANVAS / 2}" y="86" font-family="Helvetica,Arial,sans-serif" font-size="44" font-weight="800" text-anchor="middle" fill="${fg}" fill-opacity="0.35" letter-spacing="4">···</text>
+</svg>`;
+}
+
 /** Convenience: render "NN%" with an "up-fill" bar from the ratio. */
 export function renderPercentButton(opts: {
   label?: string;

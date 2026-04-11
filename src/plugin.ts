@@ -8,7 +8,7 @@
 
 import { parseArgs, StreamDeckConnection } from "./streamdeck.ts";
 import type { InboundEvent, WillAppearEvent } from "./streamdeck.ts";
-import { renderButtonSvg } from "./render.ts";
+import { renderButtonSvg, renderLoadingSvg } from "./render.ts";
 import { getProvider } from "./providers/registry.ts";
 import { getSnapshot, setCacheLogSink } from "./providers/cache.ts";
 import { setClaudeDebugLogSink } from "./providers/claude.ts";
@@ -124,14 +124,20 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
     case "willAppear": {
       const e = event as WillAppearEvent;
       if (e.action !== ACTION_UUID) return;
+      const settings = e.payload.settings as KeySettings;
       visibleKeys.set(e.context, {
         context: e.context,
-        settings: e.payload.settings as KeySettings,
+        settings,
         lastPollAt: 0,
       });
-      // First appearance: fire an immediate cached-or-fetched refresh
-      // so the button has data as soon as the user drops it on a key.
-      // lastPollAt is updated inside refreshKey on success.
+      // Paint a loading face synchronously so the button doesn't
+      // show the static manifest placeholder while the first
+      // async fetch resolves. This is what the user sees for ~1-2s
+      // on plugin start / key drag — had to be clean.
+      conn.setImage(e.context, loadingFaceFor(settings));
+      // Kick off the real fetch. refreshKey will overwrite the
+      // loading face with the real data (or an error face) when
+      // the snapshot arrives.
       void refreshKey(conn, e.context, { force: false });
       return;
     }
@@ -242,6 +248,35 @@ async function refreshKey(
 
 function isRateLimit(errorMessage: string): boolean {
   return /429|rate.?limit/i.test(errorMessage);
+}
+
+/**
+ * Render a "loading" face for a brand-new key that hasn't had its
+ * first fetch yet. Picks the provider's brand color when we can
+ * identify the provider from the key settings, otherwise falls
+ * back to the user-configured fill color.
+ */
+function loadingFaceFor(settings: KeySettings): string {
+  const providerId = settings.providerId ?? DEFAULT_PROVIDER;
+  const provider = getProvider(providerId);
+  const label = settings.hideLabel
+    ? undefined
+    : (settings.labelOverride?.trim() || provider?.name.toUpperCase());
+  const input: Parameters<typeof renderLoadingSvg>[0] = {};
+  if (label) input.label = label;
+  if (settings.fillColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.fillColor)) {
+    input.fill = settings.fillColor;
+  } else if (provider?.brandColor) {
+    input.fill = provider.brandColor;
+  }
+  if (settings.bgColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.bgColor)) {
+    input.bg = settings.bgColor;
+  }
+  if (settings.textColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.textColor)) {
+    input.fg = settings.textColor;
+  }
+  if (settings.showBorder === false) input.border = false;
+  return renderLoadingSvg(input);
 }
 
 function renderMetric(

@@ -281,17 +281,25 @@ interface ExtraUsageSource {
   /** Amount spent this month in cents. */
   usedCreditsCents: number;
   currency: string;
+  /** Optional prepaid credit balance in cents (from the balance probe). */
+  balanceCents?: number;
+  /** True if auto-reload is configured on the balance. */
+  autoReloadEnabled?: boolean;
+  /** True if account is out of extras credits. */
+  outOfCredits?: boolean;
+  /** Account email for claude.ai web scope. */
+  accountEmail?: string;
 }
 
 function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
   if (!extra) return [];
 
-  // Always emit the ON/OFF metric when we have an extras block at
-  // all — even if the monthly limit is zero / not set. This lets
-  // the user bind a button to "extra usage enabled?" so the tile
-  // shows state at a glance.
   const now = new Date();
-  const enabledMetric: MetricValue = {
+  const out: MetricValue[] = [];
+
+  // Always emit the ON/OFF metric when we have an extras block at
+  // all — even if the monthly limit is zero / not set.
+  out.push({
     id: "extra-usage-enabled",
     label: "EXTRA",
     name: "Extra usage enabled",
@@ -299,10 +307,57 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
     ratio: extra.isEnabled ? 1 : 0,
     direction: "up",
     updatedAt: now,
-  };
+  });
+
+  // out-of-credits — red alert when the extras credit pool is dry.
+  if (extra.outOfCredits !== undefined) {
+    out.push({
+      id: "extra-usage-out-of-credits",
+      label: "CREDITS",
+      name: "Out of extras credits",
+      value: extra.outOfCredits ? "OUT" : "OK",
+      ratio: extra.outOfCredits ? 1 : 0,
+      direction: "up",
+      updatedAt: now,
+    });
+  }
+
+  // Prepaid balance (from the speculative probe). Only emitted
+  // when we successfully discovered the balance endpoint AND it
+  // returned a non-negative number.
+  if (typeof extra.balanceCents === "number" && extra.balanceCents >= 0) {
+    const bal = extra.balanceCents / 100;
+    out.push({
+      id: "extra-usage-balance",
+      label: "BALANCE",
+      name: "Extra usage prepaid balance",
+      value: `$${bal.toFixed(2)}`,
+      updatedAt: now,
+    });
+  }
+
+  // Auto-reload on/off. Only emit when we actually have a signal
+  // from the balance endpoint.
+  if (extra.autoReloadEnabled !== undefined) {
+    out.push({
+      id: "extra-usage-auto-reload",
+      label: "AUTO↻",
+      name: "Extras auto-reload",
+      value: extra.autoReloadEnabled ? "ON" : "OFF",
+      ratio: extra.autoReloadEnabled ? 1 : 0,
+      direction: "up",
+      updatedAt: now,
+    });
+  }
+
+  // NOTE: account email is intentionally not a button metric —
+  // too long to fit a 144x144 tile and not actionable glanceably.
+  // It's still captured on ExtraUsageSource so a future PI tweak
+  // can display "Signed in as: user@example.com" in the Plugin
+  // Settings tab as informational text.
 
   const limitCents = extra.monthlyLimitCents;
-  if (limitCents <= 0) return [enabledMetric];
+  if (limitCents <= 0) return out;
   const spentCents = extra.usedCreditsCents;
   const limit = limitCents / 100;
   const spent = spentCents / 100;
@@ -310,7 +365,7 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
   const usedPct = Math.min(100, (spent / limit) * 100);
   const remPct = 100 - usedPct;
   const currency = extra.currency;
-  return [
+  out.push(
     {
       id: "extra-usage-percent",
       label: "EXTRA",
@@ -339,8 +394,8 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       direction: "up",
       updatedAt: now,
     },
-    enabledMetric,
-  ];
+  );
+  return out;
 }
 
 export class ClaudeProvider implements Provider {
@@ -355,6 +410,9 @@ export class ClaudeProvider implements Provider {
     "extra-usage-remaining",
     "extra-usage-spent",
     "extra-usage-enabled",
+    "extra-usage-balance",
+    "extra-usage-auto-reload",
+    "extra-usage-out-of-credits",
   ] as const;
 
   async fetch(): Promise<ProviderSnapshot> {

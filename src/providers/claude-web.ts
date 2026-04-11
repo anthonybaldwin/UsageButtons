@@ -42,6 +42,20 @@ export interface WebExtraUsage {
   monthlyLimitCents: number;
   usedCreditsCents: number;
   currency: string;
+  /** Claude.ai org-scoped account email (from /overage_spend_limit). */
+  accountEmail?: string;
+  /** True when the account has run out of extras credits. */
+  outOfCredits?: boolean;
+  /** Free-form reason text when extras are disabled, e.g. "manual". */
+  disabledReason?: string;
+  /** ISO timestamp when extras will auto-re-enable (optional). */
+  disabledUntil?: string;
+  /** Seat tier from claude.ai's web layer. Alternative to OAuth rateLimitTier. */
+  seatTier?: string;
+  /** Prepaid balance in currency minor units (cents), if discovered. */
+  balanceCents?: number;
+  /** True if the user has auto-reload enabled on extras credits. */
+  autoReloadEnabled?: boolean;
 }
 
 /** Raw Claude.ai organization list item. */
@@ -51,12 +65,47 @@ interface OrgRow {
   capabilities?: string[];
 }
 
-/** Raw /overage_spend_limit response. */
+/** Raw /overage_spend_limit response (all the fields we've seen). */
 interface OverageResponse {
   is_enabled?: boolean;
   monthly_credit_limit?: number; // cents
   used_credits?: number; // cents
   currency?: string;
+  account_email?: string;
+  account_name?: string;
+  account_uuid?: string;
+  out_of_credits?: boolean;
+  disabled_reason?: string | null;
+  disabled_until?: string | null;
+  seat_tier?: string;
+  limit_type?: string;
+  resolved_group_limit?: number | null;
+  organization_uuid?: string;
+}
+
+/**
+ * Raw shape of claude.ai's `/api/organizations/{orgId}/prepaid/credits`
+ * endpoint — the one that returns the "Current balance" shown on
+ * claude.ai's settings page. Discovered by the user pointing at a
+ * real live response on 2026-04-11:
+ *
+ *   {
+ *     "amount": 20480,
+ *     "currency": "USD",
+ *     "auto_reload_settings": null,
+ *     "pending_invoice_amount_cents": null
+ *   }
+ *
+ * `amount` is already in currency minor units (cents). A null
+ * `auto_reload_settings` means auto-reload is off; a populated
+ * object means it's configured (shape of the object itself is not
+ * yet decoded — we only read its truthiness for a boolean signal).
+ */
+interface PrepaidCreditsResponse {
+  amount?: number;
+  currency?: string;
+  auto_reload_settings?: unknown;
+  pending_invoice_amount_cents?: number | null;
 }
 
 /**
@@ -257,28 +306,87 @@ export async function fetchClaudeExtraUsage(
     return undefined;
   }
 
-  // Schema observability: log the full key list (keys only, never
-  // values) so we can tell whether Anthropic returns a `balance` /
-  // `current_balance` / `credits_balance` field we aren't parsing.
-  // The user's claude.ai settings page shows `$204.80 Current
-  // balance` which must come from somewhere — either this endpoint
-  // under a field name we don't know yet, or a separate billing
-  // endpoint we haven't called yet.
-  try {
-    const keys = Object.keys(overage as Record<string, unknown>)
-      .sort()
-      .join(",");
-    logSink?.(`claude-web: /overage_spend_limit keys=[${keys}]`);
-  } catch {
-    /* ignore logging errors */
-  }
+  // Fetch the prepaid credits balance. One known HTTP call to
+  // `/api/organizations/{orgId}/prepaid/credits`, best-effort —
+  // if it fails (401, 404, network) we just don't include the
+  // balance metrics. Runs concurrently with nothing else at this
+  // point so we don't bother parallelising.
+  const balance = await fetchPrepaidCredits(cookieHeader, orgId);
 
-  return {
+  const result: WebExtraUsage = {
     isEnabled: overage.is_enabled === true,
     monthlyLimitCents: overage.monthly_credit_limit ?? 0,
     usedCreditsCents: overage.used_credits ?? 0,
     currency: overage.currency ?? "USD",
   };
+  if (overage.account_email) result.accountEmail = overage.account_email;
+  if (typeof overage.out_of_credits === "boolean") {
+    result.outOfCredits = overage.out_of_credits;
+  }
+  if (overage.disabled_reason) result.disabledReason = overage.disabled_reason;
+  if (overage.disabled_until) result.disabledUntil = overage.disabled_until;
+  if (overage.seat_tier) result.seatTier = overage.seat_tier;
+  if (balance) {
+    if (typeof balance.balanceCents === "number") {
+      result.balanceCents = balance.balanceCents;
+    }
+    if (typeof balance.autoReloadEnabled === "boolean") {
+      result.autoReloadEnabled = balance.autoReloadEnabled;
+    }
+  }
+  return result;
+}
+
+/**
+ * Fetch the prepaid credits balance from claude.ai.
+ *
+ * Endpoint discovered 2026-04-11 against a real live account:
+ *   GET https://claude.ai/api/organizations/{orgId}/prepaid/credits
+ * Response shape is a flat `PrepaidCreditsResponse` above.
+ *
+ * Best-effort — any failure quietly returns undefined so the rest
+ * of the extras fetch is unaffected.
+ */
+async function fetchPrepaidCredits(
+  cookieHeader: string,
+  orgId: string,
+): Promise<{ balanceCents?: number; autoReloadEnabled?: boolean } | undefined> {
+  let parsed: PrepaidCreditsResponse;
+  try {
+    parsed = await httpJson<PrepaidCreditsResponse>({
+      url: `${BASE_URL}/organizations/${orgId}/prepaid/credits`,
+      headers: {
+        cookie: cookieHeader,
+        accept: "application/json",
+      },
+      timeoutMs: 10_000,
+    });
+  } catch (err) {
+    if (err instanceof HttpError) {
+      logSink?.(
+        `claude-web: /prepaid/credits ${err.status} — balance metrics disabled`,
+      );
+    }
+    return undefined;
+  }
+
+  const result: { balanceCents?: number; autoReloadEnabled?: boolean } = {};
+  if (typeof parsed.amount === "number") {
+    result.balanceCents = parsed.amount;
+  }
+  // auto_reload_settings is an object when auto-reload is configured,
+  // null when it's disabled. Use truthiness as a boolean signal.
+  if (parsed.auto_reload_settings !== undefined) {
+    result.autoReloadEnabled = parsed.auto_reload_settings !== null;
+  }
+
+  const displayAmount = result.balanceCents !== undefined
+    ? `${(result.balanceCents / 100).toFixed(2)}${parsed.currency ? " " + parsed.currency : ""}`
+    : "—";
+  logSink?.(
+    `claude-web: /prepaid/credits balance=${displayAmount} autoReload=${result.autoReloadEnabled ?? "?"}`,
+  );
+  return result;
 }
 
 /** Clear the org-UUID cache (used when cookie settings change). */

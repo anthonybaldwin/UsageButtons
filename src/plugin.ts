@@ -316,19 +316,23 @@ async function refreshKey(
     // (e.g. Codex weekly hit 100%, so its session window is also
     // unusable; Claude sonnet maxed with no extras enabled).
     //
-    // Render a clear "MAX'D" face in red with the exhausted
-    // companion's reset countdown so the user understands they're
-    // blocked + when it'll clear, instead of the ugly "—".
+    // Render a "blocked" face dominated by the provider's logo
+    // (glyphMode: "centered") with the exhausted companion's
+    // reset countdown as the subvalue. The big logo on a red
+    // background communicates "this provider is capped" at a
+    // glance — matches the user's explicit request to put the
+    // logo there rather than a text label.
     const exhausted = snapshot.metrics.find(
       (m) => /-percent$/.test(m.id) && (m.ratio ?? 1) <= 0.01,
     );
     if (exhausted) {
       const maxdInput: Parameters<typeof renderButtonSvg>[0] = {
         label: provider.name.toUpperCase(),
-        value: "MAX'D",
+        value: "",
         ratio: 1,
         direction: "up",
         fill: "#ef4444",
+        glyphMode: "centered",
       };
       if (exhausted.resetInSeconds !== undefined) {
         maxdInput.subvalue = formatCountdown(exhausted.resetInSeconds);

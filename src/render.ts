@@ -61,10 +61,31 @@ export interface ButtonRenderInput {
   subvalueSize?: ValueSize;
   /** Render the outer rounded-rect border stroke. Default on. */
   border?: boolean;
-  /** Optional provider glyph to overlay as a small corner badge. */
+  /** Optional provider glyph (single SVG path) to render. */
   glyph?: ProviderGlyph;
-  /** Hide the corner glyph when false. Default true (visible). */
+  /** Hide the glyph entirely when false. Default true (visible). */
   showGlyph?: boolean;
+  /**
+   * How to render the glyph:
+   *
+   *   - "watermark" (default) — big (88×88), centered, BEHIND the
+   *     fill rect at low opacity. As the meter fills, the brand
+   *     color naturally "consumes" the logo from the bottom up,
+   *     leaving the unfilled (dark) portion of the card showing
+   *     the brand mark. Self-coloring — works at any user-chosen
+   *     fill / bg combo without explicit glyph color tuning.
+   *
+   *   - "centered" — big (88×88), centered, ON TOP of everything
+   *     at high opacity. Used for the "MAX'D" / blocked face so
+   *     the brand logo dominates the tile. Skips the big value
+   *     text since the logo *is* the value.
+   *
+   *   - "corner" — small (20×20) top-right badge, foreground color
+   *     at 0.7 opacity. Legacy / opt-in.
+   *
+   *   - "none" — don't render the glyph at all.
+   */
+  glyphMode?: "watermark" | "centered" | "corner" | "none";
 }
 
 const CANVAS = 144;
@@ -223,16 +244,47 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
     ? `<text x="${CANVAS / 2}" y="${subvalueBaselineY}" font-family="Helvetica,Arial,sans-serif" font-size="${subvalueFontSize}" font-weight="700" text-anchor="middle" fill="${fg}" fill-opacity="0.85">${subvalue}</text>`
     : "";
 
-  // Optional top-right glyph badge: 20×20 px at (CANVAS-26, 6),
-  // same foreground color at 0.7 opacity so it reads as a
-  // watermark without competing with the big value text.
-  const glyphSize = 20;
-  const glyphX = CANVAS - glyphSize - 6;
-  const glyphY = 6;
-  const glyphElement =
-    input.showGlyph !== false && input.glyph
-      ? `<g transform="translate(${glyphX} ${glyphY}) scale(${glyphSize / 100})" fill="${fg}" fill-opacity="0.7"><path d="${input.glyph.d}"/></g>`
-      : "";
+  // Glyph rendering — see ButtonRenderInput.glyphMode docs above
+  // for the full design rationale. Three positioned variants
+  // produce three different visual effects:
+  //
+  //   watermark: big (88×88), centered, BEHIND the fill. As the
+  //              meter fills, the brand color "consumes" the logo
+  //              from the bottom up, leaving it visible in the
+  //              unfilled (dark) portion of the card. Self-coloring
+  //              so it works against any user-chosen fill/bg combo
+  //              without manual tuning.
+  //   centered : big (88×88), centered, ON TOP of everything at
+  //              high opacity. Used for MAX'D / blocked — the logo
+  //              IS the focal point. Value text is suppressed.
+  //   corner   : small (20×20), top-right, legacy badge.
+  const showGlyph =
+    input.showGlyph !== false && !!input.glyph && input.glyphMode !== "none";
+  const glyphMode = input.glyphMode ?? "watermark";
+
+  let glyphElementBack = "";
+  let glyphElementFront = "";
+  if (showGlyph && input.glyph) {
+    if (glyphMode === "watermark") {
+      const gSize = 88;
+      const gOff = (CANVAS - gSize) / 2;
+      glyphElementBack = `<g transform="translate(${gOff} ${gOff}) scale(${gSize / 100})" fill="${fg}" fill-opacity="0.22"><path d="${input.glyph.d}"/></g>`;
+    } else if (glyphMode === "centered") {
+      const gSize = 88;
+      const gOff = (CANVAS - gSize) / 2;
+      glyphElementFront = `<g transform="translate(${gOff} ${gOff}) scale(${gSize / 100})" fill="${fg}" fill-opacity="0.92"><path d="${input.glyph.d}"/></g>`;
+    } else if (glyphMode === "corner") {
+      const gSize = 20;
+      const gx = CANVAS - gSize - 6;
+      const gy = 6;
+      glyphElementFront = `<g transform="translate(${gx} ${gy}) scale(${gSize / 100})" fill="${fg}" fill-opacity="0.7"><path d="${input.glyph.d}"/></g>`;
+    }
+  }
+
+  // In "centered" mode the glyph IS the focal — suppress the big
+  // value text entirely so the logo owns the visual center.
+  // Subvalue (reset countdown) still renders below it.
+  const showValueText = !(glyphMode === "centered" && showGlyph);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CANVAS} ${CANVAS}" opacity="${opacity}">
   <defs>
@@ -242,12 +294,13 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
   </defs>
   <g clip-path="url(#card)">
     <rect width="${CANVAS}" height="${CANVAS}" fill="${bg}"/>
+    ${glyphElementBack}
     <rect x="${rect.x}" y="${rect.y}" width="${rect.w}" height="${rect.h}" fill="${fill}"/>
   </g>
   ${borderElement}
-  ${glyphElement}
+  ${glyphElementFront}
   ${labelElements}
-  <text x="${CANVAS / 2}" y="${valueY}" font-family="Helvetica,Arial,sans-serif" font-size="${valueFontSize}" font-weight="800" text-anchor="middle" fill="${fg}">${value}</text>
+  ${showValueText ? `<text x="${CANVAS / 2}" y="${valueY}" font-family="Helvetica,Arial,sans-serif" font-size="${valueFontSize}" font-weight="800" text-anchor="middle" fill="${fg}">${value}</text>` : ""}
   ${subvalueElement}
 </svg>`;
 }

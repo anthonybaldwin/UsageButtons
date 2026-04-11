@@ -460,12 +460,20 @@ export class ClaudeProvider implements Provider {
       // OAuth didn't give us usable extras — try the claude.ai cookie
       // path as a supplement. The fetcher reads its own cookie source
       // from global settings (auto-import from browsers, manual paste,
-      // or off) so we just call it with no args.
+      // or off) so we just call it with no args. This whole block
+      // runs INSIDE the per-provider cache's single in-flight fetch,
+      // so all visible keys bound to Claude share the same web call.
       const cs = getClaudeSettings();
       if (cs.source !== "oauth") {
+        debugLogSink?.("claude: OAuth extras missing → trying claude.ai cookie path");
         const web = await fetchClaudeExtraUsage();
         if (web) {
           extraSource = web;
+          debugLogSink?.(
+            `claude: web path returned monthlyLimit=${web.monthlyLimitCents}c used=${web.usedCreditsCents}c isEnabled=${web.isEnabled}`,
+          );
+        } else {
+          debugLogSink?.("claude: web path returned no data (cookie missing / scan failed / 401)");
         }
       }
     }

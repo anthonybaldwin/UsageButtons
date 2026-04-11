@@ -56,7 +56,7 @@
 
     /* Controls */
     label { display: block; margin: 10px 0 4px; font-weight: 600; }
-    select, input[type=text], textarea { width: 100%; box-sizing: border-box; padding: 4px 6px;
+    select, input[type=text], input[type=password], textarea { width: 100%; box-sizing: border-box; padding: 4px 6px;
       background: #111827; color: #f9fafb; border: 1px solid #374151;
       border-radius: 4px; font-size: 13px; font-family: inherit; resize: vertical; }
     textarea { min-height: 44px; }
@@ -285,13 +285,12 @@
     </p>
 
     <div id="claudeCookieRow">
-      <label for="claudeCookie">Session cookie (claude.ai)</label>
-      <textarea id="claudeCookie" rows="2" placeholder="sessionKey=sk-ant-sid01-..." autocomplete="off" spellcheck="false"></textarea>
+      <label for="claudeCookie">Session key (claude.ai)</label>
+      <input id="claudeCookie" type="password" placeholder="sk-ant-sid01-..." autocomplete="off" spellcheck="false">
       <p class="hint">
-        Open claude.ai → DevTools → Network → click any request → copy the
-        <code>Cookie:</code> header value. Only <code>sessionKey=</code> is
-        required. The plugin never logs or transmits this value anywhere
-        except <code>claude.ai</code>.
+        Paste your <code>sessionKey</code> value from claude.ai — it starts
+        with <code>sk-ant-sid01-</code>. The field is masked for privacy. Only
+        sent to <code>claude.ai</code> itself, never logged anywhere.
       </p>
       <p class="hint" style="margin-top: 8px">
         <strong>Leave blank to auto-import</strong> from Edge / Firefox /
@@ -539,7 +538,14 @@
     ]) {
       const el = document.getElementById(id);
       el.addEventListener("change", pushGlobalSettings);
-      if (el.tagName === "TEXTAREA") el.addEventListener("input", pushGlobalSettings);
+      // Text + password inputs need `input` as well so edits
+      // push live instead of waiting for blur.
+      if (
+        el.tagName === "TEXTAREA" ||
+        (el.tagName === "INPUT" && (el.type === "text" || el.type === "password"))
+      ) {
+        el.addEventListener("input", pushGlobalSettings);
+      }
     }
 
     // "Reset text-size overrides" sends a custom sendToPlugin

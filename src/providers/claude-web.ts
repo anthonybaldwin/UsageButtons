@@ -31,7 +31,7 @@
  */
 
 import { HttpError, httpJson } from "../util/http.ts";
-import { findClaudeCookie } from "../util/cookies/index.ts";
+import { findClaudeCookie, invalidateCookieCache } from "../util/cookies/index.ts";
 import { getClaudeSettings } from "../settings.ts";
 
 const BASE_URL = "https://claude.ai/api";
@@ -186,6 +186,8 @@ async function resolveCookieHeader(): Promise<string | undefined> {
 
   // "auto": browser scan only. No fallback to pasted header.
   const scanned = await findClaudeCookie({
+    url: "https://claude.ai/",
+    cookieName: "sessionKey",
     onLog: (msg) => logSink?.(msg),
   });
   if (scanned) return `sessionKey=${scanned}`;
@@ -234,10 +236,12 @@ export async function fetchClaudeExtraUsage(
       timeoutMs: 15_000,
     });
   } catch (err) {
-    // 401 on the overage endpoint usually means the cookie expired.
-    // Clear the cached org so a new cookie triggers a fresh lookup.
+    // 401 on the overage endpoint usually means the cookie
+    // expired. Clear both the cached org AND the cookie cache so
+    // the next poll re-scans and picks up a fresh value.
     if (err instanceof HttpError && err.status === 401) {
       orgIdCache.delete(cookieHeader);
+      invalidateCookieCache("https://claude.ai/");
     }
     return undefined;
   }

@@ -22,7 +22,7 @@ import {
 interface KeySettings {
   providerId?: string;
   metricId?: string;
-  /** Optional override for the label rendered inside the SVG. Blank = use the metric's default. */
+  /** Optional override for the label rendered inside the SVG. Blank = use the metric's default. Multi-line OK. */
   labelOverride?: string;
   /** Hide the inner SVG label entirely (e.g. when using the Stream Deck native title). */
   hideLabel?: boolean;
@@ -30,10 +30,18 @@ interface KeySettings {
   fillColor?: string;
   /** Background color hex. Blank = dark default. */
   bgColor?: string;
+  /** Text (foreground) color hex. Blank = default white. */
+  textColor?: string;
   /** Direction the fill grows in as the value climbs toward 100%. */
   fillDirection?: "up" | "down" | "right" | "left";
   /** Flip the fill ratio (remaining ↔ used). Useful when the metric is "used %". */
   invertFill?: boolean;
+  /** Big-number size. Default "large". */
+  valueSize?: "small" | "medium" | "large";
+  /** Render the outer rounded-rect border. Default true. */
+  showBorder?: boolean;
+  /** Show the reset countdown as a subvalue under the big number. Default true. */
+  showResetTimer?: boolean;
   /**
    * Per-key refresh cadence in minutes. One of 5, 10, 15, 30, 60.
    * When undefined, the key uses the plugin's global default.
@@ -287,8 +295,19 @@ function renderMetric(
   if (settings.bgColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.bgColor)) {
     input.bg = settings.bgColor;
   }
+  if (settings.textColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.textColor)) {
+    input.fg = settings.textColor;
+  }
 
-  if (metric.resetInSeconds !== undefined) {
+  if (settings.valueSize) input.valueSize = settings.valueSize;
+  if (settings.showBorder === false) input.border = false;
+
+  // Reset-countdown subvalue — user can hide it (e.g. they prefer
+  // maximum value-text space on a "minimal" button style).
+  if (
+    metric.resetInSeconds !== undefined &&
+    settings.showResetTimer !== false
+  ) {
     input.subvalue = formatCountdown(metric.resetInSeconds);
   }
   if (metric.stale !== undefined) input.stale = metric.stale;

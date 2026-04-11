@@ -11,9 +11,10 @@
     }
     body { margin: 8px 12px; color: #e5e7eb; background: transparent; }
     label { display: block; margin: 10px 0 4px; font-weight: 600; }
-    select, input[type=text] { width: 100%; box-sizing: border-box; padding: 4px 6px;
+    select, input[type=text], textarea { width: 100%; box-sizing: border-box; padding: 4px 6px;
       background: #111827; color: #f9fafb; border: 1px solid #374151;
-      border-radius: 4px; font-size: 13px; }
+      border-radius: 4px; font-size: 13px; font-family: inherit; resize: vertical; }
+    textarea { min-height: 44px; }
     input[type=color] { width: 44px; height: 26px; padding: 0; border: 1px solid #374151;
       border-radius: 4px; background: transparent; cursor: pointer; }
     .row { display: flex; align-items: center; gap: 8px; }
@@ -75,7 +76,7 @@
   <hr>
 
   <label for="labelOverride">Label override (blank = provider default)</label>
-  <input id="labelOverride" type="text" placeholder="e.g. CLAUDE">
+  <textarea id="labelOverride" rows="2" placeholder="e.g. CLAUDE&#10;SESSION"></textarea>
 
   <div class="checkbox-row">
     <input id="hideLabel" type="checkbox">
@@ -86,6 +87,23 @@
     <input id="invertFill" type="checkbox">
     <label for="invertFill">Invert fill (show "used" instead of "remaining")</label>
   </div>
+
+  <div class="checkbox-row">
+    <input id="showResetTimer" type="checkbox" checked>
+    <label for="showResetTimer">Show reset countdown under the number</label>
+  </div>
+
+  <div class="checkbox-row">
+    <input id="showBorder" type="checkbox" checked>
+    <label for="showBorder">Draw border around the tile</label>
+  </div>
+
+  <label for="valueSize">Big-number size</label>
+  <select id="valueSize">
+    <option value="small">Small</option>
+    <option value="medium">Medium</option>
+    <option value="large" selected>Large (default)</option>
+  </select>
 
   <label for="fillDirection">Fill direction</label>
   <select id="fillDirection">
@@ -103,6 +121,11 @@
   <div class="row">
     <label for="bgColor">Background color</label>
     <input id="bgColor" type="color" value="#111827">
+  </div>
+
+  <div class="row">
+    <label for="textColor">Text color</label>
+    <input id="textColor" type="color" value="#f9fafb">
   </div>
 
   <p class="hint">
@@ -159,9 +182,13 @@
       document.getElementById("labelOverride").value = settings.labelOverride || "";
       document.getElementById("hideLabel").checked = !!settings.hideLabel;
       document.getElementById("invertFill").checked = !!settings.invertFill;
+      document.getElementById("showResetTimer").checked = settings.showResetTimer !== false;
+      document.getElementById("showBorder").checked = settings.showBorder !== false;
+      document.getElementById("valueSize").value = settings.valueSize || "large";
       document.getElementById("fillDirection").value = settings.fillDirection || "up";
       if (settings.fillColor) document.getElementById("fillColor").value = settings.fillColor;
       if (settings.bgColor)   document.getElementById("bgColor").value   = settings.bgColor;
+      if (settings.textColor) document.getElementById("textColor").value = settings.textColor;
     }
 
     function applyGlobalSettings(globals) {
@@ -195,15 +222,19 @@
       if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
       const refreshRaw = document.getElementById("refreshMinutes").value;
       const payload = {
-        providerId:    document.getElementById("provider").value,
-        metricId:      document.getElementById("metric").value,
+        providerId:     document.getElementById("provider").value,
+        metricId:       document.getElementById("metric").value,
         refreshMinutes: refreshRaw === "" ? undefined : Number(refreshRaw),
-        labelOverride: document.getElementById("labelOverride").value,
-        hideLabel:     document.getElementById("hideLabel").checked,
-        invertFill:    document.getElementById("invertFill").checked,
-        fillDirection: document.getElementById("fillDirection").value,
-        fillColor:     document.getElementById("fillColor").value,
-        bgColor:       document.getElementById("bgColor").value,
+        labelOverride:  document.getElementById("labelOverride").value,
+        hideLabel:      document.getElementById("hideLabel").checked,
+        invertFill:     document.getElementById("invertFill").checked,
+        showResetTimer: document.getElementById("showResetTimer").checked,
+        showBorder:     document.getElementById("showBorder").checked,
+        valueSize:      document.getElementById("valueSize").value,
+        fillDirection:  document.getElementById("fillDirection").value,
+        fillColor:      document.getElementById("fillColor").value,
+        bgColor:        document.getElementById("bgColor").value,
+        textColor:      document.getElementById("textColor").value,
       };
       websocket.send(JSON.stringify({
         event: "setSettings",
@@ -230,9 +261,14 @@
     });
     for (const id of [
       "metric", "refreshMinutes", "labelOverride", "hideLabel", "invertFill",
-      "fillDirection", "fillColor", "bgColor",
+      "showResetTimer", "showBorder", "valueSize",
+      "fillDirection", "fillColor", "bgColor", "textColor",
     ]) {
-      document.getElementById(id).addEventListener("change", pushSettings);
+      const el = document.getElementById(id);
+      // Textareas get both input and change; change alone doesn't fire
+      // until blur which feels laggy for color/size pickers too.
+      el.addEventListener("change", pushSettings);
+      if (el.tagName === "TEXTAREA") el.addEventListener("input", pushSettings);
     }
     document.getElementById("defaultRefresh").addEventListener("change", pushGlobalSettings);
 

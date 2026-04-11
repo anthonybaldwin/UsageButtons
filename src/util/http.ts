@@ -32,9 +32,15 @@ export class HttpError extends Error {
     public readonly statusText: string,
     public readonly body: string,
     public readonly url: string,
+    public readonly headers: Record<string, string> = {},
   ) {
     super(`HTTP ${status} ${statusText} from ${url}: ${truncate(body, 500)}`);
     this.name = "HttpError";
+  }
+
+  /** Value of a response header (case-insensitive), or undefined. */
+  header(name: string): string | undefined {
+    return this.headers[name.toLowerCase()];
   }
 }
 
@@ -89,7 +95,19 @@ export async function httpJson<T>(opts: HttpRequestOptions): Promise<T> {
 
   const text = await res.text();
   if (!res.ok) {
-    throw new HttpError(res.status, res.statusText, text, opts.url);
+    // Capture headers as a flat lowercase map so callers can read
+    // Retry-After, x-ratelimit-*, etc.
+    const headerMap: Record<string, string> = {};
+    res.headers.forEach((value, key) => {
+      headerMap[key.toLowerCase()] = value;
+    });
+    throw new HttpError(
+      res.status,
+      res.statusText,
+      text,
+      opts.url,
+      headerMap,
+    );
   }
   try {
     return JSON.parse(text) as T;

@@ -62,6 +62,12 @@ import {
   CredentialNotFoundError,
 } from "../util/credentials.ts";
 import { httpJson, HttpError } from "../util/http.ts";
+
+function truncate(s: string, n: number): string {
+  if (!s) return "";
+  const clean = s.replace(/\s+/g, " ").trim();
+  return clean.length <= n ? clean : `${clean.slice(0, n)}…`;
+}
 import type {
   MetricValue,
   Provider,
@@ -308,18 +314,30 @@ export class ClaudeProvider implements Provider {
       if (err instanceof HttpError) {
         if (err.status === 401) {
           throw new ClaudeOAuthError(
-            "Claude OAuth request unauthorized. Run `claude` to re-authenticate.",
+            `Claude OAuth request unauthorized. Run \`claude\` to re-authenticate. body=${truncate(err.body, 200)}`,
             "unauthorized",
           );
         }
         if (err.status === 403 && err.body.includes("user:profile")) {
           throw new ClaudeOAuthError(
-            "Claude OAuth token missing `user:profile` scope. Run `claude setup-token` to regenerate.",
+            `Claude OAuth token missing \`user:profile\` scope. Run \`claude setup-token\` to regenerate. body=${truncate(err.body, 200)}`,
             "scope-missing",
           );
         }
+        // Surface everything we can: status, key headers, body.
+        // This is the difference between "some 429" and
+        // "actually a rate limit with a Retry-After".
+        const retryAfter = err.header("retry-after");
+        const reqId = err.header("request-id") ?? err.header("x-request-id");
+        const meta = [
+          `HTTP ${err.status}`,
+          retryAfter ? `retry-after=${retryAfter}` : "",
+          reqId ? `req=${reqId}` : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
         throw new ClaudeOAuthError(
-          `Claude OAuth server error: HTTP ${err.status}`,
+          `Claude OAuth server error: ${meta} body=${truncate(err.body, 200)}`,
           "server",
         );
       }

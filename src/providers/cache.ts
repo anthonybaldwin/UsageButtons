@@ -28,6 +28,16 @@
 import type { Provider, ProviderSnapshot } from "./types.ts";
 
 /**
+ * Observability hook. The plugin sets this to its own `log()` so cache
+ * events show up in %APPDATA%/Elgato/StreamDeck/logs/com.baldwin.*.log.
+ * Kept as an injected callback so this module stays dependency-free.
+ */
+let logSink: (message: string) => void = () => {};
+export function setCacheLogSink(fn: (message: string) => void): void {
+  logSink = fn;
+}
+
+/**
  * Cache TTL is set to match the plugin's shortest user-selectable
  * poll interval (5 minutes). That means any poll tick within 5m of
  * a prior successful fetch reuses the snapshot without touching the
@@ -105,12 +115,19 @@ export async function getSnapshot(
   // Cool-down: an upstream error in the recent past. Serve cached
   // data (if any) marked stale, or a synthetic error snapshot.
   if (entry.lastError && t - entry.lastError.at < COOLDOWN_MS) {
+    const secondsLeft = Math.ceil((COOLDOWN_MS - (t - entry.lastError.at)) / 1000);
+    logSink(
+      `cache[${provider.id}] cool-down: ${secondsLeft}s left, serving ${entry.snapshot ? "stale snapshot" : "error face"} (last error: ${entry.lastError.message})`,
+    );
     if (entry.snapshot) return markStale(entry.snapshot, entry.lastError.message);
     return errorSnapshot(provider, entry.lastError.message);
   }
 
   // Coalesce concurrent callers behind a single in-flight promise.
-  if (entry.inflight) return entry.inflight;
+  if (entry.inflight) {
+    logSink(`cache[${provider.id}] coalesced with in-flight fetch`);
+    return entry.inflight;
+  }
 
   // Fresh-enough cached snapshot wins unless the caller forces.
   if (
@@ -119,19 +136,31 @@ export async function getSnapshot(
     entry.fetchedAt &&
     t - entry.fetchedAt < MIN_TTL_MS
   ) {
+    const ageSec = Math.round((t - entry.fetchedAt) / 1000);
+    logSink(`cache[${provider.id}] hit (age=${ageSec}s)`);
     return entry.snapshot;
   }
 
+  logSink(
+    `cache[${provider.id}] miss — ${options.force ? "forced " : ""}fetching upstream`,
+  );
   const fetchPromise = (async (): Promise<ProviderSnapshot> => {
     try {
       const snapshot = await provider.fetch({ pollIntervalMs: MIN_TTL_MS });
       entry.snapshot = snapshot;
       entry.fetchedAt = now();
+      const hadError = !!entry.lastError;
       delete entry.lastError;
+      logSink(
+        `cache[${provider.id}] fetched OK (source=${snapshot.source}, metrics=${snapshot.metrics.length}${hadError ? ", recovered from error" : ""})`,
+      );
       return snapshot;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       entry.lastError = { message, at: now() };
+      logSink(
+        `cache[${provider.id}] fetch FAILED: ${message} — cooling down for ${Math.round(COOLDOWN_MS / 1000)}s`,
+      );
       if (entry.snapshot) return markStale(entry.snapshot, message);
       return errorSnapshot(provider, message);
     } finally {

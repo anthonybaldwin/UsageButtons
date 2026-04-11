@@ -10,7 +10,7 @@ import { parseArgs, StreamDeckConnection } from "./streamdeck.ts";
 import type { InboundEvent, WillAppearEvent } from "./streamdeck.ts";
 import { renderButtonSvg } from "./render.ts";
 import { getProvider } from "./providers/registry.ts";
-import { getSnapshot } from "./providers/cache.ts";
+import { getSnapshot, setCacheLogSink } from "./providers/cache.ts";
 import type { MetricValue } from "./providers/types.ts";
 import {
   resolveRefreshMs,
@@ -71,6 +71,11 @@ async function main(): Promise<void> {
   const args = parseArgs(Bun.argv);
   const connection = new StreamDeckConnection(args);
   await connection.connect();
+
+  // Wire the cache's log events through to Stream Deck's per-plugin
+  // log file so we can see hit/miss/cool-down decisions in
+  // %APPDATA%/Elgato/StreamDeck/logs/com.baldwin.usage-buttons*.log.
+  setCacheLogSink((msg) => connection.log(msg));
 
   connection.onEvent((event) => handleEvent(connection, event));
 

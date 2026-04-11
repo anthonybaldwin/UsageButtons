@@ -207,13 +207,14 @@
     </div>
 
     <p class="hint" style="margin-top: 14px">
-      <strong>Windows + Chrome note:</strong> Chrome holds its Cookies database
-      with exclusive access while running, so auto-import can't read it. To get
-      the extra-usage buttons populated, <strong>quit Chrome once</strong> — the
-      next refresh will scan, cache the cookie for 24 hours, and you can reopen
-      Chrome immediately. Edge / Firefox / closed Chrome all work fine.
-      Alternatively, switch this dropdown to <strong>Manual</strong> and paste
-      the cookie header.
+      <strong>Windows + Chrome 127+ note:</strong> modern Chrome encrypts
+      cookies with App-Bound Encryption (v20 prefix) which cannot be decrypted
+      by any process outside Chrome itself — not sweet-cookie, not us, not
+      even Microsoft's own database tools. To populate the Extra usage buttons
+      on Chrome, switch this dropdown to <strong>Manual</strong> and paste the
+      cookie header. One-time step, cached until the cookie expires. Edge and
+      Firefox are unaffected — if you're logged in to claude.ai there, auto
+      mode just works.
     </p>
   </div>
 

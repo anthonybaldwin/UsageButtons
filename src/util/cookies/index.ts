@@ -191,9 +191,54 @@ function listProfileDirs(userDataDir: string): string[] {
 }
 
 /**
+ * Probe a staged Chromium Cookies SQLite to find out whether the
+ * target cookie row exists and, critically, which encryption
+ * version prefix it uses. Returns one of:
+ *
+ *   "missing"  — row not present (account not logged in here)
+ *   "absent"   — row present but empty encrypted_value
+ *   "v20"      — row present, uses Chrome 127+ App-Bound
+ *                Encryption which cannot be decrypted from any
+ *                non-Chrome process. Sweet-cookie's AES-256-GCM
+ *                path silently fails on these and returns an
+ *                empty value — callers should surface a clear
+ *                "use manual paste / companion extension"
+ *                message rather than "no cookie found".
+ *   "v10" | "v11" | … — sweet-cookie can likely decrypt it.
+ */
+async function probeCookiePrefix(
+  stagedCookiesDb: string,
+  cookieName: string,
+  hostLike: string,
+): Promise<"missing" | "absent" | string> {
+  // Lazy-import bun:sqlite so a non-Bun runtime (unit tests) can
+  // still import this module without the binding.
+  const { Database } = await import("bun:sqlite");
+  const db = new Database(stagedCookiesDb, { readonly: true });
+  try {
+    const row = db
+      .query<{ encrypted_value: Uint8Array }, [string, string]>(
+        `SELECT encrypted_value FROM cookies WHERE name = ? AND host_key LIKE ? LIMIT 1`,
+      )
+      .get(cookieName, hostLike);
+    if (!row) return "missing";
+    const bytes = new Uint8Array(row.encrypted_value);
+    if (bytes.length < 3) return "absent";
+    return Buffer.from(bytes.slice(0, 3)).toString("ascii");
+  } finally {
+    db.close();
+  }
+}
+
+/**
  * Windows fallback: for every installed Chromium-family browser's
  * profile, stage it to temp and let sweet-cookie scan the staged
  * copy. Returns the first hit, or undefined.
+ *
+ * Also probes each staged DB for the target cookie's encryption
+ * prefix so we can emit a clear "v20 / app-bound encryption"
+ * diagnostic when sweet-cookie silently fails to decrypt modern
+ * Chrome cookies.
  */
 async function windowsStagedScan(
   opts: FindCookieOptions & { cookieName: string },
@@ -224,20 +269,12 @@ async function windowsStagedScan(
     const profiles = listProfileDirs(browser.userDataDir);
     if (profiles.length === 0) continue;
 
-    // Chrome holds its Cookies file with exclusive sharing that
-    // can't be bypassed by any non-admin user-mode tool (verified
-    // against FileStream with FileShare.ReadWrite|Delete AND
-    // Microsoft's own esentutl /y). Don't waste cycles trying.
-    // If the user needs Chrome-based auto-import they can either
-    // close Chrome briefly, or use Edge/Firefox, or paste the
-    // cookie manually in the Property Inspector.
-    if (browser.name === "Chrome") {
-      log(
-        `cookies[${browser.name}] skipping — Chrome holds Cookies file with exclusive sharing while running (use Edge / Firefox / close Chrome briefly / manual paste)`,
-      );
-      continue;
-    }
-
+    // For Chrome specifically, `esentutl /y` fails with
+    // JET_errFileAccessDenied while Chrome is running (Chrome holds
+    // the file with FileShare.None). It succeeds when Chrome is
+    // closed. For Edge/Brave/etc. it succeeds either way.
+    // Either way we try — a single failed esentutl is cheap and
+    // the staging loop catches it cleanly with a log line.
     log(
       `cookies[${browser.name}] staging ${profiles.length} profile(s) for lock-bypass scan`,
     );
@@ -246,6 +283,31 @@ async function windowsStagedScan(
       const staged = stageChromiumProfile(browser.userDataDir, profile, log);
       if (!staged) continue;
       try {
+        // Probe the raw cookie row BEFORE handing off to sweet-cookie
+        // so we can detect the v20 / app-bound encryption case. If
+        // sweet-cookie returns no match on a v20 row, we know why
+        // instead of reporting a generic "no cookie found".
+        const stagedCookiesDb = join(
+          staged.stagedProfile,
+          "Network",
+          "Cookies",
+        );
+        let probe: string | undefined;
+        try {
+          probe = await probeCookiePrefix(
+            stagedCookiesDb,
+            opts.cookieName,
+            "%" + new URL(opts.url).hostname + "%",
+          );
+          log(
+            `cookies[${browser.name}/${profile}] row probe: ${probe} for ${opts.cookieName}`,
+          );
+        } catch (err) {
+          log(
+            `cookies[${browser.name}/${profile}] probe failed: ${String((err as Error).message ?? err)}`,
+          );
+        }
+
         const result = await getCookies({
           url: opts.url,
           names: [opts.cookieName],
@@ -263,6 +325,20 @@ async function windowsStagedScan(
             `cookies[${browser.name}/${profile}] found ${opts.cookieName} via staged scan`,
           );
           return match;
+        }
+
+        // sweet-cookie returned nothing but we know the row exists.
+        // The only common cause on modern Chrome is the v20 prefix
+        // (App-Bound Encryption from Chrome 127+) which sweet-cookie
+        // parses via its AES-256-GCM path using the legacy DPAPI
+        // key — the decryption silently fails because v20 rows are
+        // actually wrapped with the `app_bound_encrypted_key` from
+        // Local State, which requires a COM elevation-service hop
+        // that is impossible to bypass from a user-mode process.
+        if (probe === "v20") {
+          log(
+            `cookies[${browser.name}/${profile}] ${opts.cookieName} is v20 App-Bound Encrypted (Chrome 127+) — cannot decrypt from outside Chrome. Use Manual paste in the Property Inspector, or switch claude.ai to Edge / Firefox.`,
+          );
         }
       } finally {
         try {

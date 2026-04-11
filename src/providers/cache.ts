@@ -146,7 +146,10 @@ export async function getSnapshot(
   );
   const fetchPromise = (async (): Promise<ProviderSnapshot> => {
     try {
-      const snapshot = await provider.fetch({ pollIntervalMs: MIN_TTL_MS });
+      const snapshot = await provider.fetch({
+        pollIntervalMs: MIN_TTL_MS,
+        force: options.force === true,
+      });
       entry.snapshot = snapshot;
       entry.fetchedAt = now();
       const hadError = !!entry.lastError;

@@ -56,6 +56,12 @@ export interface ProviderContext {
   pollIntervalMs: number;
   /** Signal to abort a long-running fetch. */
   signal?: AbortSignal;
+  /**
+   * User-initiated refresh (e.g. keyDown on a Stream Deck key).
+   * Providers may use this to bypass sub-caches and secondary
+   * rate-limit policies that they'd normally respect.
+   */
+  force?: boolean;
 }
 
 export interface Provider {

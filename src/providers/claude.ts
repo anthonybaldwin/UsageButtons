@@ -63,13 +63,85 @@ import {
 } from "../util/credentials.ts";
 import { httpJson, HttpError } from "../util/http.ts";
 import { getClaudeSettings } from "../settings.ts";
-import { fetchClaudeExtraUsage } from "./claude-web.ts";
+import { fetchClaudeExtraUsage, type WebExtraUsage } from "./claude-web.ts";
 import { CODEXBAR_BRAND_COLORS } from "./brand-colors.ts";
 import type {
   MetricValue,
   Provider,
+  ProviderContext,
   ProviderSnapshot,
 } from "./types.ts";
+
+/**
+ * Extras-refresh policy constants.
+ *
+ * Claude extras are a supplementary metric that rarely change (you
+ * can only rack up charges after you've actually hit your weekly
+ * limit AND flipped the extras toggle on). Hitting
+ * `/overage_spend_limit` + `/prepaid/credits` every 5 minutes for
+ * most users is wasteful — Anthropic has no idea how to give us a
+ * different answer than "is_enabled: false, balance: $X".
+ *
+ * Refresh policy:
+ *   - Default:          once every 60 minutes
+ *   - Near a limit
+ *     (session/weekly
+ *      usage ≥ 80%):    bump to every 15 minutes, in case the
+ *                        user flips extras on
+ *   - Extras is ON:     every 15 minutes (spend is actively moving)
+ *   - `force=true`
+ *     (user keyDown):   always refresh, bypasses the policy
+ *
+ * Manual refresh via keyDown sets `ctx.force = true` all the way
+ * through cache → provider.fetch so the user can always demand a
+ * fresh answer by pressing the key.
+ */
+const EXTRAS_DEFAULT_TTL_MS = 60 * 60 * 1000; // 60 min
+const EXTRAS_ACTIVE_TTL_MS = 15 * 60 * 1000; // 15 min (near limit / extras on)
+const NEAR_LIMIT_THRESHOLD_PERCENT = 80;
+
+interface CachedExtras {
+  source: ExtraUsageSource;
+  capturedAt: number;
+}
+let cachedExtras: CachedExtras | undefined;
+
+/**
+ * Decide whether to re-fetch extras from the web endpoint on this
+ * tick. Returns `{ refresh: true }` to fire the web calls, or
+ * `{ refresh: false, reason }` to reuse `cachedExtras`.
+ */
+function shouldRefreshExtras(
+  response: UsageResponse,
+  force: boolean,
+): { refresh: true; reason: string } | { refresh: false; reason: string } {
+  if (force) return { refresh: true, reason: "forced" };
+  if (!cachedExtras) return { refresh: true, reason: "no cache" };
+
+  const age = Date.now() - cachedExtras.capturedAt;
+  const sessionPct = response.five_hour?.utilization ?? 0;
+  const weeklyPct = response.seven_day?.utilization ?? 0;
+  const nearLimit =
+    sessionPct >= NEAR_LIMIT_THRESHOLD_PERCENT ||
+    weeklyPct >= NEAR_LIMIT_THRESHOLD_PERCENT;
+  const extrasOn = cachedExtras.source.isEnabled;
+
+  if (extrasOn) {
+    return age >= EXTRAS_ACTIVE_TTL_MS
+      ? { refresh: true, reason: `extras on, age=${Math.round(age / 1000)}s` }
+      : { refresh: false, reason: `extras on but fresh (${Math.round(age / 1000)}s)` };
+  }
+
+  if (nearLimit) {
+    return age >= EXTRAS_ACTIVE_TTL_MS
+      ? { refresh: true, reason: `near limit (${Math.round(Math.max(sessionPct, weeklyPct))}%), age=${Math.round(age / 1000)}s` }
+      : { refresh: false, reason: `near limit but fresh (${Math.round(age / 1000)}s)` };
+  }
+
+  return age >= EXTRAS_DEFAULT_TTL_MS
+    ? { refresh: true, reason: `default TTL elapsed (${Math.round(age / 1000)}s)` }
+    : { refresh: false, reason: `far from limits + extras off, reusing (${Math.round(age / 60000)}m old)` };
+}
 
 function truncate(s: string, n: number): string {
   if (!s) return "";
@@ -415,7 +487,7 @@ export class ClaudeProvider implements Provider {
     "extra-usage-out-of-credits",
   ] as const;
 
-  async fetch(): Promise<ProviderSnapshot> {
+  async fetch(ctx?: ProviderContext): Promise<ProviderSnapshot> {
     const creds = await loadCredentials();
 
     if (!creds.scopes.includes("user:profile")) {

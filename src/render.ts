@@ -46,6 +46,11 @@ export interface ButtonRenderInput {
   stale?: boolean;
   /** Value text size. Default "large". */
   valueSize?: ValueSize;
+  /**
+   * Subvalue text size (reset countdown / supplementary text).
+   * Default "large" so the reset countdown is legible on the key.
+   */
+  subvalueSize?: ValueSize;
   /** Render the outer rounded-rect border stroke. Default on. */
   border?: boolean;
 }
@@ -97,7 +102,16 @@ const VALUE_FONT_SIZE: Record<ValueSize, number> = {
 };
 const LABEL_FONT_SIZE = 16;
 const LABEL_LINE_HEIGHT = 17;
-const SUBVALUE_FONT_SIZE = 16;
+/**
+ * Subvalue (reset countdown / supplementary text) font sizes.
+ * Default bumped to "large" because the old fixed 16px rendered
+ * the "4h 13m" / "5d" line almost invisible on a Stream Deck key.
+ */
+const SUBVALUE_FONT_SIZE: Record<ValueSize, number> = {
+  small: 14,
+  medium: 18,
+  large: 22,
+};
 
 export function renderButtonSvg(input: ButtonRenderInput): string {
   const ratio = clamp01(input.ratio);
@@ -109,6 +123,8 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
   const rect = fillRect(ratio, direction);
   const valueSize: ValueSize = input.valueSize ?? "large";
   const valueFontSize = VALUE_FONT_SIZE[valueSize];
+  const subvalueSize: ValueSize = input.subvalueSize ?? "large";
+  const subvalueFontSize = SUBVALUE_FONT_SIZE[subvalueSize];
   const showBorder = input.border !== false;
 
   const labelLines = input.label
@@ -127,10 +143,14 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
   const hasSub = subvalue.length > 0;
   const labelBlockHeight = hasLabel ? labelLines.length * LABEL_LINE_HEIGHT : 0;
   const labelBottom = hasLabel ? 14 + labelBlockHeight : 0;
-  const subvalueTop = hasSub ? CANVAS - 26 : CANVAS;
-  // Available vertical range for the value baseline:
-  //   [labelBottom + valueFontSize*0.75, subvalueTop - valueFontSize*0.15]
-  // We center the value within that range.
+  // Subvalue baseline needs more room when the text is larger.
+  // Leave `subvalueFontSize * 0.85` pixels of bottom padding so
+  // descenders don't clip the rounded card edge.
+  const subvalueBaselineY = CANVAS - Math.round(subvalueFontSize * 0.35);
+  const subvalueTop = hasSub
+    ? subvalueBaselineY - Math.round(subvalueFontSize * 0.85)
+    : CANVAS;
+  // Available vertical range for the value baseline.
   const top = labelBottom + valueFontSize * 0.75;
   const bot = subvalueTop - valueFontSize * 0.15;
   const valueY = Math.round((top + bot) / 2);
@@ -147,7 +167,7 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
     : "";
 
   const subvalueElement = hasSub
-    ? `<text x="${CANVAS / 2}" y="${CANVAS - 12}" font-family="Helvetica,Arial,sans-serif" font-size="${SUBVALUE_FONT_SIZE}" font-weight="600" text-anchor="middle" fill="${fg}" fill-opacity="0.75">${subvalue}</text>`
+    ? `<text x="${CANVAS / 2}" y="${subvalueBaselineY}" font-family="Helvetica,Arial,sans-serif" font-size="${subvalueFontSize}" font-weight="700" text-anchor="middle" fill="${fg}" fill-opacity="0.85">${subvalue}</text>`
     : "";
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CANVAS} ${CANVAS}" opacity="${opacity}">

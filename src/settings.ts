@@ -72,17 +72,35 @@ export interface ProviderSettingsMap {
   // Future: codex, cursor, droid, kimi, ollama, openrouter, …
 }
 
+/**
+ * Text size presets for per-button value/subvalue text. Each button
+ * can override the plugin-wide default from its own settings; when
+ * omitted there, the global value here applies.
+ */
+export type TextSize = "small" | "medium" | "large";
+
 export interface GlobalSettings {
   /** Refresh cadence applied to any key that doesn't set its own. */
   defaultRefreshMinutes?: RefreshMinutes;
+  /** Plugin-wide default big-number size, overridable per-button. */
+  defaultValueSize?: TextSize;
+  /** Plugin-wide default reset-countdown size, overridable per-button. */
+  defaultSubvalueSize?: TextSize;
   /** Per-provider source preferences + credentials. */
   providers?: ProviderSettingsMap;
 }
 
 let current: GlobalSettings = {
   defaultRefreshMinutes: DEFAULT_REFRESH_MINUTES,
+  defaultValueSize: "large",
+  defaultSubvalueSize: "large",
   providers: {},
 };
+
+function normaliseTextSize(raw: unknown, fallback: TextSize): TextSize {
+  if (raw === "small" || raw === "medium" || raw === "large") return raw;
+  return fallback;
+}
 
 function normaliseSource(raw: unknown): ProviderSource {
   if (raw === "oauth" || raw === "cookie") return raw;
@@ -115,8 +133,17 @@ export function setGlobalSettings(next: GlobalSettings): void {
 
   current = {
     defaultRefreshMinutes: refresh,
+    defaultValueSize: normaliseTextSize(next.defaultValueSize, "large"),
+    defaultSubvalueSize: normaliseTextSize(next.defaultSubvalueSize, "large"),
     providers,
   };
+}
+
+export function getDefaultValueSize(): TextSize {
+  return current.defaultValueSize ?? "large";
+}
+export function getDefaultSubvalueSize(): TextSize {
+  return current.defaultSubvalueSize ?? "large";
 }
 
 export function getGlobalSettings(): Readonly<GlobalSettings> {

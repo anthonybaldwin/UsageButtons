@@ -257,6 +257,22 @@ export async function fetchClaudeExtraUsage(
     return undefined;
   }
 
+  // Schema observability: log the full key list (keys only, never
+  // values) so we can tell whether Anthropic returns a `balance` /
+  // `current_balance` / `credits_balance` field we aren't parsing.
+  // The user's claude.ai settings page shows `$204.80 Current
+  // balance` which must come from somewhere — either this endpoint
+  // under a field name we don't know yet, or a separate billing
+  // endpoint we haven't called yet.
+  try {
+    const keys = Object.keys(overage as Record<string, unknown>)
+      .sort()
+      .join(",");
+    logSink?.(`claude-web: /overage_spend_limit keys=[${keys}]`);
+  } catch {
+    /* ignore logging errors */
+  }
+
   return {
     isEnabled: overage.is_enabled === true,
     monthlyLimitCents: overage.monthly_credit_limit ?? 0,

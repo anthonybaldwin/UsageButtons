@@ -285,15 +285,30 @@ interface ExtraUsageSource {
 
 function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
   if (!extra) return [];
+
+  // Always emit the ON/OFF metric when we have an extras block at
+  // all — even if the monthly limit is zero / not set. This lets
+  // the user bind a button to "extra usage enabled?" so the tile
+  // shows state at a glance.
+  const now = new Date();
+  const enabledMetric: MetricValue = {
+    id: "extra-usage-enabled",
+    label: "EXTRA",
+    name: "Extra usage enabled",
+    value: extra.isEnabled ? "ON" : "OFF",
+    ratio: extra.isEnabled ? 1 : 0,
+    direction: "up",
+    updatedAt: now,
+  };
+
   const limitCents = extra.monthlyLimitCents;
-  if (limitCents <= 0) return [];
+  if (limitCents <= 0) return [enabledMetric];
   const spentCents = extra.usedCreditsCents;
   const limit = limitCents / 100;
   const spent = spentCents / 100;
   const remaining = Math.max(0, limit - spent);
   const usedPct = Math.min(100, (spent / limit) * 100);
   const remPct = 100 - usedPct;
-  const now = new Date();
   const currency = extra.currency;
   return [
     {
@@ -324,6 +339,7 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       direction: "up",
       updatedAt: now,
     },
+    enabledMetric,
   ];
 }
 
@@ -338,6 +354,7 @@ export class ClaudeProvider implements Provider {
     "extra-usage-percent",
     "extra-usage-remaining",
     "extra-usage-spent",
+    "extra-usage-enabled",
   ] as const;
 
   async fetch(): Promise<ProviderSnapshot> {

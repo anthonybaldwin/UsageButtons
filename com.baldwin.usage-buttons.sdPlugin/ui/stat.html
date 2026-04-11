@@ -111,9 +111,18 @@
 
     <label for="valueSize">Big-number size</label>
     <select id="valueSize">
+      <option value="">Use plugin default</option>
       <option value="small">Small</option>
       <option value="medium">Medium</option>
-      <option value="large" selected>Large (default)</option>
+      <option value="large">Large</option>
+    </select>
+
+    <label for="subvalueSize">Reset-countdown size</label>
+    <select id="subvalueSize">
+      <option value="">Use plugin default</option>
+      <option value="small">Small</option>
+      <option value="medium">Medium</option>
+      <option value="large">Large</option>
     </select>
 
     <div class="checkbox-row">
@@ -181,6 +190,24 @@
     </select>
     <p class="hint">Each button can override this from the "This button" tab.</p>
 
+    <div class="group-heading">Default text sizes</div>
+    <label for="defaultValueSize">Big-number size (default for all buttons)</label>
+    <select id="defaultValueSize">
+      <option value="small">Small</option>
+      <option value="medium">Medium</option>
+      <option value="large" selected>Large</option>
+    </select>
+    <label for="defaultSubvalueSize">Reset-countdown size (default for all buttons)</label>
+    <select id="defaultSubvalueSize">
+      <option value="small">Small</option>
+      <option value="medium">Medium</option>
+      <option value="large" selected>Large</option>
+    </select>
+    <p class="hint">
+      Any button in the "This button" tab can override these. Blank /
+      "Use default" on the button sticks with the plugin-wide value.
+    </p>
+
     <div class="group-heading">Claude</div>
 
     <label for="claudeSource">Data source</label>
@@ -228,6 +255,7 @@
         ["session-percent",       "Session % remaining (5h)"],
         ["weekly-percent",        "Weekly % remaining"],
         ["weekly-sonnet-percent", "Sonnet % remaining (weekly)"],
+        ["extra-usage-enabled",   "Extra usage ON / OFF"],
         ["extra-usage-percent",   "Extra usage headroom %"],
         ["extra-usage-remaining", "Extra usage remaining ($)"],
         ["extra-usage-spent",     "Extra usage spent ($)"],
@@ -300,7 +328,8 @@
       document.getElementById("invertFill").checked = !!settings.invertFill;
       document.getElementById("showResetTimer").checked = settings.showResetTimer !== false;
       document.getElementById("showBorder").checked = settings.showBorder !== false;
-      document.getElementById("valueSize").value = settings.valueSize || "large";
+      document.getElementById("valueSize").value = settings.valueSize || "";
+      document.getElementById("subvalueSize").value = settings.subvalueSize || "";
       document.getElementById("fillDirection").value = settings.fillDirection || "up";
       // Fill color: user override wins, otherwise default to the
       // provider's CodexBar brand color.
@@ -315,6 +344,11 @@
       const minutes = globals.defaultRefreshMinutes;
       document.getElementById("defaultRefresh").value =
         [5, 10, 15, 30, 60].includes(minutes) ? String(minutes) : "15";
+      const validSize = (v) => ["small", "medium", "large"].includes(v) ? v : "large";
+      document.getElementById("defaultValueSize").value =
+        validSize(globals.defaultValueSize);
+      document.getElementById("defaultSubvalueSize").value =
+        validSize(globals.defaultSubvalueSize);
       const claude = (globals.providers && globals.providers.claude) || {};
       const src =
         claude.source === "oauth" || claude.source === "cookie"
@@ -349,6 +383,8 @@
     function pushSettings() {
       if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
       const refreshRaw = document.getElementById("refreshMinutes").value;
+      const valueRaw = document.getElementById("valueSize").value;
+      const subvalueRaw = document.getElementById("subvalueSize").value;
       const payload = {
         providerId:     document.getElementById("provider").value,
         metricId:       document.getElementById("metric").value,
@@ -358,7 +394,10 @@
         invertFill:     document.getElementById("invertFill").checked,
         showResetTimer: document.getElementById("showResetTimer").checked,
         showBorder:     document.getElementById("showBorder").checked,
-        valueSize:      document.getElementById("valueSize").value,
+        // Empty-string "Use plugin default" omits the field so it
+        // falls through to the global default at render time.
+        ...(valueRaw ? { valueSize: valueRaw } : {}),
+        ...(subvalueRaw ? { subvalueSize: subvalueRaw } : {}),
         fillDirection:  document.getElementById("fillDirection").value,
         fillColor:      document.getElementById("fillColor").value,
         bgColor:        document.getElementById("bgColor").value,
@@ -377,6 +416,8 @@
       const source = document.getElementById("claudeSource").value;
       const payload = {
         defaultRefreshMinutes: Number(document.getElementById("defaultRefresh").value),
+        defaultValueSize:      document.getElementById("defaultValueSize").value,
+        defaultSubvalueSize:   document.getElementById("defaultSubvalueSize").value,
         providers: {
           claude: {
             source,
@@ -404,14 +445,17 @@
     });
     for (const id of [
       "metric", "refreshMinutes", "labelOverride", "hideLabel", "invertFill",
-      "showResetTimer", "showBorder", "valueSize",
+      "showResetTimer", "showBorder", "valueSize", "subvalueSize",
       "fillDirection", "fillColor", "bgColor", "textColor",
     ]) {
       const el = document.getElementById(id);
       el.addEventListener("change", pushSettings);
       if (el.tagName === "TEXTAREA") el.addEventListener("input", pushSettings);
     }
-    for (const id of ["defaultRefresh", "claudeSource", "claudeCookie"]) {
+    for (const id of [
+      "defaultRefresh", "defaultValueSize", "defaultSubvalueSize",
+      "claudeSource", "claudeCookie",
+    ]) {
       const el = document.getElementById(id);
       el.addEventListener("change", pushGlobalSettings);
       if (el.tagName === "TEXTAREA") el.addEventListener("input", pushGlobalSettings);

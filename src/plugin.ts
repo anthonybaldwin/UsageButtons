@@ -15,6 +15,8 @@ import { setClaudeDebugLogSink } from "./providers/claude.ts";
 import { setClaudeWebLogSink } from "./providers/claude-web.ts";
 import type { MetricValue, Provider } from "./providers/types.ts";
 import {
+  getDefaultSubvalueSize,
+  getDefaultValueSize,
   resolveRefreshMs,
   setGlobalSettings,
   type GlobalSettings,
@@ -37,8 +39,10 @@ interface KeySettings {
   fillDirection?: "up" | "down" | "right" | "left";
   /** Flip the fill ratio (remaining ↔ used). Useful when the metric is "used %". */
   invertFill?: boolean;
-  /** Big-number size. Default "large". */
+  /** Big-number size. Overrides the plugin-wide default. */
   valueSize?: "small" | "medium" | "large";
+  /** Reset-countdown subvalue size. Overrides the plugin-wide default. */
+  subvalueSize?: "small" | "medium" | "large";
   /** Render the outer rounded-rect border. Default true. */
   showBorder?: boolean;
   /** Show the reset countdown as a subvalue under the big number. Default true. */
@@ -308,7 +312,11 @@ function renderMetric(
     input.fg = settings.textColor;
   }
 
-  if (settings.valueSize) input.valueSize = settings.valueSize;
+  // Text sizes: per-key override falls through to the plugin-wide
+  // default so one change in Plugin Settings can re-style every
+  // button without touching each one.
+  input.valueSize = settings.valueSize ?? getDefaultValueSize();
+  input.subvalueSize = settings.subvalueSize ?? getDefaultSubvalueSize();
   if (settings.showBorder === false) input.border = false;
 
   // Reset-countdown subvalue — user can hide it (e.g. they prefer

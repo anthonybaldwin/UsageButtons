@@ -41,12 +41,13 @@ export interface MetricValue {
 export interface ProviderSnapshot {
   providerId: string;
   providerName: string;
-  /** Source label, e.g. `"mock"`, `"oauth"`, `"web"`, `"cli"`. */
+  /** Source label, e.g. `"mock"`, `"oauth"`, `"web"`, `"cli"`, `"cache"`. */
   source: string;
   /** All metrics currently known for this provider. */
   metrics: MetricValue[];
   /** Provider-level status, if available. */
   status?: "operational" | "degraded" | "outage" | "unknown";
+  /** Human error message describing the most recent upstream failure. */
   error?: string;
 }
 

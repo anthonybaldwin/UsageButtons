@@ -72,22 +72,36 @@ async function killStreamDeck(): Promise<void> {
 
 async function startStreamDeck(): Promise<void> {
   if (platform() === "win32") {
-    // The Start Menu shortcut is the most reliable entry point.
-    // We use `cmd /c start "" <target>` so the launched process
-    // detaches from our bun invocation.
     const candidate = resolve(
       process.env["ProgramFiles"] ?? "C:/Program Files",
       "Elgato",
       "StreamDeck",
       "StreamDeck.exe",
     );
-    if (existsSync(candidate)) {
-      await $`cmd /c start "" ${candidate}`.nothrow();
-    } else {
+    if (!existsSync(candidate)) {
       log(
         "! could not locate StreamDeck.exe under Program Files — relaunch it yourself",
       );
+      return;
     }
+    // PowerShell Start-Process is the reliable way to launch a
+    // detached Windows GUI app from a script. `cmd /c start ""
+    // <path>` looks equivalent but Git Bash / MSYS rewrites argv in
+    // ways that can cause ShellExecute to fire a ghost "\\" open
+    // that pops a Windows Explorer error dialog. Start-Process
+    // takes one quoted path argument and does the right thing.
+    Bun.spawnSync({
+      cmd: [
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        `Start-Process -FilePath '${candidate.replace(/'/g, "''")}'`,
+      ],
+      stdout: "ignore",
+      stderr: "ignore",
+    });
   } else {
     await $`open -a "Stream Deck"`.nothrow();
   }

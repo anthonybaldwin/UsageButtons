@@ -13,7 +13,7 @@ import { getProvider } from "./providers/registry.ts";
 import { getSnapshot, setCacheLogSink } from "./providers/cache.ts";
 import { setClaudeDebugLogSink } from "./providers/claude.ts";
 import { setClaudeWebLogSink } from "./providers/claude-web.ts";
-import type { MetricValue } from "./providers/types.ts";
+import type { MetricValue, Provider } from "./providers/types.ts";
 import {
   resolveRefreshMs,
   setGlobalSettings,
@@ -232,7 +232,7 @@ async function refreshKey(
   }
   conn.setImage(
     context,
-    renderMetric(snapshot.providerName, metric, key.settings),
+    renderMetric(provider, snapshot.providerName, metric, key.settings),
   );
 }
 
@@ -241,6 +241,7 @@ function isRateLimit(errorMessage: string): boolean {
 }
 
 function renderMetric(
+  provider: Provider,
   providerName: string,
   metric: MetricValue,
   settings: KeySettings,
@@ -291,8 +292,14 @@ function renderMetric(
     input.direction = metric.direction;
   }
 
+  // Fill color priority: user override > provider brand color.
+  // Provider brand colors are borrowed from CodexBar's
+  // ProviderBranding.color so the buttons feel visually consistent
+  // with that app (warm coral for Claude, teal for Codex, etc.).
   if (settings.fillColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.fillColor)) {
     input.fill = settings.fillColor;
+  } else {
+    input.fill = provider.brandColor;
   }
   if (settings.bgColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.bgColor)) {
     input.bg = settings.bgColor;

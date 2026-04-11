@@ -24,10 +24,60 @@
  */
 
 import { Database } from "bun:sqlite";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { dpapiDecrypt, stripChromiumKeyPrefix, DpapiError } from "./dpapi.ts";
+
+/**
+ * Copy a file that may be held open by another process (Chrome's
+ * Cookies DB while Chrome is running). Bun's fs.copyFileSync uses
+ * CopyFileW under the hood which fails with EBUSY when the source
+ * is locked.
+ *
+ * Workaround: shell out to PowerShell and open the source with
+ * `FileShare.ReadWrite | FileShare.Delete` via .NET's FileStream.
+ * That matches the sharing mode Chrome uses on its own handle, so
+ * both processes can coexist without one blocking the other.
+ *
+ * Chrome 127+ tightens this up as part of App-Bound Encryption, so
+ * this trick may stop working on the newest versions. It continues
+ * to work for the Network/Cookies DB on current stable channels as
+ * of 2025-Q4.
+ */
+function copyLockedFile(src: string, dst: string): void {
+  const script = [
+    `$src = New-Object System.IO.FileStream('${src.replace(/'/g, "''")}',`,
+    `  [System.IO.FileMode]::Open,`,
+    `  [System.IO.FileAccess]::Read,`,
+    `  ([System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete))`,
+    `$dst = New-Object System.IO.FileStream('${dst.replace(/'/g, "''")}',`,
+    `  [System.IO.FileMode]::Create,`,
+    `  [System.IO.FileAccess]::Write,`,
+    `  [System.IO.FileShare]::None)`,
+    `$src.CopyTo($dst)`,
+    `$src.Close()`,
+    `$dst.Close()`,
+  ].join(" ");
+
+  const result = Bun.spawnSync({
+    cmd: [
+      "powershell",
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      script,
+    ],
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (result.exitCode !== 0) {
+    const err = result.stderr.toString().trim() || "unknown error";
+    throw new Error(`locked-file copy failed: ${err}`);
+  }
+}
 
 export interface ChromiumBrowser {
   /** Human label ("Chrome", "Edge", "Brave", …) used for logging. */
@@ -172,17 +222,20 @@ async function readCookieFromProfile(
   const cookiesPath = profileCookiesPath(profileDir);
   if (!cookiesPath) return undefined;
 
-  // Copy to a sibling temp file to sidestep Chrome's WAL lock.
+  // Copy to a sibling temp file to sidestep Chrome's exclusive
+  // lock on the live Cookies DB. We use a PowerShell-backed file
+  // copy that opens the source with FileShare.ReadWrite|Delete so
+  // Chrome's held handle doesn't EBUSY us.
   const tmp = mkdtempSync(join(tmpdir(), "usage-buttons-cookies-"));
   const tmpDb = join(tmp, "Cookies.sqlite");
   try {
-    copyFileSync(cookiesPath, tmpDb);
+    copyLockedFile(cookiesPath, tmpDb);
     // Also copy the WAL + SHM if present so the DB is readable.
     for (const suffix of ["-wal", "-shm"]) {
       const src = cookiesPath + suffix;
       if (existsSync(src)) {
         try {
-          copyFileSync(src, tmpDb + suffix);
+          copyLockedFile(src, tmpDb + suffix);
         } catch {
           // ignore — WAL file may be locked but main DB is usable
         }

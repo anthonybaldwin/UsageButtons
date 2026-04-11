@@ -9,7 +9,37 @@
       font-family: -apple-system, "Segoe UI", sans-serif;
       font-size: 13px;
     }
-    body { margin: 8px 12px; color: #e5e7eb; background: transparent; }
+    body { margin: 0; color: #e5e7eb; background: transparent; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 2px;
+      padding: 8px 12px 0;
+      border-bottom: 1px solid #374151;
+      margin-bottom: 12px;
+    }
+    .tab {
+      background: transparent;
+      color: #9ca3af;
+      border: none;
+      padding: 8px 14px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 120ms, border-color 120ms;
+    }
+    .tab:hover { color: #e5e7eb; }
+    .tab.active {
+      color: #f9fafb;
+      border-bottom-color: #3b82f6;
+    }
+    .panel { display: none; padding: 0 12px 16px; }
+    .panel.active { display: block; }
+
+    /* Controls */
     label { display: block; margin: 10px 0 4px; font-weight: 600; }
     select, input[type=text], textarea { width: 100%; box-sizing: border-box; padding: 4px 6px;
       background: #111827; color: #f9fafb; border: 1px solid #374151;
@@ -23,26 +53,124 @@
     .checkbox-row label { margin: 0; font-weight: 600; }
     p.hint { margin: 10px 0 0; opacity: 0.65; font-size: 11px; }
     hr { border: none; border-top: 1px solid #374151; margin: 14px 0 0; }
-    .section {
-      background: #0b1220;
-      border: 1px solid #374151;
-      border-radius: 6px;
-      padding: 8px 10px 12px;
-      margin-bottom: 12px;
-    }
-    .section h3 {
-      margin: 0 0 2px;
-      font-size: 11px;
+    code { background: #1f2937; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+
+    /* Subtle header above each logical group inside a panel */
+    .group-heading {
+      margin: 18px 0 2px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
-      opacity: 0.7;
+      letter-spacing: 0.06em;
+      opacity: 0.55;
+      font-weight: 700;
     }
+    .group-heading:first-child { margin-top: 4px; }
   </style>
 </head>
 <body>
 
-  <div class="section" id="globalSection">
-    <h3>Plugin settings · applies to every Usage Button</h3>
+  <nav class="tabs">
+    <button class="tab active" data-tab="button" type="button">This button</button>
+    <button class="tab" data-tab="plugin" type="button">Plugin settings</button>
+  </nav>
+
+  <!-- ================== Button tab (per-key) ================== -->
+  <div id="buttonPanel" class="panel active">
+
+    <div class="group-heading">Source</div>
+
+    <label for="provider">Provider</label>
+    <select id="provider">
+      <option value="mock">Mock (dev)</option>
+      <option value="claude">Claude</option>
+      <option value="codex">Codex</option>
+    </select>
+
+    <label for="metric">Metric</label>
+    <select id="metric"></select>
+
+    <label for="refreshMinutes">Refresh interval (this button)</label>
+    <select id="refreshMinutes">
+      <option value="">Use plugin default</option>
+      <option value="5">5 minutes</option>
+      <option value="10">10 minutes</option>
+      <option value="15">15 minutes</option>
+      <option value="30">30 minutes</option>
+      <option value="60">1 hour</option>
+    </select>
+
+    <div class="group-heading">Text</div>
+
+    <label for="labelOverride">Label override (blank = provider default)</label>
+    <textarea id="labelOverride" rows="2" placeholder="e.g. CLAUDE&#10;SESSION"></textarea>
+
+    <div class="checkbox-row">
+      <input id="hideLabel" type="checkbox">
+      <label for="hideLabel">Hide built-in label</label>
+    </div>
+
+    <label for="valueSize">Big-number size</label>
+    <select id="valueSize">
+      <option value="small">Small</option>
+      <option value="medium">Medium</option>
+      <option value="large" selected>Large (default)</option>
+    </select>
+
+    <div class="checkbox-row">
+      <input id="showResetTimer" type="checkbox" checked>
+      <label for="showResetTimer">Show reset countdown under the number</label>
+    </div>
+
+    <div class="group-heading">Fill</div>
+
+    <div class="checkbox-row">
+      <input id="invertFill" type="checkbox">
+      <label for="invertFill">Invert fill (show "used" instead of "remaining")</label>
+    </div>
+
+    <label for="fillDirection">Fill direction</label>
+    <select id="fillDirection">
+      <option value="up">Up (default)</option>
+      <option value="down">Down</option>
+      <option value="right">Right</option>
+      <option value="left">Left</option>
+    </select>
+
+    <div class="group-heading">Colors</div>
+
+    <div class="row">
+      <label for="fillColor">Fill color</label>
+      <input id="fillColor" type="color" value="#3b82f6">
+    </div>
+
+    <div class="row">
+      <label for="bgColor">Background color</label>
+      <input id="bgColor" type="color" value="#111827">
+    </div>
+
+    <div class="row">
+      <label for="textColor">Text color</label>
+      <input id="textColor" type="color" value="#f9fafb">
+    </div>
+
+    <div class="checkbox-row">
+      <input id="showBorder" type="checkbox" checked>
+      <label for="showBorder">Draw border around the tile</label>
+    </div>
+
+    <p class="hint">
+      Click the key on your Stream Deck to force an immediate refresh.
+      The <strong>Title:</strong> field at the top of this panel is ignored
+      for Usage Buttons — use the <strong>Label override</strong> field above
+      to add text to the tile.
+    </p>
+  </div>
+
+  <!-- ================== Plugin tab (shared) =================== -->
+  <div id="pluginPanel" class="panel">
+
+    <div class="group-heading">Refresh</div>
+
     <label for="defaultRefresh">Default refresh interval</label>
     <select id="defaultRefresh">
       <option value="5">5 minutes</option>
@@ -51,14 +179,17 @@
       <option value="30">30 minutes</option>
       <option value="60">1 hour</option>
     </select>
+    <p class="hint">Each button can override this from the "This button" tab.</p>
 
-    <label for="claudeSource" style="margin-top: 14px">Claude source</label>
+    <div class="group-heading">Claude</div>
+
+    <label for="claudeSource">Source</label>
     <select id="claudeSource">
       <option value="auto" selected>Auto (OAuth + cookie supplement for extras)</option>
       <option value="oauth">OAuth only (no cookie calls)</option>
     </select>
 
-    <label for="claudeCookieSource">Claude cookie source</label>
+    <label for="claudeCookieSource">Cookie source</label>
     <select id="claudeCookieSource">
       <option value="auto" selected>Auto — import from Chrome / Edge / Brave / Firefox</option>
       <option value="manual">Manual — paste below</option>
@@ -66,8 +197,8 @@
     </select>
 
     <div id="claudeCookieManualRow">
-      <label for="claudeCookie">Claude session cookie (claude.ai)</label>
-      <textarea id="claudeCookie" rows="2" placeholder="sessionKey=sk-ant-sid01-...    (paste the Cookie: header from claude.ai DevTools)" autocomplete="off" spellcheck="false"></textarea>
+      <label for="claudeCookie">Session cookie (claude.ai)</label>
+      <textarea id="claudeCookie" rows="2" placeholder="sessionKey=sk-ant-sid01-..." autocomplete="off" spellcheck="false"></textarea>
       <p class="hint">
         Open claude.ai in your browser, DevTools → Network → any request →
         copy the <code>Cookie:</code> header value. Only <code>sessionKey=</code>
@@ -75,86 +206,6 @@
       </p>
     </div>
   </div>
-
-  <label for="provider">Provider</label>
-  <select id="provider">
-    <option value="mock">Mock (dev)</option>
-    <option value="claude">Claude</option>
-    <option value="codex">Codex</option>
-  </select>
-
-  <label for="metric">Metric</label>
-  <select id="metric"></select>
-
-  <label for="refreshMinutes">Refresh interval (this button)</label>
-  <select id="refreshMinutes">
-    <option value="">Use plugin default</option>
-    <option value="5">5 minutes</option>
-    <option value="10">10 minutes</option>
-    <option value="15">15 minutes</option>
-    <option value="30">30 minutes</option>
-    <option value="60">1 hour</option>
-  </select>
-
-  <hr>
-
-  <label for="labelOverride">Label override (blank = provider default)</label>
-  <textarea id="labelOverride" rows="2" placeholder="e.g. CLAUDE&#10;SESSION"></textarea>
-
-  <div class="checkbox-row">
-    <input id="hideLabel" type="checkbox">
-    <label for="hideLabel">Hide built-in label</label>
-  </div>
-
-  <div class="checkbox-row">
-    <input id="invertFill" type="checkbox">
-    <label for="invertFill">Invert fill (show "used" instead of "remaining")</label>
-  </div>
-
-  <div class="checkbox-row">
-    <input id="showResetTimer" type="checkbox" checked>
-    <label for="showResetTimer">Show reset countdown under the number</label>
-  </div>
-
-  <div class="checkbox-row">
-    <input id="showBorder" type="checkbox" checked>
-    <label for="showBorder">Draw border around the tile</label>
-  </div>
-
-  <label for="valueSize">Big-number size</label>
-  <select id="valueSize">
-    <option value="small">Small</option>
-    <option value="medium">Medium</option>
-    <option value="large" selected>Large (default)</option>
-  </select>
-
-  <label for="fillDirection">Fill direction</label>
-  <select id="fillDirection">
-    <option value="up">Up (default)</option>
-    <option value="down">Down</option>
-    <option value="right">Right</option>
-    <option value="left">Left</option>
-  </select>
-
-  <div class="row">
-    <label for="fillColor">Fill color</label>
-    <input id="fillColor" type="color" value="#3b82f6">
-  </div>
-
-  <div class="row">
-    <label for="bgColor">Background color</label>
-    <input id="bgColor" type="color" value="#111827">
-  </div>
-
-  <div class="row">
-    <label for="textColor">Text color</label>
-    <input id="textColor" type="color" value="#f9fafb">
-  </div>
-
-  <p class="hint">
-    Click the key on your Stream Deck to force an immediate refresh.
-    Set a title in the box at the top of this panel to add overlay text.
-  </p>
 
   <script>
     const METRICS = {
@@ -178,6 +229,37 @@
       ],
     };
 
+    // CodexBar brand colors — keep in sync with
+    // src/providers/brand-colors.ts so the Fill color picker shows
+    // sensible defaults per provider.
+    const BRAND_COLORS = {
+      mock:   "#3b82f6",
+      claude: "#cc7c5e",
+      codex:  "#49a3b0",
+    };
+
+    // ---------- Tab switching ----------
+    const TAB_STORAGE_KEY = "usage-buttons-pi-tab";
+    function showTab(name) {
+      for (const tab of document.querySelectorAll(".tab")) {
+        tab.classList.toggle("active", tab.dataset.tab === name);
+      }
+      for (const panel of document.querySelectorAll(".panel")) {
+        panel.classList.toggle("active", panel.id === name + "Panel");
+      }
+      try { sessionStorage.setItem(TAB_STORAGE_KEY, name); } catch { /* ignore */ }
+    }
+    for (const tab of document.querySelectorAll(".tab")) {
+      tab.addEventListener("click", () => showTab(tab.dataset.tab));
+    }
+    // Restore tab across PI reloads within the same session so the
+    // user doesn't land on "This button" every single click.
+    try {
+      const saved = sessionStorage.getItem(TAB_STORAGE_KEY);
+      if (saved === "plugin") showTab("plugin");
+    } catch { /* ignore */ }
+
+    // ---------- Metric dropdown ----------
     function populateMetrics(providerId, selectedMetric) {
       const metric = document.getElementById("metric");
       const list = METRICS[providerId] || [];
@@ -191,6 +273,7 @@
       metric.replaceChildren(...options);
     }
 
+    // ---------- Settings plumbing ----------
     let websocket = null;
     let uuid = null;
     let actionInfo = null;
@@ -209,7 +292,10 @@
       document.getElementById("showBorder").checked = settings.showBorder !== false;
       document.getElementById("valueSize").value = settings.valueSize || "large";
       document.getElementById("fillDirection").value = settings.fillDirection || "up";
-      if (settings.fillColor) document.getElementById("fillColor").value = settings.fillColor;
+      // Fill color: user override wins, otherwise default to the
+      // provider's CodexBar brand color.
+      document.getElementById("fillColor").value =
+        settings.fillColor || BRAND_COLORS[providerId] || "#3b82f6";
       if (settings.bgColor)   document.getElementById("bgColor").value   = settings.bgColor;
       if (settings.textColor) document.getElementById("textColor").value = settings.textColor;
     }
@@ -228,9 +314,6 @@
           : "auto";
       document.getElementById("claudeCookieSource").value = cookieSrc;
       document.getElementById("claudeCookie").value = claude.cookieHeader || "";
-      // The paste field is only meaningful in Manual mode. Auto
-      // ignores it entirely (browser scan only), and Off doesn't
-      // make cookie calls at all — so hide it everywhere else.
       document.getElementById("claudeCookieManualRow").style.display =
         cookieSrc === "manual" ? "" : "none";
     }
@@ -241,9 +324,6 @@
       websocket = new WebSocket("ws://127.0.0.1:" + port);
       websocket.onopen = () => {
         websocket.send(JSON.stringify({ event: registerEvent, uuid: inUUID }));
-        // Pull the plugin-wide settings so the global section
-        // reflects whatever the user already has configured across
-        // their other Usage Buttons.
         websocket.send(JSON.stringify({ event: "getGlobalSettings", context: inUUID }));
       };
       websocket.onmessage = (ev) => {
@@ -291,8 +371,6 @@
           claude: {
             source: document.getElementById("claudeSource").value,
             cookieSource: cookieSrc,
-            // Empty string = user cleared the field; omit the key so
-            // the setting validator doesn't keep a stale one.
             ...(claudeCookie ? { cookieHeader: claudeCookie } : {}),
           },
         },
@@ -302,13 +380,17 @@
         context: uuid,
         payload,
       }));
-      // Toggle the manual-paste visibility to match the new source.
       document.getElementById("claudeCookieManualRow").style.display =
         cookieSrc === "manual" ? "" : "none";
     }
 
+    // ---------- Event wiring ----------
     document.getElementById("provider").addEventListener("change", () => {
-      populateMetrics(document.getElementById("provider").value);
+      const newProvider = document.getElementById("provider").value;
+      populateMetrics(newProvider);
+      if (BRAND_COLORS[newProvider]) {
+        document.getElementById("fillColor").value = BRAND_COLORS[newProvider];
+      }
       pushSettings();
     });
     for (const id of [
@@ -317,8 +399,6 @@
       "fillDirection", "fillColor", "bgColor", "textColor",
     ]) {
       const el = document.getElementById(id);
-      // Textareas get both input and change; change alone doesn't fire
-      // until blur which feels laggy for color/size pickers too.
       el.addEventListener("change", pushSettings);
       if (el.tagName === "TEXTAREA") el.addEventListener("input", pushSettings);
     }

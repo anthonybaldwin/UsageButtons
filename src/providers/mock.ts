@@ -11,6 +11,7 @@ import type { MetricValue, Provider, ProviderSnapshot } from "./types.ts";
 export class MockProvider implements Provider {
   readonly id = "mock";
   readonly name = "Mock";
+  readonly brandColor = "#3b82f6"; // neutral dev-blue; not a CodexBar-branded hue
   readonly metricIds = [
     "session-percent",
     "weekly-percent",

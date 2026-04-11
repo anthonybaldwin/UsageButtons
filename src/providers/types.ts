@@ -61,6 +61,15 @@ export interface ProviderContext {
 export interface Provider {
   readonly id: string;
   readonly name: string;
+  /**
+   * Default fill color for buttons bound to this provider, as a
+   * lowercase `#rrggbb` string. Borrowed from CodexBar's
+   * `ProviderBranding.color` so our buttons look visually familiar
+   * to anyone already using CodexBar. New providers should pick
+   * their value from `src/providers/brand-colors.ts` rather than
+   * hand-rolling one.
+   */
+  readonly brandColor: string;
   /** All metric ids this provider *may* emit. Used for the PI dropdown. */
   readonly metricIds: readonly string[];
   fetch(ctx: ProviderContext): Promise<ProviderSnapshot>;

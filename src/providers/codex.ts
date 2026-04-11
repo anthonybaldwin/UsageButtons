@@ -72,6 +72,7 @@ import {
   CredentialNotFoundError,
 } from "../util/credentials.ts";
 import { httpJson, HttpError } from "../util/http.ts";
+import { CODEXBAR_BRAND_COLORS } from "./brand-colors.ts";
 import type {
   MetricValue,
   Provider,
@@ -318,6 +319,7 @@ function parseBalance(raw: number | string | null | undefined): number | undefin
 export class CodexProvider implements Provider {
   readonly id = "codex";
   readonly name = "Codex";
+  readonly brandColor = CODEXBAR_BRAND_COLORS.codex;
   readonly metricIds = [
     "session-percent",
     "weekly-percent",

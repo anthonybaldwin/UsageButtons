@@ -64,6 +64,7 @@ import {
 import { httpJson, HttpError } from "../util/http.ts";
 import { getClaudeSettings } from "../settings.ts";
 import { fetchClaudeExtraUsage } from "./claude-web.ts";
+import { CODEXBAR_BRAND_COLORS } from "./brand-colors.ts";
 import type {
   MetricValue,
   Provider,
@@ -329,6 +330,7 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
 export class ClaudeProvider implements Provider {
   readonly id = "claude";
   readonly name = "Claude";
+  readonly brandColor = CODEXBAR_BRAND_COLORS.claude;
   readonly metricIds = [
     "session-percent",
     "weekly-percent",

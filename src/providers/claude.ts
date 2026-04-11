@@ -438,47 +438,81 @@ export class ClaudeProvider implements Provider {
     );
     if (modelSpecific) metrics.push(modelSpecific);
 
-    // Extra usage resolution order:
-    //   1. OAuth response's `extra_usage` block, if enabled and has numbers
-    //   2. claude.ai Web API `/overage_spend_limit`, if user pasted a cookie
-    // OAuth has no HTTP cost beyond the /usage call we already made,
-    // so we try it first. The web call only happens when (a) OAuth
-    // didn't give us usable data and (b) a cookie header is configured
-    // in global settings.
+    // Extra usage resolution — three-way branch driven by
+    // `providers.claude.source`:
+    //
+    //   "oauth"  → OAuth only. Ignores any pasted cookie. Extras
+    //              populate only when Anthropic's OAuth endpoint
+    //              actually returned them (rare — most accounts
+    //              see `is_enabled: false`).
+    //
+    //   "cookie" → Cookie-primary. OAuth still fetches session /
+    //              weekly / sonnet (no choice — it's the only
+    //              source for those). For extras we skip OAuth's
+    //              `is_enabled` check entirely and go straight to
+    //              claude.ai's /overage_spend_limit endpoint.
+    //
+    //   "both"   → (default) OAuth first for everything, cookie
+    //              supplement for extras only when OAuth's extras
+    //              block is missing / disabled.
+    //
+    // Whichever branch runs, it runs INSIDE the per-provider
+    // snapshot cache's single in-flight fetch, so every visible
+    // Claude key shares the same HTTP calls.
+    const cs = getClaudeSettings();
     const oauthExtra = normaliseExtraUsage(response.extra_usage);
     let extraSource: ExtraUsageSource | undefined;
-    if (
-      oauthExtra &&
+    let extraSourceLabel: "oauth" | "web" | "none" = "none";
+
+    const oauthUsable =
+      !!oauthExtra &&
       oauthExtra.isEnabled &&
-      (oauthExtra.monthlyLimit ?? 0) > 0
-    ) {
+      (oauthExtra.monthlyLimit ?? 0) > 0;
+
+    function useOauthExtras(): void {
+      if (!oauthExtra) return;
       extraSource = {
         isEnabled: true,
         monthlyLimitCents: oauthExtra.monthlyLimit ?? 0,
         usedCreditsCents: oauthExtra.usedCredits ?? 0,
         currency: oauthExtra.currency ?? "USD",
       };
-    } else {
-      // OAuth didn't give us usable extras — try the claude.ai cookie
-      // path as a supplement. The fetcher reads its own cookie source
-      // from global settings (auto-import from browsers, manual paste,
-      // or off) so we just call it with no args. This whole block
-      // runs INSIDE the per-provider cache's single in-flight fetch,
-      // so all visible keys bound to Claude share the same web call.
-      const cs = getClaudeSettings();
-      if (cs.source !== "oauth") {
-        debugLogSink?.("claude: OAuth extras missing → trying claude.ai cookie path");
-        const web = await fetchClaudeExtraUsage();
-        if (web) {
-          extraSource = web;
-          debugLogSink?.(
-            `claude: web path returned monthlyLimit=${web.monthlyLimitCents}c used=${web.usedCreditsCents}c isEnabled=${web.isEnabled}`,
-          );
-        } else {
-          debugLogSink?.("claude: web path returned no data (cookie missing / scan failed / 401)");
-        }
+      extraSourceLabel = "oauth";
+    }
+
+    async function tryWebExtras(why: string): Promise<void> {
+      debugLogSink?.(`claude: ${why} → trying claude.ai cookie path`);
+      const web = await fetchClaudeExtraUsage();
+      if (web) {
+        extraSource = web;
+        extraSourceLabel = "web";
+        debugLogSink?.(
+          `claude: web path returned monthlyLimit=${web.monthlyLimitCents}c used=${web.usedCreditsCents}c isEnabled=${web.isEnabled}`,
+        );
+      } else {
+        debugLogSink?.("claude: web path returned no data (cookie missing / scan failed / 401)");
       }
     }
+
+    if (cs.source === "oauth") {
+      // OAuth-only: no web call, even if OAuth extras are missing.
+      if (oauthUsable) useOauthExtras();
+    } else if (cs.source === "cookie") {
+      // Cookie-primary: always call the web endpoint, skip OAuth
+      // extras entirely even when they would be usable. The user
+      // is explicitly telling us cookie is the authoritative
+      // source for this data.
+      await tryWebExtras("source=cookie");
+    } else {
+      // "both" (default): OAuth first, cookie fallback when OAuth
+      // has nothing usable.
+      if (oauthUsable) {
+        useOauthExtras();
+      } else {
+        await tryWebExtras("source=both, OAuth extras missing");
+      }
+    }
+
     metrics.push(...extraUsageMetrics(extraSource));
 
     // Schema observability. Key names + numeric stat values only —
@@ -491,7 +525,7 @@ export class ClaudeProvider implements Provider {
       ? Object.keys(rawExtra).sort().join(",")
       : "(missing)";
     const extraValues = extraSource
-      ? `source=${oauthExtra?.isEnabled ? "oauth" : "web"} isEnabled=${extraSource.isEnabled} monthlyLimitCents=${extraSource.monthlyLimitCents} usedCreditsCents=${extraSource.usedCreditsCents}`
+      ? `source=${extraSourceLabel} isEnabled=${extraSource.isEnabled} monthlyLimitCents=${extraSource.monthlyLimitCents} usedCreditsCents=${extraSource.usedCreditsCents}`
       : "(none)";
     debugLogSink?.(
       `claude response: topKeys=[${topKeys}] extra_usage keys=[${extraKeys}] values=${extraValues}`,

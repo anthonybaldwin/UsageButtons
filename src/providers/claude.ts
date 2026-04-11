@@ -103,12 +103,44 @@ interface UsageWindow {
   resets_at?: string | null;
 }
 
-interface ExtraUsage {
+/**
+ * Extra usage block — field names tolerant of both snake_case and
+ * camelCase because we haven't yet confirmed which Anthropic actually
+ * returns for this nested object. CodexBar's Swift decoder uses
+ * camelCase property names but its CodingKeys enum wasn't in the
+ * reference report I pulled, so we accept either until we've seen a
+ * live response. `normaliseExtraUsage` below picks whichever is set.
+ */
+interface ExtraUsageRaw {
   is_enabled?: boolean | null;
-  monthly_limit?: number | null; // cents
-  used_credits?: number | null; // cents
+  isEnabled?: boolean | null;
+  monthly_limit?: number | null;
+  monthlyLimit?: number | null;
+  used_credits?: number | null;
+  usedCredits?: number | null;
   utilization?: number | null;
   currency?: string | null;
+}
+
+interface ExtraUsage {
+  isEnabled: boolean;
+  monthlyLimit: number | undefined; // cents
+  usedCredits: number | undefined;  // cents
+  utilization: number | undefined;
+  currency: string | undefined;
+}
+
+function normaliseExtraUsage(raw: ExtraUsageRaw | null | undefined): ExtraUsage | undefined {
+  if (!raw) return undefined;
+  const isEnabled = raw.isEnabled ?? raw.is_enabled ?? false;
+  const result: ExtraUsage = {
+    isEnabled: isEnabled === true,
+    monthlyLimit: raw.monthlyLimit ?? raw.monthly_limit ?? undefined,
+    usedCredits: raw.usedCredits ?? raw.used_credits ?? undefined,
+    utilization: raw.utilization ?? undefined,
+    currency: raw.currency ?? undefined,
+  };
+  return result;
 }
 
 interface UsageResponse {
@@ -117,7 +149,7 @@ interface UsageResponse {
   seven_day_sonnet?: UsageWindow | null;
   seven_day_opus?: UsageWindow | null;
   seven_day_oauth_apps?: UsageWindow | null;
-  extra_usage?: ExtraUsage | null;
+  extra_usage?: ExtraUsageRaw | null;
 }
 
 export class ClaudeOAuthError extends Error {
@@ -224,11 +256,23 @@ function remainingMetric(
   return metric;
 }
 
-/** Claude's extra_usage monthly spend cap: fill represents headroom. */
-function extraUsageMetrics(extra: ExtraUsage | null | undefined): MetricValue[] {
-  if (!extra || extra.is_enabled !== true) return [];
-  const limitCents = extra.monthly_limit ?? 0;
-  const spentCents = extra.used_credits ?? 0;
+/**
+ * Claude's extra_usage monthly spend cap: fill represents headroom.
+ *
+ * Semantics (from the CodexBar Swift decoder):
+ *   - monthlyLimit / usedCredits are expressed in cents (minor units)
+ *   - isEnabled gates whether the user has extra usage turned on at all
+ *   - We drop the metrics entirely when extra usage is disabled or
+ *     the limit is zero, because there's nothing meaningful to show
+ *
+ * The user may have "extra usage" available with a $0 spend so far,
+ * which should yield 100% headroom and a three-button breakdown
+ * (percent, dollar remaining, dollar spent).
+ */
+function extraUsageMetrics(extra: ExtraUsage | undefined): MetricValue[] {
+  if (!extra || !extra.isEnabled) return [];
+  const limitCents = extra.monthlyLimit ?? 0;
+  const spentCents = extra.usedCredits ?? 0;
   if (limitCents <= 0) return [];
   const limit = limitCents / 100;
   const spent = spentCents / 100;
@@ -276,7 +320,6 @@ export class ClaudeProvider implements Provider {
     "session-percent",
     "weekly-percent",
     "weekly-sonnet-percent",
-    "weekly-opus-percent",
     "extra-usage-percent",
     "extra-usage-remaining",
     "extra-usage-spent",
@@ -364,23 +407,56 @@ export class ClaudeProvider implements Provider {
     );
     if (weekly) metrics.push(weekly);
 
-    const sonnet = remainingMetric(
+    // Match CodexBar: there is ONE model-specific slot, labeled
+    // "Sonnet", populated from `seven_day_sonnet` first and falling
+    // back to `seven_day_opus` if sonnet is missing. CodexBar never
+    // exposes a separate "Opus" line — the fallback-chain design is
+    // intentional because the two fields describe the same weekly
+    // model-specific quota from different sides.
+    // (ref: tmp/CodexBar/Sources/CodexBarCore/Providers/Claude/
+    //       ClaudeUsageFetcher.swift lines 841-843)
+    const modelSpecific = remainingMetric(
       "weekly-sonnet-percent",
       "SONNET",
       "Weekly Sonnet remaining",
-      response.seven_day_sonnet,
+      response.seven_day_sonnet ?? response.seven_day_opus,
     );
-    if (sonnet) metrics.push(sonnet);
+    if (modelSpecific) metrics.push(modelSpecific);
 
-    const opus = remainingMetric(
-      "weekly-opus-percent",
-      "OPUS",
-      "Weekly Opus remaining",
-      response.seven_day_opus,
+    const extra = normaliseExtraUsage(response.extra_usage);
+    metrics.push(...extraUsageMetrics(extra));
+
+    // Schema observability. Key names + extra_usage values only —
+    // no secrets. This is how we tell "Anthropic didn't send the
+    // field" from "we decoded it wrong".
+    const topKeys = Object.keys(response as Record<string, unknown>).sort().join(",");
+    const rawExtra = response.extra_usage as Record<string, unknown> | null | undefined;
+    const extraKeys = rawExtra
+      ? Object.keys(rawExtra).sort().join(",")
+      : "(missing)";
+    const extraValues = extra
+      ? `isEnabled=${extra.isEnabled} monthlyLimit=${extra.monthlyLimit ?? "—"} usedCredits=${extra.usedCredits ?? "—"} utilization=${extra.utilization ?? "—"}`
+      : "(missing)";
+    debugLogSink?.(
+      `claude response: topKeys=[${topKeys}] extra_usage keys=[${extraKeys}] values=${extraValues}`,
     );
-    if (opus) metrics.push(opus);
 
-    metrics.push(...extraUsageMetrics(response.extra_usage));
+    // Per-window utilization dump — tells us definitively whether
+    // Opus is missing-from-response, null-utilization, or simply
+    // parsed-but-dropped by our fetcher. "absent" = window object
+    // not returned at all; "null" = window returned but utilization
+    // is null; a number = Anthropic is tracking this window.
+    const windowLabel = (w: UsageWindow | null | undefined): string => {
+      if (w === null || w === undefined) return "absent";
+      if (typeof w.utilization !== "number") return "null";
+      return String(w.utilization);
+    };
+    // seven_day_cowork isn't in our UsageResponse type yet — read it
+    // via a loose cast just for the diagnostic line.
+    const cowork = (response as Record<string, UsageWindow | null | undefined>)["seven_day_cowork"];
+    debugLogSink?.(
+      `claude windows: five_hour=${windowLabel(response.five_hour)} seven_day=${windowLabel(response.seven_day)} sonnet=${windowLabel(response.seven_day_sonnet)} opus=${windowLabel(response.seven_day_opus)} cowork=${windowLabel(cowork)}`,
+    );
 
     return {
       providerId: this.id,
@@ -390,4 +466,14 @@ export class ClaudeProvider implements Provider {
       status: "operational",
     };
   }
+}
+
+/**
+ * Optional debug sink the plugin wires to Stream Deck's log file on
+ * startup. Kept as an injected callback so this module stays
+ * dependency-free. Called once per successful fetch with schema info.
+ */
+let debugLogSink: ((msg: string) => void) | undefined;
+export function setClaudeDebugLogSink(fn: (msg: string) => void): void {
+  debugLogSink = fn;
 }

@@ -11,6 +11,7 @@ import type { InboundEvent, WillAppearEvent } from "./streamdeck.ts";
 import { renderButtonSvg } from "./render.ts";
 import { getProvider } from "./providers/registry.ts";
 import { getSnapshot, setCacheLogSink } from "./providers/cache.ts";
+import { setClaudeDebugLogSink } from "./providers/claude.ts";
 import type { MetricValue } from "./providers/types.ts";
 import {
   resolveRefreshMs,
@@ -76,6 +77,7 @@ async function main(): Promise<void> {
   // log file so we can see hit/miss/cool-down decisions in
   // %APPDATA%/Elgato/StreamDeck/logs/com.baldwin.usage-buttons*.log.
   setCacheLogSink((msg) => connection.log(msg));
+  setClaudeDebugLogSink((msg) => connection.log(msg));
 
   connection.onEvent((event) => handleEvent(connection, event));
 

@@ -151,8 +151,9 @@ export async function getSnapshot(
       entry.fetchedAt = now();
       const hadError = !!entry.lastError;
       delete entry.lastError;
+      const ids = snapshot.metrics.map((m) => m.id).join(",") || "(none)";
       logSink(
-        `cache[${provider.id}] fetched OK (source=${snapshot.source}, metrics=${snapshot.metrics.length}${hadError ? ", recovered from error" : ""})`,
+        `cache[${provider.id}] fetched OK (source=${snapshot.source}, metrics=[${ids}]${hadError ? ", recovered from error" : ""})`,
       );
       return snapshot;
     } catch (err) {

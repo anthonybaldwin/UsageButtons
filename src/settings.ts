@@ -86,6 +86,13 @@ export interface GlobalSettings {
   defaultValueSize?: TextSize;
   /** Plugin-wide default reset-countdown size, overridable per-button. */
   defaultSubvalueSize?: TextSize;
+  /**
+   * Plugin-wide invert-fill toggle. Applies to every button and is
+   * NOT overridable per-button — "% used" vs "% remaining" is a
+   * taste choice users want to make once for the whole plugin, not
+   * babysit on every key individually.
+   */
+  invertFill?: boolean;
   /** Per-provider source preferences + credentials. */
   providers?: ProviderSettingsMap;
 }
@@ -94,6 +101,7 @@ let current: GlobalSettings = {
   defaultRefreshMinutes: DEFAULT_REFRESH_MINUTES,
   defaultValueSize: "large",
   defaultSubvalueSize: "large",
+  invertFill: false,
   providers: {},
 };
 
@@ -135,6 +143,7 @@ export function setGlobalSettings(next: GlobalSettings): void {
     defaultRefreshMinutes: refresh,
     defaultValueSize: normaliseTextSize(next.defaultValueSize, "large"),
     defaultSubvalueSize: normaliseTextSize(next.defaultSubvalueSize, "large"),
+    invertFill: next.invertFill === true,
     providers,
   };
 }
@@ -144,6 +153,9 @@ export function getDefaultValueSize(): TextSize {
 }
 export function getDefaultSubvalueSize(): TextSize {
   return current.defaultSubvalueSize ?? "large";
+}
+export function getInvertFill(): boolean {
+  return current.invertFill === true;
 }
 
 export function getGlobalSettings(): Readonly<GlobalSettings> {

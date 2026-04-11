@@ -17,6 +17,7 @@ import type { MetricValue, Provider } from "./providers/types.ts";
 import {
   getDefaultSubvalueSize,
   getDefaultValueSize,
+  getInvertFill,
   resolveRefreshMs,
   setGlobalSettings,
   type GlobalSettings,
@@ -57,8 +58,6 @@ interface KeySettings {
   textColor?: string;
   /** Direction the fill grows in as the value climbs toward 100%. */
   fillDirection?: "up" | "down" | "right" | "left";
-  /** Flip the fill ratio (remaining ↔ used). Useful when the metric is "used %". */
-  invertFill?: boolean;
   /** Big-number size. Overrides the plugin-wide default. */
   valueSize?: "small" | "medium" | "large";
   /** Reset-countdown subvalue size. Overrides the plugin-wide default. */
@@ -338,17 +337,21 @@ function renderMetric(
   metric: MetricValue,
   settings: KeySettings,
 ): string {
-  // Inverted view: the user wants "X% used" instead of "X% remaining"
-  // (or vice versa). Flip BOTH the displayed number and the fill
-  // ratio together — flipping just the ratio would render a 2% bar
-  // with "98%" text, which is nonsense.
+  // Inverted view: when the plugin-wide `invertFill` setting is on,
+  // every percentage metric renders as "X% used" instead of
+  // "X% remaining" (or vice versa) across the entire plugin. Flip
+  // BOTH the displayed number and the fill ratio together —
+  // flipping just the ratio would render a 2% bar with "98%" text,
+  // which is nonsense.
   //
-  // We only flip the numeric value when the metric looks like a
-  // percentage (unit === "%"). For dollar or count metrics we can't
-  // sensibly compute a complement — those still flip the ratio only.
+  // This used to be a per-button setting but users want one
+  // consistent view across their whole Stream Deck, not to
+  // babysit every key individually. Now a single toggle in Plugin
+  // settings flips the whole plugin.
+  const invert = getInvertFill();
   let effectiveValue: number | string = metric.value;
   let effectiveRatio = metric.ratio;
-  if (settings.invertFill) {
+  if (invert) {
     if (typeof effectiveValue === "number" && metric.unit === "%") {
       effectiveValue = Math.max(0, Math.min(100, 100 - effectiveValue));
     }

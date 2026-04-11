@@ -308,12 +308,44 @@ async function refreshKey(
 
   const metric = snapshot.metrics.find((m) => m.id === metricId);
   if (!metric) {
+    // Look for an "exhausted" companion metric on the same
+    // provider — i.e. any *-percent metric whose remaining ratio
+    // is at or near zero. If we find one, the requested metric is
+    // missing not because of an unrelated bug but because the
+    // provider has run out of headroom on a related quota
+    // (e.g. Codex weekly hit 100%, so its session window is also
+    // unusable; Claude sonnet maxed with no extras enabled).
+    //
+    // Render a clear "MAX'D" face in red with the exhausted
+    // companion's reset countdown so the user understands they're
+    // blocked + when it'll clear, instead of the ugly "—".
+    const exhausted = snapshot.metrics.find(
+      (m) => /-percent$/.test(m.id) && (m.ratio ?? 1) <= 0.01,
+    );
+    if (exhausted) {
+      const maxdInput: Parameters<typeof renderButtonSvg>[0] = {
+        label: provider.name.toUpperCase(),
+        value: "MAX'D",
+        ratio: 1,
+        direction: "up",
+        fill: "#ef4444",
+      };
+      if (exhausted.resetInSeconds !== undefined) {
+        maxdInput.subvalue = formatCountdown(exhausted.resetInSeconds);
+      }
+      const glyph = PROVIDER_ICONS[provider.id];
+      if (glyph) maxdInput.glyph = glyph;
+      conn.setImage(context, renderButtonSvg(maxdInput));
+      return;
+    }
+
+    // Genuinely missing metric (provider doesn't expose it for
+    // this account / plan) — fall back to a quiet placeholder.
     conn.setImage(
       context,
       renderButtonSvg({
         label: provider.name.toUpperCase(),
         value: "—",
-        subvalue: metricId,
         stale: true,
       }),
     );

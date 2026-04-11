@@ -21,30 +21,86 @@ export type RefreshMinutes = (typeof REFRESH_PRESETS)[number];
 
 export const DEFAULT_REFRESH_MINUTES: RefreshMinutes = 15;
 
+/**
+ * Per-provider source preference. Mirrors CodexBar's "Source" picker
+ * (Settings → Providers → <Name> → Usage source).
+ *
+ *   - "auto" (default): provider picks the best available data path.
+ *     For Claude that means OAuth primary + Web supplement.
+ *   - "oauth": only hit api.anthropic.com/api/oauth/usage.
+ *     No cookie calls, even if a cookie is set. Useful for users
+ *     who don't want any claude.ai traffic from the plugin.
+ *   - "web": only hit claude.ai/api/*. Cookie required.
+ *     Not shipping yet — needs session/weekly parity first.
+ */
+export type ProviderSource = "auto" | "oauth" | "web";
+
+/** Per-provider config, keyed by provider id. */
+export interface ClaudeProviderSettings {
+  source?: ProviderSource;
+  /** Raw cookie header pasted from claude.ai DevTools. Normalised on read. */
+  cookieHeader?: string;
+}
+
+export interface ProviderSettingsMap {
+  claude?: ClaudeProviderSettings;
+  // Future: codex, cursor, droid, kimi, ollama, openrouter, …
+}
+
 export interface GlobalSettings {
   /** Refresh cadence applied to any key that doesn't set its own. */
   defaultRefreshMinutes?: RefreshMinutes;
+  /** Per-provider source preferences + credentials. */
+  providers?: ProviderSettingsMap;
 }
 
 let current: GlobalSettings = {
   defaultRefreshMinutes: DEFAULT_REFRESH_MINUTES,
+  providers: {},
 };
 
+function normaliseSource(raw: unknown): ProviderSource {
+  if (raw === "oauth" || raw === "web") return raw;
+  return "auto";
+}
+
 export function setGlobalSettings(next: GlobalSettings): void {
-  // Validate: keep only known refresh presets.
   const minutes = next.defaultRefreshMinutes;
-  if (
+  const refresh: RefreshMinutes =
     typeof minutes === "number" &&
     (REFRESH_PRESETS as readonly number[]).includes(minutes)
-  ) {
-    current = { defaultRefreshMinutes: minutes as RefreshMinutes };
-  } else {
-    current = { defaultRefreshMinutes: DEFAULT_REFRESH_MINUTES };
+      ? (minutes as RefreshMinutes)
+      : DEFAULT_REFRESH_MINUTES;
+
+  const rawProviders = next.providers ?? {};
+  const providers: ProviderSettingsMap = {};
+
+  const claude = rawProviders.claude;
+  if (claude) {
+    const entry: ClaudeProviderSettings = {
+      source: normaliseSource(claude.source),
+    };
+    const cookie =
+      typeof claude.cookieHeader === "string"
+        ? claude.cookieHeader.trim()
+        : "";
+    if (cookie.length > 0) entry.cookieHeader = cookie;
+    providers.claude = entry;
   }
+
+  current = {
+    defaultRefreshMinutes: refresh,
+    providers,
+  };
 }
 
 export function getGlobalSettings(): Readonly<GlobalSettings> {
   return current;
+}
+
+/** Convenience: Claude provider settings with defaults applied. */
+export function getClaudeSettings(): Readonly<ClaudeProviderSettings> {
+  return current.providers?.claude ?? { source: "auto" };
 }
 
 /**

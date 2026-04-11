@@ -51,6 +51,22 @@
       <option value="30">30 minutes</option>
       <option value="60">1 hour</option>
     </select>
+
+    <label for="claudeSource" style="margin-top: 14px">Claude source</label>
+    <select id="claudeSource">
+      <option value="auto" selected>Auto (OAuth + cookie fallback for extras)</option>
+      <option value="oauth">OAuth only (no cookie calls)</option>
+    </select>
+
+    <label for="claudeCookie">Claude session cookie (claude.ai)</label>
+    <textarea id="claudeCookie" rows="2" placeholder="sessionKey=sk-ant-sid01-...    (paste the Cookie: header from claude.ai DevTools)" autocomplete="off" spellcheck="false"></textarea>
+    <p class="hint">
+      Optional. When present, the plugin fetches the "Extra usage" block from
+      claude.ai directly (current balance, monthly limit, spend) — Anthropic's
+      OAuth API hides those fields for some accounts. Open claude.ai in your
+      browser, DevTools → Network → any request → copy the <code>Cookie:</code>
+      header value. Only <code>sessionKey=</code> is required.
+    </p>
   </div>
 
   <label for="provider">Provider</label>
@@ -192,9 +208,14 @@
     }
 
     function applyGlobalSettings(globals) {
-      const minutes = globals && globals.defaultRefreshMinutes;
+      globals = globals || {};
+      const minutes = globals.defaultRefreshMinutes;
       document.getElementById("defaultRefresh").value =
         [5, 10, 15, 30, 60].includes(minutes) ? String(minutes) : "15";
+      const claude = (globals.providers && globals.providers.claude) || {};
+      const src = claude.source === "oauth" ? "oauth" : "auto";
+      document.getElementById("claudeSource").value = src;
+      document.getElementById("claudeCookie").value = claude.cookieHeader || "";
     }
 
     function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
@@ -245,8 +266,17 @@
 
     function pushGlobalSettings() {
       if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      const claudeCookie = document.getElementById("claudeCookie").value.trim();
       const payload = {
         defaultRefreshMinutes: Number(document.getElementById("defaultRefresh").value),
+        providers: {
+          claude: {
+            source: document.getElementById("claudeSource").value,
+            // Empty string = user cleared the field; omit the key so
+            // the setting validator doesn't keep a stale one.
+            ...(claudeCookie ? { cookieHeader: claudeCookie } : {}),
+          },
+        },
       };
       websocket.send(JSON.stringify({
         event: "setGlobalSettings",
@@ -270,7 +300,11 @@
       el.addEventListener("change", pushSettings);
       if (el.tagName === "TEXTAREA") el.addEventListener("input", pushSettings);
     }
-    document.getElementById("defaultRefresh").addEventListener("change", pushGlobalSettings);
+    for (const id of ["defaultRefresh", "claudeSource", "claudeCookie"]) {
+      const el = document.getElementById(id);
+      el.addEventListener("change", pushGlobalSettings);
+      if (el.tagName === "TEXTAREA") el.addEventListener("input", pushGlobalSettings);
+    }
 
     applyKeySettings({});
     window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;

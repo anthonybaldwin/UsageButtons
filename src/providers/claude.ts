@@ -62,17 +62,19 @@ import {
   CredentialNotFoundError,
 } from "../util/credentials.ts";
 import { httpJson, HttpError } from "../util/http.ts";
+import { getClaudeSettings } from "../settings.ts";
+import { fetchClaudeExtraUsage } from "./claude-web.ts";
+import type {
+  MetricValue,
+  Provider,
+  ProviderSnapshot,
+} from "./types.ts";
 
 function truncate(s: string, n: number): string {
   if (!s) return "";
   const clean = s.replace(/\s+/g, " ").trim();
   return clean.length <= n ? clean : `${clean.slice(0, n)}…`;
 }
-import type {
-  MetricValue,
-  Provider,
-  ProviderSnapshot,
-} from "./types.ts";
 
 const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const BETA_HEADER = "oauth-2025-04-20";
@@ -259,28 +261,39 @@ function remainingMetric(
 /**
  * Claude's extra_usage monthly spend cap: fill represents headroom.
  *
- * Semantics (from the CodexBar Swift decoder):
- *   - monthlyLimit / usedCredits are expressed in cents (minor units)
- *   - isEnabled gates whether the user has extra usage turned on at all
- *   - We drop the metrics entirely when extra usage is disabled or
- *     the limit is zero, because there's nothing meaningful to show
+ * Takes a unified `ExtraUsageSource` that may have come from the
+ * OAuth response OR from the Web API supplement — both produce the
+ * same shape after normalisation (cents + currency + enabled flag).
  *
- * The user may have "extra usage" available with a $0 spend so far,
- * which should yield 100% headroom and a three-button breakdown
- * (percent, dollar remaining, dollar spent).
+ * When `isEnabled === false`, CodexBar's OAuth handler bails out.
+ * We keep that behaviour for OAuth-only data, but the Web API path
+ * returns the *real* monthly_credit_limit / used_credits even for
+ * disabled accounts, so we also render the dollar metrics when a
+ * limit is known regardless of the enabled flag. This matches what
+ * CodexBar shows in its menu ("$0.00 / $X.XX" even when the toggle
+ * is off on claude.ai).
  */
-function extraUsageMetrics(extra: ExtraUsage | undefined): MetricValue[] {
-  if (!extra || !extra.isEnabled) return [];
-  const limitCents = extra.monthlyLimit ?? 0;
-  const spentCents = extra.usedCredits ?? 0;
+interface ExtraUsageSource {
+  isEnabled: boolean;
+  /** Monthly spend limit in cents. */
+  monthlyLimitCents: number;
+  /** Amount spent this month in cents. */
+  usedCreditsCents: number;
+  currency: string;
+}
+
+function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
+  if (!extra) return [];
+  const limitCents = extra.monthlyLimitCents;
   if (limitCents <= 0) return [];
+  const spentCents = extra.usedCreditsCents;
   const limit = limitCents / 100;
   const spent = spentCents / 100;
   const remaining = Math.max(0, limit - spent);
   const usedPct = Math.min(100, (spent / limit) * 100);
   const remPct = 100 - usedPct;
   const now = new Date();
-  const currency = extra.currency ?? "USD";
+  const currency = extra.currency;
   return [
     {
       id: "extra-usage-percent",
@@ -423,20 +436,52 @@ export class ClaudeProvider implements Provider {
     );
     if (modelSpecific) metrics.push(modelSpecific);
 
-    const extra = normaliseExtraUsage(response.extra_usage);
-    metrics.push(...extraUsageMetrics(extra));
+    // Extra usage resolution order:
+    //   1. OAuth response's `extra_usage` block, if enabled and has numbers
+    //   2. claude.ai Web API `/overage_spend_limit`, if user pasted a cookie
+    // OAuth has no HTTP cost beyond the /usage call we already made,
+    // so we try it first. The web call only happens when (a) OAuth
+    // didn't give us usable data and (b) a cookie header is configured
+    // in global settings.
+    const oauthExtra = normaliseExtraUsage(response.extra_usage);
+    let extraSource: ExtraUsageSource | undefined;
+    if (
+      oauthExtra &&
+      oauthExtra.isEnabled &&
+      (oauthExtra.monthlyLimit ?? 0) > 0
+    ) {
+      extraSource = {
+        isEnabled: true,
+        monthlyLimitCents: oauthExtra.monthlyLimit ?? 0,
+        usedCreditsCents: oauthExtra.usedCredits ?? 0,
+        currency: oauthExtra.currency ?? "USD",
+      };
+    } else {
+      // OAuth didn't give us usable extras — try the claude.ai cookie
+      // path as a supplement. Best-effort: if cookie is missing, or
+      // the web call fails, we just don't render extras at all.
+      const cs = getClaudeSettings();
+      if (cs.source !== "oauth") {
+        const web = await fetchClaudeExtraUsage(cs.cookieHeader);
+        if (web) {
+          extraSource = web;
+        }
+      }
+    }
+    metrics.push(...extraUsageMetrics(extraSource));
 
-    // Schema observability. Key names + extra_usage values only —
-    // no secrets. This is how we tell "Anthropic didn't send the
-    // field" from "we decoded it wrong".
+    // Schema observability. Key names + numeric stat values only —
+    // no secrets. This tells us whether the "empty extra usage" face
+    // is (a) OAuth returning disabled, (b) web cookie missing, or
+    // (c) web call failed.
     const topKeys = Object.keys(response as Record<string, unknown>).sort().join(",");
     const rawExtra = response.extra_usage as Record<string, unknown> | null | undefined;
     const extraKeys = rawExtra
       ? Object.keys(rawExtra).sort().join(",")
       : "(missing)";
-    const extraValues = extra
-      ? `isEnabled=${extra.isEnabled} monthlyLimit=${extra.monthlyLimit ?? "—"} usedCredits=${extra.usedCredits ?? "—"} utilization=${extra.utilization ?? "—"}`
-      : "(missing)";
+    const extraValues = extraSource
+      ? `source=${oauthExtra?.isEnabled ? "oauth" : "web"} isEnabled=${extraSource.isEnabled} monthlyLimitCents=${extraSource.monthlyLimitCents} usedCreditsCents=${extraSource.usedCreditsCents}`
+      : "(none)";
     debugLogSink?.(
       `claude response: topKeys=[${topKeys}] extra_usage keys=[${extraKeys}] values=${extraValues}`,
     );

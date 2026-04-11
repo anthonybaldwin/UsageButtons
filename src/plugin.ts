@@ -324,53 +324,58 @@ async function refreshKey(
 
   const metric = snapshot.metrics.find((m) => m.id === metricId);
   if (!metric) {
-    // Look for an "exhausted" companion metric on the same
-    // provider — i.e. any *-percent metric whose remaining ratio
-    // is at or near zero. If we find one, the requested metric is
-    // almost certainly missing because the provider has run out
-    // of headroom on a related quota (Codex weekly hit 100% so
-    // its session window is also unusable; Claude sonnet maxed
-    // with no extras enabled, etc.).
+    // The "synthesize a 0%-remaining fake" exhaustion fallback
+    // ONLY applies when the REQUESTED metric is itself a percent
+    // metric (`*-percent`). For non-percent metrics like
+    // `credits-balance`, `extra-usage-balance`, etc., synthesizing
+    // a percent-style 0% fake produces a confusing button (e.g.
+    // "CREDITS 100%" because the user has no credits → metric
+    // gated out → fake fired → percent-shaped output that doesn't
+    // describe anything real).
     //
-    // Synthesize a fake "0% remaining" metric using the requested
-    // id and render it through the normal renderMetric path. With
-    // invertFill ON the meter shows a full bar at "100%" used;
-    // with invertFill OFF it shows an empty bar at "0%" remaining.
-    // Either way it's a normal-looking button — the user can read
-    // "this is capped" from the value text alone. No red overlay,
-    // no big logo: matches the user's preference to keep
-    // threshold colors on money metrics only.
-    const exhausted = snapshot.metrics.find(
-      (m) => /-percent$/.test(m.id) && (m.ratio ?? 1) <= 0.01,
-    );
-    if (exhausted) {
-      const fake: MetricValue = {
-        id: metricId,
-        label: deriveLabelFromMetricId(metricId),
-        name: `${deriveLabelFromMetricId(metricId)} (capped)`,
-        value: 0,
-        numericValue: 0,
-        numericUnit: "percent",
-        unit: "%",
-        ratio: 0,
-        direction: "up",
-      };
-      if (exhausted.resetInSeconds !== undefined) {
-        fake.resetInSeconds = exhausted.resetInSeconds;
-      }
-      conn.setImage(
-        context,
-        renderMetric(provider, snapshot.providerName, fake, key.settings),
+    // Behaviour:
+    //   percent metric missing + companion percent exhausted →
+    //     synthesize a fake 0% remaining to mirror the cap
+    //   percent metric missing + no exhausted companion →
+    //     quiet "—" placeholder
+    //   non-percent metric missing → ALWAYS quiet "—" placeholder
+    //     (we have no honest way to fake a balance/spend value)
+    const isRequestedPercent = /-percent$/.test(metricId);
+    if (isRequestedPercent) {
+      const exhausted = snapshot.metrics.find(
+        (m) => /-percent$/.test(m.id) && (m.ratio ?? 1) <= 0.01,
       );
-      return;
+      if (exhausted) {
+        const fake: MetricValue = {
+          id: metricId,
+          label: deriveLabelFromMetricId(metricId),
+          name: `${deriveLabelFromMetricId(metricId)} (capped)`,
+          value: 0,
+          numericValue: 0,
+          numericUnit: "percent",
+          unit: "%",
+          ratio: 0,
+          direction: "up",
+        };
+        if (exhausted.resetInSeconds !== undefined) {
+          fake.resetInSeconds = exhausted.resetInSeconds;
+        }
+        conn.setImage(
+          context,
+          renderMetric(provider, snapshot.providerName, fake, key.settings),
+        );
+        return;
+      }
     }
 
     // Genuinely missing metric (provider doesn't expose it for
-    // this account / plan) — fall back to a quiet placeholder.
+    // this account / plan) — fall back to a quiet placeholder
+    // with the metric's natural label so the user knows which
+    // button is the empty one.
     conn.setImage(
       context,
       renderButtonSvg({
-        label: provider.name.toUpperCase(),
+        label: deriveLabelFromMetricId(metricId),
         value: "—",
         stale: true,
       }),

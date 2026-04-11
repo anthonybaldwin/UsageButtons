@@ -36,6 +36,21 @@
       color: #f9fafb;
       border-bottom-color: #3b82f6;
     }
+
+    button.action {
+      width: 100%;
+      background: #1f2937;
+      color: #e5e7eb;
+      border: 1px solid #374151;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    button.action:hover { background: #374151; }
+    button.action:active { background: #111827; }
     .panel { display: none; padding: 0 12px 16px; }
     .panel.active { display: block; }
 
@@ -234,6 +249,15 @@
     <p class="hint">
       Any button in the "This button" tab can override these. Blank /
       "Use default" on the button sticks with the plugin-wide value.
+    </p>
+    <button type="button" id="resetTextSizes" class="action">
+      Reset text-size overrides on every button
+    </button>
+    <p class="hint">
+      Clears <code>valueSize</code> / <code>subvalueSize</code> from
+      every visible button so the plugin-wide defaults above take
+      over everywhere. Buttons on inactive profiles pick up the reset
+      the next time they appear.
     </p>
 
     <div class="group-heading">Claude provider · applies to every Claude button</div>
@@ -517,6 +541,18 @@
       el.addEventListener("change", pushGlobalSettings);
       if (el.tagName === "TEXTAREA") el.addEventListener("input", pushGlobalSettings);
     }
+
+    // "Reset text-size overrides" sends a custom sendToPlugin
+    // event that the plugin handles by iterating every visible
+    // key and clearing its valueSize / subvalueSize fields.
+    document.getElementById("resetTextSizes").addEventListener("click", () => {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      websocket.send(JSON.stringify({
+        event: "sendToPlugin",
+        context: uuid,
+        payload: { action: "resetTextSizeOverrides" },
+      }));
+    });
 
     applyKeySettings({});
     window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;

@@ -127,6 +127,48 @@ async function main(): Promise<void> {
  * interval has elapsed. Each key tracks its own `lastPollAt` so
  * keys with different intervals tick independently.
  */
+/**
+ * Re-render every currently visible key from its cached provider
+ * snapshot. Used after a global-settings change (font size, invert
+ * fill, etc.) so the UI updates without waiting for the next poll.
+ * Doesn't force a fresh provider.fetch(); the existing cached
+ * snapshot is enough because the change is display-only.
+ */
+async function refreshAllVisibleKeys(conn: StreamDeckConnection): Promise<void> {
+  await Promise.all(
+    [...visibleKeys.keys()].map((ctx) => refreshKey(conn, ctx, { force: false })),
+  );
+}
+
+/**
+ * Clear per-key valueSize + subvalueSize overrides from every
+ * visible key so the plugin-wide defaults take over. Invoked by
+ * the "Reset per-button text-size overrides" action in the PI.
+ *
+ * Only touches keys currently visible on a Stream Deck device —
+ * keys on inactive profiles aren't tracked by the plugin and will
+ * continue to carry their old overrides until they reappear.
+ */
+async function resetTextSizeOverrides(
+  conn: StreamDeckConnection,
+): Promise<void> {
+  conn.log(
+    `resetTextSizeOverrides: clearing per-key text size overrides on ${visibleKeys.size} visible key(s)`,
+  );
+  for (const [ctx, key] of visibleKeys) {
+    // Mutate in-memory and persist via setSettings so a Stream
+    // Deck restart won't bring the old values back.
+    delete key.settings.valueSize;
+    delete key.settings.subvalueSize;
+    conn.send({
+      event: "setSettings",
+      context: ctx,
+      payload: key.settings as Record<string, unknown>,
+    });
+  }
+  await refreshAllVisibleKeys(conn);
+}
+
 async function scheduleDueKeys(conn: StreamDeckConnection): Promise<void> {
   const now = Date.now();
   const due: string[] = [];
@@ -187,6 +229,21 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
       conn.log(
         `global settings updated: default=${payload?.settings?.defaultRefreshMinutes ?? "default"}m`,
       );
+      // A global font-size change should re-render every visible
+      // key whose settings don't explicitly override (so the new
+      // default kicks in immediately rather than on the next poll).
+      void refreshAllVisibleKeys(conn);
+      return;
+    }
+    case "sendToPlugin": {
+      // Custom Property Inspector → plugin events. Right now the
+      // only one is "resetTextSizeOverrides" which clears
+      // valueSize / subvalueSize from every visible key so the
+      // plugin-wide default takes over everywhere.
+      const payload = (event as { payload?: { action?: string } }).payload;
+      if (payload?.action === "resetTextSizeOverrides") {
+        void resetTextSizeOverrides(conn);
+      }
       return;
     }
     case "keyDown": {

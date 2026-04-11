@@ -21,14 +21,11 @@
   <label for="provider">Provider</label>
   <select id="provider">
     <option value="mock">Mock (dev)</option>
+    <option value="claude">Claude</option>
   </select>
 
   <label for="metric">Metric</label>
-  <select id="metric">
-    <option value="session-percent">Session % remaining</option>
-    <option value="weekly-percent">Weekly % remaining</option>
-    <option value="credits">Credits remaining</option>
-  </select>
+  <select id="metric"></select>
 
   <p class="hint">
     More providers unlock as they ship. See <code>docs/codexbar-reference.md</code>
@@ -36,11 +33,43 @@
   </p>
 
   <script>
+    // Provider → list of (metric id, human label) pairs. Used to
+    // repopulate the metric dropdown whenever the provider changes.
+    // Keep this in sync with each provider's `metricIds` in
+    // src/providers/*.ts.
+    const METRICS = {
+      mock: [
+        ["session-percent", "Session % remaining"],
+        ["weekly-percent",  "Weekly % remaining"],
+        ["credits",         "Credits remaining"],
+      ],
+      claude: [
+        ["session-percent",       "Session % remaining (5h)"],
+        ["weekly-percent",        "Weekly % remaining"],
+        ["weekly-sonnet-percent", "Weekly Sonnet % remaining"],
+        ["weekly-opus-percent",   "Weekly Opus % remaining"],
+        ["extra-usage-percent",   "Extra usage headroom %"],
+        ["extra-usage-remaining", "Extra usage remaining ($)"],
+        ["extra-usage-spent",     "Extra usage spent ($)"],
+      ],
+    };
+
+    function populateMetrics(providerId, selectedMetric) {
+      const metric = document.getElementById("metric");
+      const list = METRICS[providerId] || [];
+      const options = list.map(([value, label]) => {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = label;
+        if (value === selectedMetric) opt.selected = true;
+        return opt;
+      });
+      metric.replaceChildren(...options);
+    }
+
     // Stream Deck calls this global with registration args when the
-    // Property Inspector loads. We use it to read current settings and
-    // to push updates back as the user picks options.
-    //
-    // Protocol: https://docs.elgato.com/streamdeck/sdk/references/property-inspector/
+    // Property Inspector loads. Protocol:
+    //   https://docs.elgato.com/streamdeck/sdk/references/property-inspector/
     let websocket = null;
     let uuid = null;
     let actionInfo = null;
@@ -55,12 +84,10 @@
       };
 
       const settings = actionInfo.payload.settings || {};
-      if (settings.providerId) {
-        document.getElementById("provider").value = settings.providerId;
-      }
-      if (settings.metricId) {
-        document.getElementById("metric").value = settings.metricId;
-      }
+      const providerId = settings.providerId || "mock";
+      const metricId = settings.metricId || "session-percent";
+      document.getElementById("provider").value = providerId;
+      populateMetrics(providerId, metricId);
     }
 
     function pushSettings() {
@@ -76,10 +103,16 @@
       }));
     }
 
-    document.getElementById("provider").addEventListener("change", pushSettings);
+    document.getElementById("provider").addEventListener("change", () => {
+      populateMetrics(document.getElementById("provider").value);
+      pushSettings();
+    });
     document.getElementById("metric").addEventListener("change", pushSettings);
 
-    // Expose the Stream Deck callback in the global scope where the app expects it.
+    // Initialise even if Stream Deck hasn't called connectElgato yet
+    // (so the dropdown isn't empty when opened in a browser for dev).
+    populateMetrics("mock", "session-percent");
+
     window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
   </script>
 </body>

@@ -12,6 +12,11 @@ import { renderButtonSvg } from "./render.ts";
 import { getProvider } from "./providers/registry.ts";
 import { getSnapshot } from "./providers/cache.ts";
 import type { MetricValue } from "./providers/types.ts";
+import {
+  resolveRefreshMs,
+  setGlobalSettings,
+  type GlobalSettings,
+} from "./settings.ts";
 
 interface KeySettings {
   providerId?: string;
@@ -28,25 +33,32 @@ interface KeySettings {
   fillDirection?: "up" | "down" | "right" | "left";
   /** Flip the fill ratio (remaining ↔ used). Useful when the metric is "used %". */
   invertFill?: boolean;
+  /**
+   * Per-key refresh cadence in minutes. One of 5, 10, 15, 30, 60.
+   * When undefined, the key uses the plugin's global default.
+   */
+  refreshMinutes?: number;
 }
 
 interface VisibleKey {
   context: string;
   settings: KeySettings;
+  /** Epoch ms of the most recent refresh (or 0 before the first one). */
+  lastPollAt: number;
 }
 
 const ACTION_UUID = "com.baldwin.usage-buttons.stat";
 const DEFAULT_PROVIDER = "mock";
 const DEFAULT_METRIC = "session-percent";
 /**
- * How often the plugin's own poll loop ticks. The per-provider
- * cache in `src/providers/cache.ts` enforces a longer TTL on top of
- * this, so the actual upstream HTTP rate is gated by whichever is
- * more conservative. We poll more often here so that click-refresh
- * and settings changes feel snappy, while the cache keeps the
- * real upstream rate sane.
+ * How often the plugin's master scheduler ticks. On every tick we
+ * iterate all visible keys and call refreshKey() on any whose
+ * per-key interval has elapsed since the last poll. The tick is
+ * short (30s) so a freshly-added key with a 5m interval sees its
+ * first data within at most 30s after appearing, and so per-key
+ * interval changes feel responsive.
  */
-const POLL_INTERVAL_MS = 15_000;
+const SCHEDULER_TICK_MS = 30_000;
 
 const visibleKeys = new Map<string, VisibleKey>();
 
@@ -62,10 +74,28 @@ async function main(): Promise<void> {
 
   connection.onEvent((event) => handleEvent(connection, event));
 
-  // Start the poll loop. We refresh all visible keys together so a
-  // single provider fetch can fan out to multiple keys bound to the
-  // same stat.
-  setInterval(() => void refreshAllKeys(connection), POLL_INTERVAL_MS);
+  // Ask Stream Deck for our plugin-wide settings so we know the
+  // user's preferred default refresh interval before the first
+  // scheduler tick fires.
+  connection.send({ event: "getGlobalSettings", context: args.pluginUUID });
+
+  setInterval(() => void scheduleDueKeys(connection), SCHEDULER_TICK_MS);
+}
+
+/**
+ * Scheduler tick: fire refreshKey on any visible key whose per-key
+ * interval has elapsed. Each key tracks its own `lastPollAt` so
+ * keys with different intervals tick independently.
+ */
+async function scheduleDueKeys(conn: StreamDeckConnection): Promise<void> {
+  const now = Date.now();
+  const due: string[] = [];
+  for (const [ctx, key] of visibleKeys) {
+    const intervalMs = resolveRefreshMs(key.settings);
+    if (now - key.lastPollAt >= intervalMs) due.push(ctx);
+  }
+  if (due.length === 0) return;
+  await Promise.all(due.map((ctx) => refreshKey(conn, ctx, { force: false })));
 }
 
 function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
@@ -76,10 +106,11 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
       visibleKeys.set(e.context, {
         context: e.context,
         settings: e.payload.settings as KeySettings,
+        lastPollAt: 0,
       });
-      // First appearance: use the cached snapshot if one exists so
-      // we render instantly without hitting the upstream. The poll
-      // loop will refresh on its own cadence.
+      // First appearance: fire an immediate cached-or-fetched refresh
+      // so the button has data as soon as the user drops it on a key.
+      // lastPollAt is updated inside refreshKey on success.
       void refreshKey(conn, e.context, { force: false });
       return;
     }
@@ -96,8 +127,20 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
       if (!existing) return;
       existing.settings = payload.settings ?? {};
       // Settings changes re-render immediately from the cached
-      // snapshot — same provider, just a different metric / color.
+      // snapshot — same provider, just a different metric / color /
+      // interval. We also reset lastPollAt so an interval-reduction
+      // takes effect on the very next scheduler tick.
+      existing.lastPollAt = 0;
       void refreshKey(conn, ctx, { force: false });
+      return;
+    }
+    case "didReceiveGlobalSettings": {
+      const payload = (event as { payload?: { settings?: GlobalSettings } })
+        .payload;
+      setGlobalSettings(payload?.settings ?? {});
+      conn.log(
+        `global settings updated: default=${payload?.settings?.defaultRefreshMinutes ?? "default"}m`,
+      );
       return;
     }
     case "keyDown": {
@@ -112,12 +155,6 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
   }
 }
 
-async function refreshAllKeys(conn: StreamDeckConnection): Promise<void> {
-  await Promise.all(
-    [...visibleKeys.keys()].map((ctx) => refreshKey(conn, ctx, { force: false })),
-  );
-}
-
 async function refreshKey(
   conn: StreamDeckConnection,
   context: string,
@@ -125,6 +162,7 @@ async function refreshKey(
 ): Promise<void> {
   const key = visibleKeys.get(context);
   if (!key) return;
+  key.lastPollAt = Date.now();
 
   const providerId = key.settings.providerId ?? DEFAULT_PROVIDER;
   const metricId = key.settings.metricId ?? DEFAULT_METRIC;

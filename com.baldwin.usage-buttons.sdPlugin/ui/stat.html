@@ -22,9 +22,36 @@
     .checkbox-row label { margin: 0; font-weight: 600; }
     p.hint { margin: 10px 0 0; opacity: 0.65; font-size: 11px; }
     hr { border: none; border-top: 1px solid #374151; margin: 14px 0 0; }
+    .section {
+      background: #0b1220;
+      border: 1px solid #374151;
+      border-radius: 6px;
+      padding: 8px 10px 12px;
+      margin-bottom: 12px;
+    }
+    .section h3 {
+      margin: 0 0 2px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      opacity: 0.7;
+    }
   </style>
 </head>
 <body>
+
+  <div class="section" id="globalSection">
+    <h3>Plugin settings · applies to every Usage Button</h3>
+    <label for="defaultRefresh">Default refresh interval</label>
+    <select id="defaultRefresh">
+      <option value="5">5 minutes</option>
+      <option value="10">10 minutes</option>
+      <option value="15" selected>15 minutes</option>
+      <option value="30">30 minutes</option>
+      <option value="60">1 hour</option>
+    </select>
+  </div>
+
   <label for="provider">Provider</label>
   <select id="provider">
     <option value="mock">Mock (dev)</option>
@@ -34,6 +61,16 @@
 
   <label for="metric">Metric</label>
   <select id="metric"></select>
+
+  <label for="refreshMinutes">Refresh interval (this button)</label>
+  <select id="refreshMinutes">
+    <option value="">Use plugin default</option>
+    <option value="5">5 minutes</option>
+    <option value="10">10 minutes</option>
+    <option value="15">15 minutes</option>
+    <option value="30">30 minutes</option>
+    <option value="60">1 hour</option>
+  </select>
 
   <hr>
 
@@ -113,11 +150,13 @@
     let uuid = null;
     let actionInfo = null;
 
-    function applySettings(settings) {
+    function applyKeySettings(settings) {
       const providerId = settings.providerId || "mock";
       const metricId = settings.metricId || "session-percent";
       document.getElementById("provider").value = providerId;
       populateMetrics(providerId, metricId);
+      document.getElementById("refreshMinutes").value =
+        settings.refreshMinutes != null ? String(settings.refreshMinutes) : "";
       document.getElementById("labelOverride").value = settings.labelOverride || "";
       document.getElementById("hideLabel").checked = !!settings.hideLabel;
       document.getElementById("invertFill").checked = !!settings.invertFill;
@@ -126,21 +165,40 @@
       if (settings.bgColor)   document.getElementById("bgColor").value   = settings.bgColor;
     }
 
+    function applyGlobalSettings(globals) {
+      const minutes = globals && globals.defaultRefreshMinutes;
+      document.getElementById("defaultRefresh").value =
+        [5, 10, 15, 30, 60].includes(minutes) ? String(minutes) : "15";
+    }
+
     function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
       uuid = inUUID;
       actionInfo = JSON.parse(inActionInfo);
       websocket = new WebSocket("ws://127.0.0.1:" + port);
       websocket.onopen = () => {
         websocket.send(JSON.stringify({ event: registerEvent, uuid: inUUID }));
+        // Pull the plugin-wide settings so the global section
+        // reflects whatever the user already has configured across
+        // their other Usage Buttons.
+        websocket.send(JSON.stringify({ event: "getGlobalSettings", context: inUUID }));
       };
-      applySettings(actionInfo.payload.settings || {});
+      websocket.onmessage = (ev) => {
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch { return; }
+        if (msg.event === "didReceiveGlobalSettings") {
+          applyGlobalSettings(msg.payload && msg.payload.settings);
+        }
+      };
+      applyKeySettings(actionInfo.payload.settings || {});
     }
 
     function pushSettings() {
       if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      const refreshRaw = document.getElementById("refreshMinutes").value;
       const payload = {
         providerId:    document.getElementById("provider").value,
         metricId:      document.getElementById("metric").value,
+        refreshMinutes: refreshRaw === "" ? undefined : Number(refreshRaw),
         labelOverride: document.getElementById("labelOverride").value,
         hideLabel:     document.getElementById("hideLabel").checked,
         invertFill:    document.getElementById("invertFill").checked,
@@ -155,18 +213,31 @@
       }));
     }
 
+    function pushGlobalSettings() {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      const payload = {
+        defaultRefreshMinutes: Number(document.getElementById("defaultRefresh").value),
+      };
+      websocket.send(JSON.stringify({
+        event: "setGlobalSettings",
+        context: uuid,
+        payload,
+      }));
+    }
+
     document.getElementById("provider").addEventListener("change", () => {
       populateMetrics(document.getElementById("provider").value);
       pushSettings();
     });
     for (const id of [
-      "metric", "labelOverride", "hideLabel", "invertFill",
+      "metric", "refreshMinutes", "labelOverride", "hideLabel", "invertFill",
       "fillDirection", "fillColor", "bgColor",
     ]) {
       document.getElementById(id).addEventListener("change", pushSettings);
     }
+    document.getElementById("defaultRefresh").addEventListener("change", pushGlobalSettings);
 
-    applySettings({});
+    applyKeySettings({});
     window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
   </script>
 </body>

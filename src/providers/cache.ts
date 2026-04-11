@@ -27,8 +27,19 @@
 
 import type { Provider, ProviderSnapshot } from "./types.ts";
 
-const MIN_TTL_MS = 30_000;       // reuse successful snapshots for 30s
-const COOLDOWN_MS = 90_000;      // back off 90s after an upstream error
+/**
+ * Cache TTL is set to match the plugin's shortest user-selectable
+ * poll interval (5 minutes). That means any poll tick within 5m of
+ * a prior successful fetch reuses the snapshot without touching the
+ * upstream. Keys configured with longer intervals (10m / 15m / …)
+ * automatically share the same snapshot as the fastest-polling key,
+ * so 10 keys bound to Claude = at most one HTTP call per 5 minutes
+ * regardless of how many keys exist or how often the plugin ticks.
+ */
+const MIN_TTL_MS = 5 * 60 * 1000;
+
+/** After an upstream error, stop hitting the API for 10 minutes. */
+const COOLDOWN_MS = 10 * 60 * 1000;
 
 interface CacheEntry {
   /** Last successful snapshot, if any. */

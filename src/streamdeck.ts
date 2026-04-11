@@ -68,6 +68,15 @@ export type OutboundEvent =
       context: string;
     }
   | {
+      event: "getGlobalSettings";
+      context: string;
+    }
+  | {
+      event: "setGlobalSettings";
+      context: string;
+      payload: Record<string, unknown>;
+    }
+  | {
       event: "logMessage";
       payload: { message: string };
     }

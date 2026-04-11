@@ -33,26 +33,37 @@ export const DEFAULT_REFRESH_MINUTES: RefreshMinutes = 15;
  *   - "web": only hit claude.ai/api/*. Cookie required.
  *     Not shipping yet — needs session/weekly parity first.
  */
-export type ProviderSource = "auto" | "oauth" | "web";
-
 /**
- * Where claude.ai session cookies come from, mirroring CodexBar's
- * "Cookie source" picker:
- *   - "auto" (default): scan installed browsers on this machine
- *     (Chrome/Edge/Brave/Vivaldi/Opera/Firefox) and auto-import the
- *     claude.ai sessionKey cookie. No paste required.
- *   - "manual": only use the cookie header the user pasted into the
- *     `cookieHeader` field. Useful if the user runs a browser we
- *     don't know about or the decryption fails.
- *   - "off": don't use cookies at all. OAuth-only.
+ * Where Claude metrics come from:
+ *
+ *   - "oauth"   — OAuth API only (~/.claude/.credentials.json +
+ *                 api.anthropic.com/api/oauth/usage). Never calls
+ *                 claude.ai's web API. Extras are populated only
+ *                 when Anthropic returns them on the OAuth endpoint
+ *                 (most accounts do not — `is_enabled: false`).
+ *
+ *   - "cookie"  — Cookie-primary for extras. OAuth still fetches
+ *                 session/weekly/sonnet (the OAuth endpoint is the
+ *                 only source for those). For the extra-usage
+ *                 block we go directly to claude.ai's web API
+ *                 using the pasted Cookie header, skipping OAuth's
+ *                 `is_enabled` check entirely.
+ *
+ *   - "both"    — Default. OAuth for everything first, then cookie
+ *                 supplement for extras only when OAuth's extras
+ *                 block is empty / disabled. This is what you
+ *                 want unless you know why you want something else.
  */
-export type CookieSource = "auto" | "manual" | "off";
+export type ProviderSource = "oauth" | "cookie" | "both";
 
 /** Per-provider config, keyed by provider id. */
 export interface ClaudeProviderSettings {
   source?: ProviderSource;
-  cookieSource?: CookieSource;
-  /** Raw cookie header pasted from claude.ai DevTools. Normalised on read. */
+  /**
+   * Raw cookie header pasted from claude.ai DevTools. When source is
+   * "cookie" or "both", this value is used for claude.ai web API
+   * calls. Normalised on read.
+   */
   cookieHeader?: string;
 }
 
@@ -74,13 +85,8 @@ let current: GlobalSettings = {
 };
 
 function normaliseSource(raw: unknown): ProviderSource {
-  if (raw === "oauth" || raw === "web") return raw;
-  return "auto";
-}
-
-function normaliseCookieSource(raw: unknown): CookieSource {
-  if (raw === "manual" || raw === "off") return raw;
-  return "auto";
+  if (raw === "oauth" || raw === "cookie") return raw;
+  return "both";
 }
 
 export function setGlobalSettings(next: GlobalSettings): void {
@@ -98,7 +104,6 @@ export function setGlobalSettings(next: GlobalSettings): void {
   if (claude) {
     const entry: ClaudeProviderSettings = {
       source: normaliseSource(claude.source),
-      cookieSource: normaliseCookieSource(claude.cookieSource),
     };
     const cookie =
       typeof claude.cookieHeader === "string"
@@ -120,9 +125,7 @@ export function getGlobalSettings(): Readonly<GlobalSettings> {
 
 /** Convenience: Claude provider settings with defaults applied. */
 export function getClaudeSettings(): Readonly<ClaudeProviderSettings> {
-  return (
-    current.providers?.claude ?? { source: "auto", cookieSource: "auto" }
-  );
+  return current.providers?.claude ?? { source: "both" };
 }
 
 /**

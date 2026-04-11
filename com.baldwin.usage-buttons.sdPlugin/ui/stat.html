@@ -183,39 +183,38 @@
 
     <div class="group-heading">Claude</div>
 
-    <label for="claudeSource">Source</label>
+    <label for="claudeSource">Data source</label>
     <select id="claudeSource">
-      <option value="auto" selected>Auto (OAuth + cookie supplement for extras)</option>
-      <option value="oauth">OAuth only (no cookie calls)</option>
+      <option value="both" selected>Both — OAuth + Cookie (recommended)</option>
+      <option value="oauth">OAuth only — API, no cookie calls</option>
+      <option value="cookie">Cookie — paste required, primary extras source</option>
     </select>
+    <p class="hint">
+      <strong>OAuth</strong> uses <code>~/.claude/.credentials.json</code> and
+      <code>api.anthropic.com</code>. Handles session %, weekly %, Sonnet %.
+      <strong>Cookie</strong> calls <code>claude.ai</code> directly — the only
+      way to get the Extra usage block (balance, spend limit, $ spent) for
+      accounts where OAuth returns <code>is_enabled: false</code>.
+      <strong>Both</strong> uses OAuth first and falls through to Cookie for
+      extras when OAuth doesn't have them.
+    </p>
 
-    <label for="claudeCookieSource">Cookie source</label>
-    <select id="claudeCookieSource">
-      <option value="auto" selected>Auto — import from Chrome / Edge / Brave / Firefox</option>
-      <option value="manual">Manual — paste below</option>
-      <option value="off">Off — don't use cookies at all</option>
-    </select>
-
-    <div id="claudeCookieManualRow">
+    <div id="claudeCookieRow">
       <label for="claudeCookie">Session cookie (claude.ai)</label>
       <textarea id="claudeCookie" rows="2" placeholder="sessionKey=sk-ant-sid01-..." autocomplete="off" spellcheck="false"></textarea>
       <p class="hint">
-        Open claude.ai in your browser, DevTools → Network → any request →
-        copy the <code>Cookie:</code> header value. Only <code>sessionKey=</code>
-        is required.
+        Open claude.ai → DevTools → Network → click any request → copy the
+        <code>Cookie:</code> header value. Only <code>sessionKey=</code> is
+        required. The plugin never logs or transmits this value anywhere
+        except <code>claude.ai</code>.
+      </p>
+      <p class="hint" style="margin-top: 8px">
+        <strong>Leave blank to auto-import</strong> from Edge / Firefox /
+        closed Chrome with legacy (v10/v11) cookies. Chrome 127+ uses
+        App-Bound Encryption (v20) which is not decryptable from outside
+        Chrome — those users must paste.
       </p>
     </div>
-
-    <p class="hint" style="margin-top: 14px">
-      <strong>Windows + Chrome 127+ note:</strong> modern Chrome encrypts
-      cookies with App-Bound Encryption (v20 prefix) which cannot be decrypted
-      by any process outside Chrome itself — not sweet-cookie, not us, not
-      even Microsoft's own database tools. To populate the Extra usage buttons
-      on Chrome, switch this dropdown to <strong>Manual</strong> and paste the
-      cookie header. One-time step, cached until the cookie expires. Edge and
-      Firefox are unaffected — if you're logged in to claude.ai there, auto
-      mode just works.
-    </p>
   </div>
 
   <script>
@@ -317,16 +316,16 @@
       document.getElementById("defaultRefresh").value =
         [5, 10, 15, 30, 60].includes(minutes) ? String(minutes) : "15";
       const claude = (globals.providers && globals.providers.claude) || {};
-      const src = claude.source === "oauth" ? "oauth" : "auto";
+      const src =
+        claude.source === "oauth" || claude.source === "cookie"
+          ? claude.source
+          : "both";
       document.getElementById("claudeSource").value = src;
-      const cookieSrc =
-        claude.cookieSource === "manual" || claude.cookieSource === "off"
-          ? claude.cookieSource
-          : "auto";
-      document.getElementById("claudeCookieSource").value = cookieSrc;
       document.getElementById("claudeCookie").value = claude.cookieHeader || "";
-      document.getElementById("claudeCookieManualRow").style.display =
-        cookieSrc === "manual" ? "" : "none";
+      // Cookie paste field is only meaningful when cookies are in
+      // play. Hide it in OAuth-only mode.
+      document.getElementById("claudeCookieRow").style.display =
+        src === "oauth" ? "none" : "";
     }
 
     function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
@@ -375,13 +374,12 @@
     function pushGlobalSettings() {
       if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
       const claudeCookie = document.getElementById("claudeCookie").value.trim();
-      const cookieSrc = document.getElementById("claudeCookieSource").value;
+      const source = document.getElementById("claudeSource").value;
       const payload = {
         defaultRefreshMinutes: Number(document.getElementById("defaultRefresh").value),
         providers: {
           claude: {
-            source: document.getElementById("claudeSource").value,
-            cookieSource: cookieSrc,
+            source,
             ...(claudeCookie ? { cookieHeader: claudeCookie } : {}),
           },
         },
@@ -391,8 +389,8 @@
         context: uuid,
         payload,
       }));
-      document.getElementById("claudeCookieManualRow").style.display =
-        cookieSrc === "manual" ? "" : "none";
+      document.getElementById("claudeCookieRow").style.display =
+        source === "oauth" ? "none" : "";
     }
 
     // ---------- Event wiring ----------
@@ -413,7 +411,7 @@
       el.addEventListener("change", pushSettings);
       if (el.tagName === "TEXTAREA") el.addEventListener("input", pushSettings);
     }
-    for (const id of ["defaultRefresh", "claudeSource", "claudeCookieSource", "claudeCookie"]) {
+    for (const id of ["defaultRefresh", "claudeSource", "claudeCookie"]) {
       const el = document.getElementById(id);
       el.addEventListener("change", pushGlobalSettings);
       if (el.tagName === "TEXTAREA") el.addEventListener("input", pushGlobalSettings);

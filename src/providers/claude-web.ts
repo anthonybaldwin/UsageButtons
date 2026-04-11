@@ -166,25 +166,27 @@ export function setClaudeWebLogSink(fn: (message: string) => void): void {
 /**
  * Resolve a cookie header for claude.ai according to global settings:
  *
- *   cookieSource === "off"    → never use cookies, return undefined
- *   cookieSource === "manual" → use the user-pasted cookieHeader ONLY
- *   cookieSource === "auto"   → scan installed browsers ONLY; the
- *                               paste field is ignored in this mode
- *                               (it's even hidden in the PI). The
- *                               user's mental model is "Auto means
- *                               I never have to paste anything", so
- *                               we honour that strictly rather than
- *                               silently using a stale pasted value.
+ *   source === "oauth"          → never use cookies, return undefined
+ *   source === "cookie" | "both" → prefer the pasted cookieHeader,
+ *                                  fall back to a browser auto-scan.
+ *                                  The browser scan succeeds on Edge,
+ *                                  Firefox, and closed-Chrome with
+ *                                  legacy (v10/v11) cookies. Chrome
+ *                                  127+ `v20` cookies are unreadable
+ *                                  from outside Chrome regardless of
+ *                                  file-lock state, so users on modern
+ *                                  Chrome must paste.
  */
 async function resolveCookieHeader(): Promise<string | undefined> {
   const cs = getClaudeSettings();
-  if (cs.cookieSource === "off") return undefined;
+  if (cs.source === "oauth") return undefined;
 
-  if (cs.cookieSource === "manual") {
-    return normalizeCookieHeader(cs.cookieHeader ?? "") ?? undefined;
-  }
+  // Pasted cookie wins when present — it's the only way to cover
+  // Chrome 127+ and it's instantaneous. The auto-scan fallback is
+  // for users on Edge / Firefox / closed Chrome.
+  const pasted = normalizeCookieHeader(cs.cookieHeader ?? "");
+  if (pasted) return pasted;
 
-  // "auto": browser scan only. No fallback to pasted header.
   const scanned = await findClaudeCookie({
     url: "https://claude.ai/",
     cookieName: "sessionKey",

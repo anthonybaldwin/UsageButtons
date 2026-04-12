@@ -1,0 +1,54 @@
+version: 2
+
+# Dependabot config — keeps npm deps (sweet-cookie, @types/bun,
+# typescript) and GitHub Actions pinned versions up to date via
+# weekly PRs. Runtime is Bun, but Dependabot's npm ecosystem parser
+# handles package.json + bun.lock just fine.
+
+updates:
+  # Runtime + dev dependencies declared in package.json.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      # Match the Conventional Commits style we use in the repo.
+      prefix: "chore"
+      include: "scope"
+    # Group minor + patch bumps into a single PR to reduce noise.
+    # Majors still get their own PRs so the changelog can be
+    # reviewed properly.
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      production-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions referenced in .github/workflows/*.yml
+  # (actions/checkout, oven-sh/setup-bun, actions/upload-artifact).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"

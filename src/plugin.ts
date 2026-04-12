@@ -20,10 +20,18 @@ import {
   getDefaultValueSize,
   getInvertFill,
   getShowGlyphs,
+  getSkipUpdateCheck,
   resolveRefreshMs,
   setGlobalSettings,
   type GlobalSettings,
 } from "./settings.ts";
+import {
+  checkForUpdate,
+  getCurrentVersion,
+  getLatestVersion,
+  isUpdateAvailable,
+  setUpdateCheckerLogSink,
+} from "./update-checker.ts";
 
 interface KeySettings {
   providerId?: string;
@@ -128,6 +136,7 @@ async function main(): Promise<void> {
   setCacheLogSink((msg) => connection.log(msg));
   setClaudeDebugLogSink((msg) => connection.log(msg));
   setClaudeWebLogSink((msg) => connection.log(msg));
+  setUpdateCheckerLogSink((msg) => connection.log(msg));
 
   connection.onEvent((event) => handleEvent(connection, event));
 
@@ -187,6 +196,16 @@ async function resetTextSizeOverrides(
 }
 
 async function scheduleDueKeys(conn: StreamDeckConnection): Promise<void> {
+  // Run the update check on every tick — it no-ops internally unless
+  // the 6-hour cache has expired.
+  if (!getSkipUpdateCheck()) {
+    await checkForUpdate();
+    if (isUpdateAvailable()) {
+      showUpdateFace(conn);
+      return;
+    }
+  }
+
   const now = Date.now();
   const due: string[] = [];
   for (const [ctx, key] of visibleKeys) {
@@ -211,6 +230,29 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
       // looks broken. ShowTitle is already false in manifest.json
       // but explicitly blanking guarantees no overlap.
       conn.setTitle(e.context, "");
+
+      // If an update is pending, show the update face immediately
+      // instead of provider data. The scheduler will keep checking
+      // and re-rendering as long as the update is available.
+      if (!getSkipUpdateCheck() && isUpdateAvailable()) {
+        visibleKeys.set(e.context, {
+          context: e.context,
+          settings,
+          lastPollAt: Date.now(),
+        });
+        const latest = getLatestVersion() ?? "?";
+        conn.setImage(
+          e.context,
+          renderButtonSvg({
+            label: "UPDATE",
+            value: `v${latest}`,
+            subvalue: "new version",
+            fill: "#f59e0b",
+            valueSize: "medium",
+          }),
+        );
+        return;
+      }
 
       // Check if we already have cached data for this provider.
       // If so, render directly from cache — no loading face, no
@@ -562,6 +604,25 @@ function placeholderFace(opts: {
     input.showGlyph = false;
   }
   return renderButtonSvg(input);
+}
+
+/**
+ * Override every visible button with an "UPDATE" face when a newer
+ * version is available on GitHub Releases. Shows the target version
+ * so the user knows what to download.
+ */
+function showUpdateFace(conn: StreamDeckConnection): void {
+  const latest = getLatestVersion() ?? "?";
+  const svg = renderButtonSvg({
+    label: "UPDATE",
+    value: `v${latest}`,
+    subvalue: "new version",
+    fill: "#f59e0b",
+    valueSize: "medium",
+  });
+  for (const [ctx] of visibleKeys) {
+    conn.setImage(ctx, svg);
+  }
 }
 
 /**

@@ -241,6 +241,17 @@
     </select>
     <p class="hint">Each button can override this from the "This button" tab.</p>
 
+    <div class="checkbox-row">
+      <input id="skipUpdateCheck" type="checkbox">
+      <label for="skipUpdateCheck">Skip update check</label>
+    </div>
+    <p class="hint">
+      The plugin checks GitHub Releases every 6 hours for a newer
+      version. When an update is found, all buttons show an "UPDATE"
+      notice until you install the new version. Enable this to suppress
+      the check entirely.
+    </p>
+
     <div class="group-heading">Display</div>
     <div class="checkbox-row">
       <input id="invertFill" type="checkbox">
@@ -537,6 +548,7 @@
         validSize(globals.defaultSubvalueSize);
       document.getElementById("invertFill").checked = globals.invertFill === true;
       document.getElementById("showGlyphs").checked = globals.showGlyphs !== false;
+      document.getElementById("skipUpdateCheck").checked = globals.skipUpdateCheck === true;
 
       // Claude settings
       const claude = (globals.providers && globals.providers.claude) || {};
@@ -648,6 +660,7 @@
         defaultSubvalueSize:   document.getElementById("defaultSubvalueSize").value,
         invertFill:            document.getElementById("invertFill").checked,
         showGlyphs:            document.getElementById("showGlyphs").checked,
+        skipUpdateCheck:       document.getElementById("skipUpdateCheck").checked,
         providers,
       };
       websocket.send(JSON.stringify({
@@ -684,7 +697,7 @@
     }
     for (const id of [
       "defaultRefresh", "defaultValueSize", "defaultSubvalueSize",
-      "invertFill", "showGlyphs",
+      "invertFill", "showGlyphs", "skipUpdateCheck",
       "claudeSource", "claudeCookie",
       "cursorCookie",
     ]) {

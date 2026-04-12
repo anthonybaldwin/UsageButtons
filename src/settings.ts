@@ -108,6 +108,12 @@ export interface GlobalSettings {
   showGlyphs?: boolean;
   /** Per-provider source preferences + credentials. */
   providers?: ProviderSettingsMap;
+  /**
+   * Skip the automatic update check against GitHub Releases.
+   * When true, the plugin never phones home and never blocks
+   * buttons with the "UPDATE" face.
+   */
+  skipUpdateCheck?: boolean;
 }
 
 let current: GlobalSettings = {
@@ -170,6 +176,7 @@ export function setGlobalSettings(next: GlobalSettings): void {
     defaultSubvalueSize: normaliseTextSize(next.defaultSubvalueSize, "large"),
     invertFill: next.invertFill === true,
     showGlyphs: next.showGlyphs !== false,
+    skipUpdateCheck: next.skipUpdateCheck === true,
     providers,
   };
 }
@@ -185,6 +192,9 @@ export function getInvertFill(): boolean {
 }
 export function getShowGlyphs(): boolean {
   return current.showGlyphs !== false;
+}
+export function getSkipUpdateCheck(): boolean {
+  return current.skipUpdateCheck === true;
 }
 
 export function getGlobalSettings(): Readonly<GlobalSettings> {

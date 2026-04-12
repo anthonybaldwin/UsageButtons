@@ -39,7 +39,7 @@ fi
 # ── Version resolution ─────────────────────────────────────────
 
 # Read current version from manifest.json (format: "0.1.2.0")
-CURRENT=$(grep -oP '"Version"\s*:\s*"\K[^"]+' "$MANIFEST")
+CURRENT=$(sed -n 's/.*"Version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$MANIFEST")
 IFS='.' read -ra PARTS <<< "$CURRENT"
 MAJOR=${PARTS[0]:-0}
 MINOR=${PARTS[1]:-0}

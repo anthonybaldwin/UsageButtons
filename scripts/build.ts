@@ -178,7 +178,7 @@ async function buildTarget(target: Target): Promise<void> {
   if (!existsSync(BIN_DIR)) mkdirSync(BIN_DIR, { recursive: true });
   const out = resolve(BIN_DIR, target.outfile);
   log(`→ compiling for ${target.name} → ${out}`);
-  await $`bun build --compile --target=${target.bunTarget} --minify --sourcemap ${ENTRY} --outfile ${out}`;
+  await $`bun build --compile --target=${target.bunTarget} --minify --sourcemap --compile-exec-argv="--smol" ${ENTRY} --outfile ${out}`;
   // Executable bit on POSIX hosts; no-op on Windows (bun build
   // --compile already marks the .exe as needed there). When
   // cross-compiling FROM Windows to Mac, the bit doesn't survive

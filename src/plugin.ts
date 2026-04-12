@@ -95,7 +95,9 @@ interface VisibleKey {
   lastPollAt: number;
 }
 
-const ACTION_UUID = "io.github.anthonybaldwin.UsageButtons.stat";
+// Stream Deck lowercases all UUIDs in the protocol, regardless of
+// what manifest.json declares. Our comparison must match that.
+const ACTION_UUID = "io.github.anthonybaldwin.usagebuttons.stat";
 const DEFAULT_PROVIDER = "mock";
 const DEFAULT_METRIC = "session-percent";
 /**

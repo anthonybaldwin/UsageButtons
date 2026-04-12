@@ -33,16 +33,16 @@ See `README.md`.
 
 ```
 bun install               # install dev dependencies
-bun run typecheck         # tsc --noEmit
-bun run build             # compile platform binary (auto-detects host)
-bun run build:win         # force Windows target
-bun run build:mac         # force macOS target (builds BOTH arm64 + x64)
-bun run install:dev       # link the .sdPlugin into SD's Plugins dir
-bun run install:dev --restart   # + kill & relaunch Stream Deck
-bun run sync:codexbar     # refresh tmp/CodexBar from upstream
+bun typecheck         # tsc --noEmit
+bun build             # compile platform binary (auto-detects host)
+bun build:win         # force Windows target
+bun build:mac         # force macOS target (builds BOTH arm64 + x64)
+bun install:dev       # link the .sdPlugin into SD's Plugins dir
+bun install:dev --restart   # + kill & relaunch Stream Deck
+bun sync:codexbar     # refresh tmp/CodexBar from upstream
 ```
 
-`bun run build` auto-stops Stream Deck before compiling (to release
+`bun build` auto-stops Stream Deck before compiling (to release
 the exclusive lock on the running .exe / mach-o binary) and
 auto-relaunches it after. Pass `--no-reload` to skip the
 kill/relaunch dance (useful for CI or cross-compilation from a
@@ -64,14 +64,14 @@ Mac host also runs `chmod +x` on all three files + strips any
 launch.
 
 Cross-compilation from Windows to Mac works via
-`bun run build:mac` on a Windows host — Bun handles the target
+`bun build:mac` on a Windows host — Bun handles the target
 switch natively. Move the resulting bin/ files to a Mac and run
-`bun run install:dev` there to fix executable bits + quarantine.
+`bun install:dev` there to fix executable bits + quarantine.
 
 ## Releasing
 
 ```
-bun run release patch   # or minor / major / explicit version
+bun release patch   # or minor / major / explicit version
 ```
 
 The release script bumps the version in `manifest.json` and
@@ -82,7 +82,7 @@ workflow builds and publishes the release from the tag.
 locally so the running binary matches the new version:
 
 ```
-bun run build
+bun build
 ```
 
 If you skip this, the plugin's built-in update checker will see the
@@ -104,7 +104,7 @@ machine.
 
 - `tmp/CodexBar/` is a git clone of
   https://github.com/steipete/CodexBar — gitignored.
-- Refresh with `bun run sync:codexbar` (or
+- Refresh with `bun sync:codexbar` (or
   `./scripts/sync-codexbar.sh`). This is a one-way pull, not a submodule.
 - When implementing or modifying a provider, read the matching file
   under `tmp/CodexBar/Sources/CodexBarCore/Providers/<Name>/` and the

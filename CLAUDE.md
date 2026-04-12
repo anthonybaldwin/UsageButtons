@@ -60,8 +60,8 @@ The Stream Deck app on Windows reloads plugins when you restart it, or
 when a `.sdPlugin` folder is dropped into
 `%APPDATA%\Elgato\StreamDeck\Plugins\`. The simplest dev loop:
 
-1. Build: `bun run build`
+1. Build: `bun build`
 2. Kill the Stream Deck process (`StreamDeck.exe`) from Task Manager.
 3. Relaunch Stream Deck.
 
-We can automate this later with a `bun run dev` watcher.
+We can automate this later with a `bun dev` watcher.

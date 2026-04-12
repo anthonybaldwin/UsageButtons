@@ -5,7 +5,7 @@ Distilled from a thorough read of the CodexBar repo at
 https://github.com/steipete/CodexBar). This file is our north star for
 porting CodexBar's provider concepts into the Stream Deck plugin. It is
 **not** a spec — CodexBar evolves, and we should refresh this doc by
-running `bun run sync:codexbar` and re-reviewing before implementing a
+running `bun sync:codexbar` and re-reviewing before implementing a
 new provider.
 
 > **Don't vendor CodexBar code.** Everything here is design guidance.

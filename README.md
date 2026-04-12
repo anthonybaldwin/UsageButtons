@@ -49,6 +49,7 @@ UsageButtons/
 │   │   ├── codex/                        # Codex (OAuth)
 │   │   ├── copilot/                      # GitHub Copilot
 │   │   ├── cursor/                       # Cursor (cookie)
+│   │   ├── ollama/                       # Ollama (cookie)
 │   │   ├── openrouter/                   # OpenRouter (API key)
 │   │   ├── warp/                         # Warp (GraphQL)
 │   │   ├── zai/                          # z.ai (API token)

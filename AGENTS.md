@@ -82,7 +82,7 @@ users and search engines.
 
 Current topics: `go`, `golang`, `stream-deck`, `stream-deck-plugin`,
 `elgato`, `ai-tools`, `usage-monitoring`, `claude`, `copilot`,
-`cursor`, `openrouter`, `openai-codex`, `warp`.
+`cursor`, `ollama`, `openrouter`, `openai-codex`, `warp`.
 
 ## Stream Deck plugin notes
 

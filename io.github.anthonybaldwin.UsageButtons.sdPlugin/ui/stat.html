@@ -147,6 +147,17 @@
         </p>
       </div>
 
+      <!-- Ollama auth -->
+      <div id="authConfig-ollama" class="auth-config" style="display:none">
+        <label for="ollamaCookie">Cookie header (ollama.com)</label>
+        <input id="ollamaCookie" type="password" placeholder="session=..." autocomplete="off" spellcheck="false">
+        <p class="hint">
+          Open ollama.com/settings in your browser, open DevTools (F12) → Network tab,
+          reload the page, click any request, and copy the <code>Cookie</code>
+          header value. Paste it here. Only sent to <code>ollama.com</code>.
+        </p>
+      </div>
+
       <!-- Copilot auth -->
       <div id="authConfig-copilot" class="auth-config" style="display:none">
         <p class="hint">
@@ -442,6 +453,10 @@
         ["premium-percent", "Premium interactions remaining %", "pct"],
         ["chat-percent",    "Chat interactions remaining %",    "pct"],
       ],
+      ollama: [
+        ["session-percent", "Session usage remaining %",        "pct"],
+        ["weekly-percent",  "Weekly usage remaining %",         "pct"],
+      ],
       cursor: [
         ["total-percent",   "Total plan usage remaining %",     "pct"],
         ["auto-percent",    "Auto / Composer usage remaining %","pct"],
@@ -472,6 +487,7 @@
       claude:     "#cc7c5e",
       codex:      "#49a3b0",
       copilot:    "#a855f7",
+      ollama:     "#888888",
       cursor:     "#00bfa5",
       openrouter: "#6467f2",
       warp:       "#938bb4",
@@ -480,7 +496,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "openrouter", "warp", "zai", "kimi-k2"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "ollama", "openrouter", "warp", "zai", "kimi-k2"];
 
     // ---------- Provider from action UUID ----------
     const ACTION_PREFIX = "io.github.anthonybaldwin.usagebuttons.";
@@ -651,6 +667,10 @@
       // Cursor settings
       const cursor = (globals.providers && globals.providers.cursor) || {};
       document.getElementById("cursorCookie").value = cursor.cookieHeader || "";
+
+      // Ollama settings
+      const ollama = (globals.providers && globals.providers.ollama) || {};
+      document.getElementById("ollamaCookie").value = ollama.cookieHeader || "";
     }
 
     function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
@@ -729,6 +749,7 @@
       const claudeCookie = document.getElementById("claudeCookie").value.trim();
       const source = document.getElementById("claudeSource").value;
       const cursorCookie = document.getElementById("cursorCookie").value.trim();
+      const ollamaCookie = document.getElementById("ollamaCookie").value.trim();
       const providers = {
         claude: {
           source,
@@ -737,6 +758,9 @@
       };
       if (cursorCookie) {
         providers.cursor = { cookieHeader: cursorCookie };
+      }
+      if (ollamaCookie) {
+        providers.ollama = { cookieHeader: ollamaCookie };
       }
       const payload = {
         defaultRefreshMinutes: Number(document.getElementById("defaultRefresh").value),
@@ -782,7 +806,7 @@
       "defaultRefresh", "defaultValueSize", "defaultSubvalueSize",
       "invertFill", "showGlyphs", "skipUpdateCheck",
       "claudeSource", "claudeCookie",
-      "cursorCookie",
+      "cursorCookie", "ollamaCookie",
     ]) {
       const el = document.getElementById(id);
       el.addEventListener("change", pushGlobalSettings);

@@ -35,10 +35,16 @@ type CursorProviderSettings struct {
 	CookieHeader string `json:"cookieHeader,omitempty"`
 }
 
+// OllamaProviderSettings holds Ollama-specific auth config.
+type OllamaProviderSettings struct {
+	CookieHeader string `json:"cookieHeader,omitempty"`
+}
+
 // ProviderSettingsMap holds per-provider config.
 type ProviderSettingsMap struct {
-	Claude *ClaudeProviderSettings `json:"claude,omitempty"`
-	Cursor *CursorProviderSettings `json:"cursor,omitempty"`
+	Claude *ClaudeProviderSettings  `json:"claude,omitempty"`
+	Cursor *CursorProviderSettings  `json:"cursor,omitempty"`
+	Ollama *OllamaProviderSettings  `json:"ollama,omitempty"`
 }
 
 // GlobalSettings are shared across every key and persisted by
@@ -181,6 +187,16 @@ func CursorSettings() CursorProviderSettings {
 		return *current.Providers.Cursor
 	}
 	return CursorProviderSettings{}
+}
+
+// OllamaSettings returns Ollama provider settings.
+func OllamaSettings() OllamaProviderSettings {
+	mu.RLock()
+	defer mu.RUnlock()
+	if current.Providers != nil && current.Providers.Ollama != nil {
+		return *current.Providers.Ollama
+	}
+	return OllamaProviderSettings{}
 }
 
 // ResolveRefreshMs returns the effective refresh interval in ms for a key.

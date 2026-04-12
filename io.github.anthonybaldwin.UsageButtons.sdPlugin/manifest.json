@@ -87,6 +87,21 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.ollama",
+      "Name": "Ollama",
+      "Tooltip": "Ollama usage stats — session %, weekly %.",
+      "Icon": "assets/action-ollama",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "assets/action-ollama-key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.openrouter",
       "Name": "OpenRouter",
       "Tooltip": "OpenRouter usage stats — credit balance, total usage.",

@@ -23,10 +23,11 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/codex"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/copilot"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/cursor"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimik2"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/ollama"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/openrouter"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/warp"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/zai"
-	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimik2"
 )
 
 const (

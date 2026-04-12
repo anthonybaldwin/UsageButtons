@@ -405,6 +405,16 @@ export class CodexProvider implements Provider {
         numericValue: balance,
         numericUnit: "dollars",
         numericGoodWhen: "high",
+        // Full-tile fill + "Prepaid" caption — mirrors how the
+        // Claude extras balance tile is rendered. The dollar
+        // figure alone on a dark background looked anemic next
+        // to the session/weekly meter tiles; with ratio=1 the
+        // whole tile carries Codex's brand teal and the
+        // threshold logic repaints it amber/red when the
+        // balance runs low.
+        ratio: 1,
+        direction: "up",
+        caption: "Prepaid",
         updatedAt: new Date(),
       });
     }

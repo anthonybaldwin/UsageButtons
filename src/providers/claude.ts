@@ -404,6 +404,16 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       numericValue: bal,
       numericUnit: "dollars",
       numericGoodWhen: "high",
+      // Full-tile fill. The balance isn't a progress meter (no
+      // natural "100%" reference for a standalone dollar figure),
+      // but rendering it as a flat dark text-only tile looked
+      // anemic next to the meter tiles. With ratio=1 the whole
+      // tile carries the provider's brand color, and the
+      // threshold logic still repaints it amber (low balance)
+      // or red ($0 / negative) so the tile is also an alarm
+      // surface — you just can't miss it when the balance drops.
+      ratio: 1,
+      direction: "up",
       // Static subvalue label — the prepaid balance isn't a
       // countdown so the subvalue slot would otherwise be empty.
       // "Prepaid" makes the tile's meaning obvious at a glance
@@ -455,21 +465,27 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       unit: "%",
       ratio: remPct / 100,
       direction: "up",
+      // Static "Monthly" caption disambiguates what the percentage
+      // is relative to (monthly extras cap, not the session or
+      // weekly windows which are on their own countdowns).
+      caption: "Monthly",
       updatedAt: now,
     },
     {
-      // The "limit" view: display the constant monthly cap
-      // ($50.00 in the user's case) with the meter showing
-      // usage PROGRESS against it. The meter fills as the user
-      // spends — opposite direction from the percent-headroom
-      // metric, which drains as headroom shrinks.
+      // The "limit" view: a static reference tile that displays
+      // the constant monthly cap ($50.00 in the user's case).
+      // The whole tile is filled in the provider's brand color
+      // (ratio: 1) so it reads as "this is the ceiling" rather
+      // than a progress bar — SPENT already covers the progress
+      // semantic and having both tiles show the same meter was
+      // redundant (and at $0 spent both looked empty).
       //
-      // numericValue carries the SPENT amount (not the limit) so
-      // threshold logic can compare spent vs. numericMax (the
-      // limit). With numericGoodWhen: "low" + numericMax = limit,
-      // the default thresholds are warn at 80% of limit, critical
-      // at 100% — the button stays in brand color until spending
-      // approaches the cap.
+      // Thresholds still fire based on spent vs. limit: at 80%
+      // of the cap the tile repaints amber, at 100% it repaints
+      // red. numericValue carries the SPENT amount and numericMax
+      // is the limit, with numericGoodWhen: "low" — meaning the
+      // tile stays in brand color while headroom is healthy and
+      // flips to the warn / critical colors as spending climbs.
       id: "extra-usage-limit",
       label: "LIMIT",
       name: `Extra usage monthly limit (${currency})`,
@@ -478,8 +494,9 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       numericUnit: "dollars",
       numericGoodWhen: "low",
       numericMax: limit,
-      ratio: usedPct / 100,
+      ratio: 1,
       direction: "up",
+      caption: "Monthly",
       updatedAt: now,
     },
     {

@@ -9,7 +9,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 const REPO = "anthonybaldwin/UsageButtons";
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -38,21 +38,39 @@ function log(msg: string): void {
   logSink?.(`[update-checker] ${msg}`);
 }
 
-/** Read the 3-part semver from manifest.json (strips the 4th ".0"). */
+/**
+ * Read the 3-part semver from manifest.json (strips the 4th ".0").
+ *
+ * The compiled binary lives at .sdPlugin/bin/plugin-win.exe (or the
+ * macOS equivalent). manifest.json is one level up from the bin/
+ * directory, i.e. ../manifest.json relative to the executable.
+ *
+ * In dev mode (bun --watch src/plugin.ts), import.meta.dir points at
+ * the src/ folder, so we fall back to the repo-relative path.
+ */
 function readCurrentVersion(): string {
-  try {
-    const manifestPath = resolve(
+  const candidates = [
+    // Production: resolve from the running binary's location
+    // (bin/plugin-win.exe → ../manifest.json)
+    resolve(dirname(process.execPath), "..", "manifest.json"),
+    // Dev mode: resolve from the source tree
+    resolve(
       import.meta.dir,
       "..",
       "io.github.anthonybaldwin.UsageButtons.sdPlugin",
       "manifest.json",
-    );
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
-    const parts = (manifest.Version as string).split(".");
-    return parts.slice(0, 3).join(".");
-  } catch {
-    return "0.0.0";
+    ),
+  ];
+  for (const p of candidates) {
+    try {
+      const manifest = JSON.parse(readFileSync(p, "utf-8"));
+      const parts = (manifest.Version as string).split(".");
+      return parts.slice(0, 3).join(".");
+    } catch {
+      // try next candidate
+    }
   }
+  return "0.0.0";
 }
 
 /** Compare two semver strings. Returns >0 if b is newer than a. */

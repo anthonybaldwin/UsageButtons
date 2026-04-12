@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+// DefaultUserAgent is sent on every request unless the caller
+// explicitly sets a User-Agent header. Go's default "Go-http-client/1.1"
+// gets blocked by Cloudflare, so we use a real browser UA.
+const DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
 // Error is returned for non-2xx HTTP responses.
 type Error struct {
 	Status     int
@@ -47,6 +52,9 @@ func GetJSON(url string, headers map[string]string, timeout time.Duration, dst a
 	}
 	if req.Header.Get("Accept") == "" {
 		req.Header.Set("Accept", "application/json")
+	}
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", DefaultUserAgent)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -93,6 +101,9 @@ func PostJSON(url string, headers map[string]string, payload any, timeout time.D
 	}
 	if req.Header.Get("Accept") == "" {
 		req.Header.Set("Accept", "application/json")
+	}
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", DefaultUserAgent)
 	}
 
 	resp, err := http.DefaultClient.Do(req)

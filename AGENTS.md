@@ -34,14 +34,39 @@ See `README.md`.
 ```
 bun install               # install dev dependencies
 bun run typecheck         # tsc --noEmit
-bun run build             # compile platform binary into the .sdPlugin
+bun run build             # compile platform binary (auto-detects host)
+bun run build:win         # force Windows target
+bun run build:mac         # force macOS target (builds BOTH arm64 + x64)
+bun run install:dev       # link the .sdPlugin into SD's Plugins dir
+bun run install:dev --restart   # + kill & relaunch Stream Deck
 bun run sync:codexbar     # refresh tmp/CodexBar from upstream
 ```
 
-During development on Windows, copy or symlink
-`com.baldwin.usage-buttons.sdPlugin/` into
-`%APPDATA%\Elgato\StreamDeck\Plugins\` and restart Stream Deck after
-each rebuild.
+`bun run build` auto-stops Stream Deck before compiling (to release
+the exclusive lock on the running .exe / mach-o binary) and
+auto-relaunches it after. Pass `--no-reload` to skip the
+kill/relaunch dance (useful for CI or cross-compilation from a
+different host).
+
+### macOS native dual-arch build
+
+`build:mac` produces THREE files in `bin/`:
+
+  plugin-mac-arm64    — native Apple Silicon (bun-darwin-arm64)
+  plugin-mac-x64      — native Intel          (bun-darwin-x64)
+  plugin-mac          — shell wrapper that exec's the right one
+                        based on `uname -m` at launch time
+
+Stream Deck's `manifest.json` points `CodePathMac` at the wrapper.
+First byte dispatched natively, zero Rosetta. `install:dev` on a
+Mac host also runs `chmod +x` on all three files + strips any
+`com.apple.quarantine` xattr so Gatekeeper doesn't prompt on first
+launch.
+
+Cross-compilation from Windows to Mac works via
+`bun run build:mac` on a Windows host — Bun handles the target
+switch natively. Move the resulting bin/ files to a Mac and run
+`bun run install:dev` there to fix executable bits + quarantine.
 
 ## Stream Deck plugin notes
 

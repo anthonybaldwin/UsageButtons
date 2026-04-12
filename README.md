@@ -46,14 +46,41 @@ usage-buttons/
 └── README.md
 ```
 
-## Install (dev, Windows)
+## Install (dev)
+
+### Windows
 
 1. `bun install`
 2. `bun run build` — compiles `bin/plugin-win.exe` into the .sdPlugin
-3. Copy the `.sdPlugin/` folder to
-   `%APPDATA%\Elgato\StreamDeck\Plugins\` (or symlink it) and restart
-   the Stream Deck app.
-4. Add a "Usage" action to a key and configure the provider + metric.
+3. `bun run install:dev --restart` — junctions the .sdPlugin folder
+   into `%APPDATA%\Elgato\StreamDeck\Plugins\` and relaunches
+   Stream Deck
+4. Add a "Usage Stat" action to a key and configure the provider +
+   metric from the Property Inspector
+
+### macOS (Apple Silicon or Intel)
+
+1. `bun install`
+2. `bun run build:mac` — produces native binaries for **both**
+   architectures and an arch-dispatch wrapper:
+   - `bin/plugin-mac-arm64` — native Apple Silicon
+   - `bin/plugin-mac-x64` — native Intel
+   - `bin/plugin-mac` — shell wrapper that picks the right binary
+     at launch via `uname -m`. No Rosetta, no universal binary,
+     just a tiny sh script that execs the matching native build.
+3. `bun run install:dev --restart` — symlinks the .sdPlugin folder
+   into `~/Library/Application Support/com.elgato.StreamDeck/Plugins/`,
+   runs `chmod +x` on all three Mac files (the wrapper + both
+   compiled binaries), strips any `com.apple.quarantine` xattr that
+   would otherwise trip Gatekeeper on first launch, and relaunches
+   Stream Deck.
+4. Same Property Inspector flow as Windows.
+
+You can cross-compile Mac binaries from a Windows host via
+`bun run build:mac` on Windows — Bun's compiler handles the
+`bun-darwin-arm64` / `bun-darwin-x64` targets directly. When you
+move those binaries onto a Mac, `install:dev` restores the
+executable bit and the quarantine-strip for you.
 
 Full dev workflow lives in [AGENTS.md](AGENTS.md).
 

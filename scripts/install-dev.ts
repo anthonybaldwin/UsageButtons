@@ -148,12 +148,47 @@ function linkPlugin(): void {
 async function main(): Promise<void> {
   // Sanity: the binary the manifest points to must exist, otherwise
   // Stream Deck will fail to start the plugin and silently hide it.
+  // On Mac the "binary" is actually a shell wrapper that dispatches
+  // to the matching arm64 / x64 bun-compiled binary at runtime.
   const binName = platform() === "win32" ? "plugin-win.exe" : "plugin-mac";
   const bin = resolve(SDPLUGIN, "bin", binName);
   if (!existsSync(bin)) {
     log(`✗ missing ${bin}`);
     log("  run \`bun run build\` first.");
     process.exit(1);
+  }
+
+  // Mac-only: make sure the wrapper AND both compiled binaries
+  // are executable AND don't carry a Gatekeeper quarantine flag.
+  // Cross-compilation from Windows strips the executable bit, and
+  // downloading / unzipping on the Mac side stamps files with
+  // `com.apple.quarantine` which makes Stream Deck silently
+  // refuse to launch the plugin the first time. chmod +x + xattr
+  // -cr together fix both; they're no-ops when the flags are
+  // already clean.
+  if (platform() === "darwin") {
+    for (const f of ["plugin-mac", "plugin-mac-arm64", "plugin-mac-x64"]) {
+      const p = resolve(SDPLUGIN, "bin", f);
+      if (!existsSync(p)) continue;
+      try {
+        Bun.spawnSync({ cmd: ["chmod", "+x", p] });
+      } catch {
+        // non-fatal
+      }
+      try {
+        Bun.spawnSync({ cmd: ["xattr", "-d", "com.apple.quarantine", p] });
+      } catch {
+        // non-fatal — the attribute may not be present
+      }
+    }
+    // Strip quarantine from the whole plugin directory recursively
+    // so any bundled assets (icons, ui/stat.html, manifest.json)
+    // also pass Gatekeeper without prompts.
+    try {
+      Bun.spawnSync({ cmd: ["xattr", "-cr", SDPLUGIN] });
+    } catch {
+      // non-fatal
+    }
   }
 
   const running = await isStreamDeckRunning();

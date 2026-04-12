@@ -487,8 +487,10 @@
     let currentProviderId = "mock";
 
     function providerIdFromAction(actionUUID) {
-      if (!actionUUID || !actionUUID.startsWith(ACTION_PREFIX)) return "mock";
-      const id = actionUUID.slice(ACTION_PREFIX.length);
+      if (!actionUUID) return "mock";
+      const lower = actionUUID.toLowerCase();
+      if (!lower.startsWith(ACTION_PREFIX)) return "mock";
+      const id = lower.slice(ACTION_PREFIX.length);
       return id.length > 0 ? id : "mock";
     }
 

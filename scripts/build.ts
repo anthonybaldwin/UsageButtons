@@ -230,9 +230,12 @@ const key: "win" | "mac" =
     : currentTargetKey();
 
 // Only kill/relaunch Stream Deck when building for the current
-// platform. Cross-compiling (e.g. bun build:mac on Windows) doesn't
-// touch the running plugin binary, so restarting is pointless.
-const isNativeBuild = key === currentTargetKey();
+// platform. Cross-compiling (e.g. bun build:mac on Windows, or CI
+// on Linux) doesn't touch the running plugin binary, so restarting
+// is pointless. On unsupported hosts (Linux CI), always skip reload.
+const isNativeBuild =
+  (process.platform === "win32" && key === "win") ||
+  (process.platform === "darwin" && key === "mac");
 const reload = !noReload && isNativeBuild;
 const wasRunning = reload && (await isStreamDeckRunning());
 

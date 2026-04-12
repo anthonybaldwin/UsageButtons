@@ -34,6 +34,7 @@ import {
 } from "./update-checker.ts";
 
 interface KeySettings {
+  /** @deprecated Provider is now derived from the action UUID. Ignored if present. */
   providerId?: string;
   metricId?: string;
   /**
@@ -105,6 +106,8 @@ interface KeySettings {
 
 interface VisibleKey {
   context: string;
+  /** The action UUID this key belongs to (determines the provider). */
+  action: string;
   settings: KeySettings;
   /** Epoch ms of the most recent refresh (or 0 before the first one). */
   lastPollAt: number;
@@ -112,9 +115,25 @@ interface VisibleKey {
 
 // Stream Deck lowercases all UUIDs in the protocol, regardless of
 // what manifest.json declares. Our comparison must match that.
-const ACTION_UUID = "io.github.anthonybaldwin.usagebuttons.stat";
-const DEFAULT_PROVIDER = "mock";
+// Each provider now has its own action UUID:
+//   io.github.anthonybaldwin.usagebuttons.claude
+//   io.github.anthonybaldwin.usagebuttons.codex
+//   etc.
+const ACTION_PREFIX = "io.github.anthonybaldwin.usagebuttons.";
 const DEFAULT_METRIC = "session-percent";
+
+/**
+ * Extract the provider ID from a Stream Deck action UUID.
+ * Returns undefined if the UUID doesn't belong to this plugin.
+ *
+ * e.g. "io.github.anthonybaldwin.usagebuttons.claude" → "claude"
+ *      "io.github.anthonybaldwin.usagebuttons.kimi-k2" → "kimi-k2"
+ */
+function providerIdFromAction(actionUUID: string): string | undefined {
+  if (!actionUUID.startsWith(ACTION_PREFIX)) return undefined;
+  const id = actionUUID.slice(ACTION_PREFIX.length);
+  return id.length > 0 ? id : undefined;
+}
 /**
  * How often the plugin's master scheduler ticks. On every tick we
  * iterate all visible keys and call refreshKey() on any whose
@@ -227,10 +246,33 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
   switch (event.event) {
     case "willAppear": {
       const e = event as WillAppearEvent;
-      if (e.action !== ACTION_UUID) return;
+      const providerId = providerIdFromAction(e.action);
+      if (!providerId) return; // not one of our actions
       const settings = e.payload.settings as KeySettings;
-      const providerId = settings.providerId ?? DEFAULT_PROVIDER;
       const metricId = settings.metricId ?? DEFAULT_METRIC;
+
+      // One-time migration: clear stale fillColor values that the
+      // old PI used to bake in. Now the PI only saves color overrides
+      // when they differ from defaults, so the render-time logic
+      // picks the right color (brand for meters, lightened-bg for
+      // reference cards). This catches existing buttons.
+      if (settings.fillColor) {
+        const lc = settings.fillColor.toLowerCase();
+        const prov = getProvider(providerId);
+        const stale = [
+          "#374151", "#4b5563", "#1e293b", "#ffffff18", "#222e3b",
+          "#3b82f6",
+          prov?.brandColor?.toLowerCase(),
+        ];
+        if (stale.includes(lc)) {
+          delete settings.fillColor;
+          conn.send({
+            event: "setSettings",
+            context: e.context,
+            payload: settings as Record<string, unknown>,
+          });
+        }
+      }
 
       // Clear any native title the user may have typed — our SVG
       // renders its own label and a native title stacked on top
@@ -244,6 +286,7 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
       if (!getSkipUpdateCheck() && isUpdateAvailable()) {
         visibleKeys.set(e.context, {
           context: e.context,
+          action: e.action,
           settings,
           lastPollAt: Date.now(),
         });
@@ -274,6 +317,7 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
         const metric = cached.metrics.find((m) => m.id === metricId);
         visibleKeys.set(e.context, {
           context: e.context,
+          action: e.action,
           settings,
           lastPollAt: Date.now(),
         });
@@ -303,10 +347,11 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
       // the real fetch.
       visibleKeys.set(e.context, {
         context: e.context,
+        action: e.action,
         settings,
         lastPollAt: 0,
       });
-      conn.setImage(e.context, loadingFaceFor(settings));
+      conn.setImage(e.context, loadingFaceFor(providerId, settings));
       conn.log(
         `key appeared, no cache (now tracking ${visibleKeys.size} visible key(s))`,
       );
@@ -398,8 +443,9 @@ async function refreshKey(
   // the user types something after the key first appeared.
   conn.setTitle(context, "");
 
-  const providerId = key.settings.providerId ?? DEFAULT_PROVIDER;
+  const providerId = providerIdFromAction(key.action);
   const metricId = key.settings.metricId ?? DEFAULT_METRIC;
+  if (!providerId) return;
   const provider = getProvider(providerId);
   if (!provider) {
     conn.setImage(
@@ -692,6 +738,17 @@ function deriveLabelFromMetricId(metricId: string): string {
  * metric's natural unit, applied with whichever direction the
  * metric declares.
  */
+/** Blend a hex color toward white by `amount` (0..1). Returns solid hex. */
+function lightenHex(hex: string, amount: number): string {
+  const m = /^#?([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/.exec(hex);
+  if (!m) return hex;
+  const channels = [m[1]!, m[2]!, m[3]!].map((c) => {
+    const v = parseInt(c, 16);
+    return Math.min(255, Math.round(v + (255 - v) * amount));
+  });
+  return "#" + channels.map((c) => c.toString(16).padStart(2, "0")).join("");
+}
+
 function computeThresholdState(
   metric: MetricValue,
   settings: KeySettings,
@@ -748,24 +805,24 @@ function computeThresholdState(
  * brand color. Falls back to a neutral dot if the provider has no
  * known glyph.
  */
-function loadingFaceFor(settings: KeySettings): string {
-  const providerId = settings.providerId ?? DEFAULT_PROVIDER;
+function loadingFaceFor(providerId: string, settings?: KeySettings): string {
   const provider = getProvider(providerId);
   const glyph = PROVIDER_ICONS[providerId];
   const input: Parameters<typeof renderLoadingSvg>[0] = {};
   if (glyph) input.glyph = glyph;
-  if (settings.fillColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.fillColor)) {
-    input.fill = settings.fillColor;
-  } else if (provider?.brandColor) {
+  // Always use brand color for loading — it's a transient "fetching"
+  // state, not data display. The per-key fillColor (which may be
+  // neutral gray for reference cards) applies to the rendered metric.
+  if (provider?.brandColor) {
     input.fill = provider.brandColor;
   }
-  if (settings.bgColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.bgColor)) {
+  if (settings?.bgColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.bgColor)) {
     input.bg = settings.bgColor;
   }
-  if (settings.textColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.textColor)) {
+  if (settings?.textColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.textColor)) {
     input.fg = settings.textColor;
   }
-  if (settings.showBorder === false) input.border = false;
+  if (settings?.showBorder === false) input.border = false;
   return renderLoadingSvg(input);
 }
 
@@ -887,7 +944,12 @@ function renderMetric(
   } else if (settings.fillColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.fillColor)) {
     input.fill = settings.fillColor;
   } else if (isReferenceCard) {
-    input.fill = "#374151";
+    // Lighten the bg color by ~9% to produce a subtle lift so
+    // reference cards look like "same bg, just a hint lighter".
+    // Computed as a solid color to avoid SVG alpha compositing
+    // artifacts with glyphs and text.
+    const bg = input.bg ?? "#111827";
+    input.fill = lightenHex(bg, 0.09);
   } else {
     input.fill = provider.brandColor;
   }

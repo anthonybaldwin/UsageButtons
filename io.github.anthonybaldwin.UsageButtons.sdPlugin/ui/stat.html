@@ -92,20 +92,7 @@
   <!-- ================== Button tab (per-key) ================== -->
   <div id="buttonPanel" class="panel active">
 
-    <div class="group-heading">Source</div>
-
-    <label for="provider">Provider</label>
-    <select id="provider">
-      <option value="mock">Mock (dev)</option>
-      <option value="claude">Claude</option>
-      <option value="codex">Codex</option>
-      <option value="copilot">Copilot</option>
-      <option value="cursor">Cursor</option>
-      <option value="openrouter">OpenRouter</option>
-      <option value="warp">Warp</option>
-      <option value="zai">z.ai</option>
-      <option value="kimi-k2">Kimi K2</option>
-    </select>
+    <div class="group-heading">Metric</div>
 
     <label for="metric">Metric</label>
     <select id="metric"></select>
@@ -119,6 +106,105 @@
       <option value="30">30 minutes</option>
       <option value="60">1 hour</option>
     </select>
+
+    <!-- Provider-specific auth config (shown inline for this button's provider) -->
+    <div id="providerAuth" style="display:none">
+      <div class="group-heading">Authentication</div>
+
+      <!-- Claude auth -->
+      <div id="authConfig-claude" class="auth-config" style="display:none">
+        <label for="claudeSource">Data source</label>
+        <select id="claudeSource">
+          <option value="both" selected>Both — OAuth + Cookie (recommended)</option>
+          <option value="oauth">OAuth only — API, no cookie calls</option>
+          <option value="cookie">Cookie — paste required, primary extras source</option>
+        </select>
+        <p class="hint">
+          <strong>OAuth</strong> uses <code>~/.claude/.credentials.json</code> and
+          <code>api.anthropic.com</code>. Handles session %, weekly %, Sonnet %.
+          <strong>Cookie</strong> calls <code>claude.ai</code> directly — needed
+          for the Extra usage block when OAuth returns <code>is_enabled: false</code>.
+          <strong>Both</strong> uses OAuth first and falls through to Cookie.
+        </p>
+        <div id="claudeCookieRow">
+          <label for="claudeCookie">Session key (claude.ai)</label>
+          <input id="claudeCookie" type="password" placeholder="sk-ant-sid01-..." autocomplete="off" spellcheck="false">
+          <p class="hint">
+            Paste your <code>sessionKey</code> from claude.ai DevTools.
+            Masked for privacy — only sent to <code>claude.ai</code>.
+          </p>
+        </div>
+      </div>
+
+      <!-- Cursor auth -->
+      <div id="authConfig-cursor" class="auth-config" style="display:none">
+        <label for="cursorCookie">Cookie header (cursor.com)</label>
+        <input id="cursorCookie" type="password" placeholder="WorkosCursorSessionToken=..." autocomplete="off" spellcheck="false">
+        <p class="hint">
+          Open cursor.com in your browser, open DevTools (F12) → Network tab,
+          reload the page, click any request, and copy the <code>Cookie</code>
+          header value. Paste it here. Only sent to <code>cursor.com</code>.
+        </p>
+      </div>
+
+      <!-- Copilot auth -->
+      <div id="authConfig-copilot" class="auth-config" style="display:none">
+        <p class="hint">
+          Copilot reads your GitHub token automatically from
+          <code>~/.config/github-copilot/hosts.json</code> (written by
+          <code>gh auth login</code>). You can also set the
+          <code>GITHUB_TOKEN</code> environment variable. No manual
+          configuration needed if <code>gh</code> CLI is installed and
+          authenticated.
+        </p>
+      </div>
+
+      <!-- Codex auth -->
+      <div id="authConfig-codex" class="auth-config" style="display:none">
+        <p class="hint">
+          Codex reads your OAuth token automatically from
+          <code>~/.codex/auth.json</code> (written by <code>codex auth login</code>).
+          No manual configuration needed.
+        </p>
+      </div>
+
+      <!-- OpenRouter auth -->
+      <div id="authConfig-openrouter" class="auth-config" style="display:none">
+        <p class="hint">
+          Set the <code>OPENROUTER_API_KEY</code> environment variable with
+          your API key from
+          <a href="https://openrouter.ai/settings/keys" style="color:#6467f2">openrouter.ai/settings/keys</a>.
+        </p>
+      </div>
+
+      <!-- Warp auth -->
+      <div id="authConfig-warp" class="auth-config" style="display:none">
+        <p class="hint">
+          Set the <code>WARP_API_KEY</code> environment variable. See
+          <a href="https://docs.warp.dev/reference/cli/api-keys" style="color:#938bb4">Warp docs</a>.
+        </p>
+      </div>
+
+      <!-- z.ai auth -->
+      <div id="authConfig-zai" class="auth-config" style="display:none">
+        <p class="hint">
+          Set the <code>ZAI_API_TOKEN</code> environment variable with
+          your API token from the z.ai dashboard.
+        </p>
+      </div>
+
+      <!-- Kimi K2 auth -->
+      <div id="authConfig-kimi-k2" class="auth-config" style="display:none">
+        <p class="hint">
+          Set the <code>KIMI_K2_API_KEY</code> (or <code>KIMI_API_KEY</code>)
+          environment variable.
+        </p>
+      </div>
+    </div>
+
+    <p class="hint auth-shared-hint" style="display:none">
+      Authentication settings apply to <em>all</em> buttons for this provider.
+    </p>
 
     <div class="group-heading">Text</div>
 
@@ -311,106 +397,6 @@
       over everywhere. Buttons on inactive profiles pick up the reset
       the next time they appear.
     </p>
-
-    <div class="group-heading">Provider settings</div>
-    <p class="hint" style="margin: 0 0 8px">
-      Settings below apply to <em>every button</em> that uses the selected
-      provider, not just the one you're editing. Pick a provider to see
-      its auth and config options.
-    </p>
-
-    <label for="providerSettingsSelect">Configure provider</label>
-    <select id="providerSettingsSelect">
-      <option value="">— select —</option>
-      <option value="claude">Claude</option>
-      <option value="cursor">Cursor</option>
-      <option value="copilot">Copilot</option>
-      <option value="openrouter">OpenRouter</option>
-      <option value="warp">Warp</option>
-      <option value="zai">z.ai</option>
-      <option value="kimi-k2">Kimi K2</option>
-    </select>
-
-    <!-- Claude settings -->
-    <div id="providerConfig-claude" class="provider-config" style="display:none">
-      <label for="claudeSource">Data source</label>
-      <select id="claudeSource">
-        <option value="both" selected>Both — OAuth + Cookie (recommended)</option>
-        <option value="oauth">OAuth only — API, no cookie calls</option>
-        <option value="cookie">Cookie — paste required, primary extras source</option>
-      </select>
-      <p class="hint">
-        <strong>OAuth</strong> uses <code>~/.claude/.credentials.json</code> and
-        <code>api.anthropic.com</code>. Handles session %, weekly %, Sonnet %.
-        <strong>Cookie</strong> calls <code>claude.ai</code> directly — needed
-        for the Extra usage block when OAuth returns <code>is_enabled: false</code>.
-        <strong>Both</strong> uses OAuth first and falls through to Cookie.
-      </p>
-      <div id="claudeCookieRow">
-        <label for="claudeCookie">Session key (claude.ai)</label>
-        <input id="claudeCookie" type="password" placeholder="sk-ant-sid01-..." autocomplete="off" spellcheck="false">
-        <p class="hint">
-          Paste your <code>sessionKey</code> from claude.ai DevTools.
-          Masked for privacy — only sent to <code>claude.ai</code>.
-        </p>
-      </div>
-    </div>
-
-    <!-- Cursor settings -->
-    <div id="providerConfig-cursor" class="provider-config" style="display:none">
-      <label for="cursorCookie">Cookie header (cursor.com)</label>
-      <input id="cursorCookie" type="password" placeholder="WorkosCursorSessionToken=..." autocomplete="off" spellcheck="false">
-      <p class="hint">
-        Open cursor.com in your browser, open DevTools (F12) → Network tab,
-        reload the page, click any request, and copy the <code>Cookie</code>
-        header value. Paste it here. Only sent to <code>cursor.com</code>.
-      </p>
-    </div>
-
-    <!-- Copilot settings -->
-    <div id="providerConfig-copilot" class="provider-config" style="display:none">
-      <p class="hint">
-        Copilot reads your GitHub token automatically from
-        <code>~/.config/github-copilot/hosts.json</code> (written by
-        <code>gh auth login</code>). You can also set the
-        <code>GITHUB_TOKEN</code> environment variable. No manual
-        configuration needed if <code>gh</code> CLI is installed and
-        authenticated.
-      </p>
-    </div>
-
-    <!-- OpenRouter settings -->
-    <div id="providerConfig-openrouter" class="provider-config" style="display:none">
-      <p class="hint">
-        Set the <code>OPENROUTER_API_KEY</code> environment variable with
-        your API key from
-        <a href="https://openrouter.ai/settings/keys" style="color:#6467f2">openrouter.ai/settings/keys</a>.
-      </p>
-    </div>
-
-    <!-- Warp settings -->
-    <div id="providerConfig-warp" class="provider-config" style="display:none">
-      <p class="hint">
-        Set the <code>WARP_API_KEY</code> environment variable. See
-        <a href="https://docs.warp.dev/reference/cli/api-keys" style="color:#938bb4">Warp docs</a>.
-      </p>
-    </div>
-
-    <!-- z.ai settings -->
-    <div id="providerConfig-zai" class="provider-config" style="display:none">
-      <p class="hint">
-        Set the <code>ZAI_API_TOKEN</code> environment variable with
-        your API token from the z.ai dashboard.
-      </p>
-    </div>
-
-    <!-- Kimi K2 settings -->
-    <div id="providerConfig-kimi-k2" class="provider-config" style="display:none">
-      <p class="hint">
-        Set the <code>KIMI_K2_API_KEY</code> (or <code>KIMI_API_KEY</code>)
-        environment variable.
-      </p>
-    </div>
   </div>
 
   <script>
@@ -435,11 +421,6 @@
     };
 
     const METRICS = {
-      mock: [
-        ["session-percent", "Session % remaining",  "pct"],
-        ["weekly-percent",  "Weekly % remaining",   "pct"],
-        ["credits",         "Credits remaining",    "ref"],
-      ],
       claude: [
         ["session-percent",           "Session % remaining (5h)",       "pct"],
         ["weekly-percent",            "Weekly % remaining",             "pct"],
@@ -491,7 +472,6 @@
     // src/providers/brand-colors.ts so the Fill color picker shows
     // sensible defaults per provider.
     const BRAND_COLORS = {
-      mock:       "#3b82f6",
       claude:     "#cc7c5e",
       codex:      "#49a3b0",
       copilot:    "#a855f7",
@@ -501,6 +481,19 @@
       zai:        "#e85a6a",
       "kimi-k2":  "#4c00ff",
     };
+
+    // Providers that have auth config panels
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "openrouter", "warp", "zai", "kimi-k2"];
+
+    // ---------- Provider from action UUID ----------
+    const ACTION_PREFIX = "io.github.anthonybaldwin.usagebuttons.";
+    let currentProviderId = "mock";
+
+    function providerIdFromAction(actionUUID) {
+      if (!actionUUID || !actionUUID.startsWith(ACTION_PREFIX)) return "mock";
+      const id = actionUUID.slice(ACTION_PREFIX.length);
+      return id.length > 0 ? id : "mock";
+    }
 
     // ---------- Tab switching ----------
     const TAB_STORAGE_KEY = "UsageButtons-pi-tab";
@@ -538,7 +531,15 @@
       updateFeatureVisibility(providerId, metric.value);
     }
 
-    const REFERENCE_CARD_COLOR = "#374151";
+    // Lighten #111827 (default bg) by 9% → #222e3b
+    const REFERENCE_CARD_COLOR = "#222e3b";
+
+    // Only include a color setting when the user changed it from
+    // the default. Returns {} (omit) or { key: value } (include).
+    function colorOverride(id, defaultVal) {
+      const val = document.getElementById(id).value;
+      return val.toLowerCase() !== defaultVal.toLowerCase() ? { [id]: val } : {};
+    }
 
     // Returns the appropriate default fill color for a given metric.
     function defaultFillColor(providerId, metricId) {
@@ -566,17 +567,35 @@
       show("feature-rawCounts",  !!flags.rawCounts);
     }
 
+    // ---------- Provider auth config ----------
+    function showAuthConfig(providerId) {
+      // Hide all auth configs
+      for (const el of document.querySelectorAll(".auth-config")) {
+        el.style.display = "none";
+      }
+      // Show the relevant one (if it exists)
+      const panel = document.getElementById("authConfig-" + providerId);
+      const authSection = document.getElementById("providerAuth");
+      const sharedHint = document.querySelector(".auth-shared-hint");
+      if (panel && providerId !== "mock") {
+        authSection.style.display = "";
+        panel.style.display = "";
+        if (sharedHint) sharedHint.style.display = "";
+      } else {
+        authSection.style.display = "none";
+        if (sharedHint) sharedHint.style.display = "none";
+      }
+    }
+
     // ---------- Settings plumbing ----------
     let websocket = null;
     let uuid = null;
     let actionInfo = null;
 
     function applyKeySettings(settings) {
-      const providerId = settings.providerId || "mock";
-      const metricId = settings.metricId || "session-percent";
-      document.getElementById("provider").value = providerId;
-      populateMetrics(providerId, metricId);
-      updateFeatureVisibility(providerId, metricId);
+      const metricId = settings.metricId || (METRICS[currentProviderId] ? METRICS[currentProviderId][0][0] : "session-percent");
+      populateMetrics(currentProviderId, metricId);
+      updateFeatureVisibility(currentProviderId, metricId);
       document.getElementById("refreshMinutes").value =
         settings.refreshMinutes != null ? String(settings.refreshMinutes) : "";
       document.getElementById("labelOverride").value = settings.labelOverride || "";
@@ -589,18 +608,20 @@
       document.getElementById("valueSize").value = settings.valueSize || "";
       document.getElementById("subvalueSize").value = settings.subvalueSize || "";
       document.getElementById("fillDirection").value = settings.fillDirection || "up";
-      // Fill color: user override wins, otherwise default to the
-      // provider's brand color for meters, neutral gray for reference cards.
+      // Colors: show the saved override if one exists, otherwise
+      // reset the picker to the computed default. This way the user
+      // sees what the plugin will actually use, and changing the
+      // picker only saves a value if it differs from the default.
       document.getElementById("fillColor").value =
-        settings.fillColor || defaultFillColor(providerId, metricId);
-      if (settings.bgColor)   document.getElementById("bgColor").value   = settings.bgColor;
-      if (settings.textColor) document.getElementById("textColor").value = settings.textColor;
+        settings.fillColor || defaultFillColor(currentProviderId, metricId);
+      document.getElementById("bgColor").value   = settings.bgColor   || "#111827";
+      document.getElementById("textColor").value = settings.textColor || "#f9fafb";
       document.getElementById("warnBelow").value =
         settings.warnBelow != null ? String(settings.warnBelow) : "";
       document.getElementById("criticalBelow").value =
         settings.criticalBelow != null ? String(settings.criticalBelow) : "";
-      if (settings.warnColor)     document.getElementById("warnColor").value = settings.warnColor;
-      if (settings.criticalColor) document.getElementById("criticalColor").value = settings.criticalColor;
+      document.getElementById("warnColor").value     = settings.warnColor     || "#f59e0b";
+      document.getElementById("criticalColor").value = settings.criticalColor || "#ef4444";
     }
 
     function applyGlobalSettings(globals) {
@@ -633,23 +654,14 @@
       document.getElementById("cursorCookie").value = cursor.cookieHeader || "";
     }
 
-    // Provider settings dropdown — show/hide the relevant config panel
-    function showProviderConfig(providerId) {
-      for (const el of document.querySelectorAll(".provider-config")) {
-        el.style.display = "none";
-      }
-      if (providerId) {
-        const panel = document.getElementById("providerConfig-" + providerId);
-        if (panel) panel.style.display = "";
-      }
-    }
-    document.getElementById("providerSettingsSelect").addEventListener("change", function() {
-      showProviderConfig(this.value);
-    });
-
     function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
       uuid = inUUID;
       actionInfo = JSON.parse(inActionInfo);
+
+      // Derive provider from action UUID
+      currentProviderId = providerIdFromAction(actionInfo.action);
+      showAuthConfig(currentProviderId);
+
       websocket = new WebSocket("ws://127.0.0.1:" + port);
       websocket.onopen = () => {
         websocket.send(JSON.stringify({ event: registerEvent, uuid: inUUID }));
@@ -676,9 +688,9 @@
         const n = Number(s);
         return s === "" || Number.isNaN(n) ? undefined : n;
       };
+      const metricId = document.getElementById("metric").value;
       const payload = {
-        providerId:     document.getElementById("provider").value,
-        metricId:       document.getElementById("metric").value,
+        metricId:       metricId,
         refreshMinutes: refreshRaw === "" ? undefined : Number(refreshRaw),
         labelOverride:  document.getElementById("labelOverride").value,
         hideLabel:      document.getElementById("hideLabel").checked,
@@ -692,14 +704,19 @@
         ...(valueRaw ? { valueSize: valueRaw } : {}),
         ...(subvalueRaw ? { subvalueSize: subvalueRaw } : {}),
         fillDirection:  document.getElementById("fillDirection").value,
-        fillColor:      document.getElementById("fillColor").value,
-        bgColor:        document.getElementById("bgColor").value,
-        textColor:      document.getElementById("textColor").value,
+        // Color settings: only include when the user has explicitly
+        // customized them (differs from the computed default). This
+        // lets the render-time logic pick the right color (brand for
+        // meters, lightened-bg for reference cards) without a stale
+        // saved value overriding it.
+        ...colorOverride("fillColor", defaultFillColor(currentProviderId, metricId)),
+        ...colorOverride("bgColor", "#111827"),
+        ...colorOverride("textColor", "#f9fafb"),
         // Threshold settings — blank fields fall through to defaults.
         ...(parseNum(warnBelowRaw) !== undefined ? { warnBelow: parseNum(warnBelowRaw) } : {}),
         ...(parseNum(criticalBelowRaw) !== undefined ? { criticalBelow: parseNum(criticalBelowRaw) } : {}),
-        warnColor:      document.getElementById("warnColor").value,
-        criticalColor:  document.getElementById("criticalColor").value,
+        ...colorOverride("warnColor", "#f59e0b"),
+        ...colorOverride("criticalColor", "#ef4444"),
       };
       websocket.send(JSON.stringify({
         event: "setSettings",
@@ -741,19 +758,11 @@
     }
 
     // ---------- Event wiring ----------
-    document.getElementById("provider").addEventListener("change", () => {
-      const newProvider = document.getElementById("provider").value;
-      populateMetrics(newProvider);
-      const metricId = document.getElementById("metric").value;
-      document.getElementById("fillColor").value = defaultFillColor(newProvider, metricId);
-      pushSettings();
-    });
     document.getElementById("metric").addEventListener("change", () => {
-      const providerId = document.getElementById("provider").value;
       const metricId = document.getElementById("metric").value;
-      updateFeatureVisibility(providerId, metricId);
+      updateFeatureVisibility(currentProviderId, metricId);
       // Update fill color default when switching between meter/reference card metrics
-      document.getElementById("fillColor").value = defaultFillColor(providerId, metricId);
+      document.getElementById("fillColor").value = defaultFillColor(currentProviderId, metricId);
       pushSettings();
     });
     for (const id of [
@@ -800,6 +809,7 @@
       }));
     });
 
+    // Initial state — will be overwritten by connectElgatoStreamDeckSocket
     applyKeySettings({});
     updateFeatureVisibility("mock", "session-percent");
     window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;

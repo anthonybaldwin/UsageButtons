@@ -8,10 +8,12 @@
  * height (or width, depending on `direction`) is proportional to the
  * current value.
  *
- * This file has NO runtime dependencies. It must stay tree-shakable
- * and portable so `bun build --compile` can inline it into the plugin
- * binary.
+ * This file has NO runtime dependencies beyond svg-bbox.ts. It must
+ * stay tree-shakable and portable so `bun build --compile` can inline
+ * it into the plugin binary.
  */
+
+import { contentFitTransform } from "./svg-bbox.ts";
 
 export type FillDirection =
   /** Fill grows from the bottom upward as value → 100. Classic "tank". */
@@ -336,12 +338,6 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
   let glyphElementBack = "";
   let glyphElementFront = "";
   if (showGlyph && input.glyph) {
-    // Parse the glyph's viewBox so the render scale matches the
-    // source path's own coordinate space. CodexBar's paths are
-    // mostly 0 0 100 100, but a handful (alibaba 200×200, amp 28×28)
-    // use different sizes, so hardcoding /100 would distort them.
-    const vb = input.glyph.viewBox.trim().split(/\s+/).map(Number);
-    const vbW = vb.length >= 4 && !Number.isNaN(vb[2]!) && vb[2]! > 0 ? vb[2]! : 100;
     if (glyphMode === "watermark") {
       // Watermark logo — positioned in the vertical zone BETWEEN
       // the label and subvalue, not just canvas-centered. The old
@@ -395,7 +391,11 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
       const gSize = Math.max(44, Math.min(72, zoneHeight));
       const gxOff = (CANVAS - gSize) / 2;
       const gyOff = Math.round(zoneTop + (zoneHeight - gSize) / 2);
-      const gScale = gSize / vbW;
+      // Content-fit: scale based on the actual path bounds (trimmed
+      // of whitespace) rather than the raw viewBox. This ensures
+      // all provider glyphs occupy the same visual area regardless
+      // of how much padding their source SVG has.
+      const gXf = contentFitTransform(input.glyph.d, gxOff, gyOff, gSize, gSize);
       // Pick glyph front color based on fill brightness. On bright
       // fills (brand colors), use dark bg at low opacity for a
       // subtle knockout. On dark fills (reference card gray), use
@@ -403,8 +403,8 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
       const fillLum = hexLuminance(fill);
       const frontColor = fillLum < 0.15 ? fg : bg;
       const frontOpacity = fillLum < 0.15 ? 0.25 : 0.30;
-      glyphElementBack = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${fg}" fill-opacity="0.70"><path d="${input.glyph.d}"/></g>`;
-      glyphElementFront = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${frontColor}" fill-opacity="${frontOpacity}"><path d="${input.glyph.d}"/></g>`;
+      glyphElementBack = `<g transform="${gXf}" fill="${fg}" fill-opacity="0.70"><path d="${input.glyph.d}"/></g>`;
+      glyphElementFront = `<g transform="${gXf}" fill="${frontColor}" fill-opacity="${frontOpacity}"><path d="${input.glyph.d}"/></g>`;
     } else if (glyphMode === "centered") {
       // 60px focal logo. Smaller than the watermark so it doesn't
       // crowd the border + label + countdown around it. Currently
@@ -413,12 +413,14 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
       // future render path that wants the focal logo treatment.
       const gSize = 60;
       const gOff = (CANVAS - gSize) / 2;
-      glyphElementFront = `<g transform="translate(${gOff} ${gOff}) scale(${gSize / vbW})" fill="${fg}" fill-opacity="0.92"><path d="${input.glyph.d}"/></g>`;
+      const centeredXf = contentFitTransform(input.glyph.d, gOff, gOff, gSize, gSize);
+      glyphElementFront = `<g transform="${centeredXf}" fill="${fg}" fill-opacity="0.92"><path d="${input.glyph.d}"/></g>`;
     } else if (glyphMode === "corner") {
       const gSize = 20;
       const gx = CANVAS - gSize - 6;
       const gy = 6;
-      glyphElementFront = `<g transform="translate(${gx} ${gy}) scale(${gSize / vbW})" fill="${fg}" fill-opacity="0.7"><path d="${input.glyph.d}"/></g>`;
+      const cornerXf = contentFitTransform(input.glyph.d, gx, gy, gSize, gSize);
+      glyphElementFront = `<g transform="${cornerXf}" fill="${fg}" fill-opacity="0.7"><path d="${input.glyph.d}"/></g>`;
     }
   }
 
@@ -476,13 +478,11 @@ export function renderLoadingSvg(opts: {
   const glyphSize = 56;
   const glyphOffset = (CANVAS - glyphSize) / 2;
   const glyphColor = opts.fill ?? fg;
-  const loadingVb = opts.glyph?.viewBox.trim().split(/\s+/).map(Number);
-  const loadingVbW =
-    loadingVb && loadingVb.length >= 4 && !Number.isNaN(loadingVb[2]!) && loadingVb[2]! > 0
-      ? loadingVb[2]!
-      : 100;
   const glyphElement = opts.glyph
-    ? `<g transform="translate(${glyphOffset} ${glyphOffset}) scale(${glyphSize / loadingVbW})" fill="${glyphColor}" fill-opacity="0.85"><path d="${opts.glyph.d}"/></g>`
+    ? (() => {
+        const xf = contentFitTransform(opts.glyph.d, glyphOffset, glyphOffset, glyphSize, glyphSize);
+        return `<g transform="${xf}" fill="${glyphColor}" fill-opacity="0.85"><path d="${opts.glyph.d}"/></g>`;
+      })()
     : // Fallback when no glyph is available for the provider: a
       // simple centered dot so the user still sees *something*.
       `<circle cx="${CANVAS / 2}" cy="${CANVAS / 2}" r="4" fill="${fg}" fill-opacity="0.4"/>`;

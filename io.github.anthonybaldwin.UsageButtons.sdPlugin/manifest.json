@@ -27,15 +27,113 @@
   ],
   "Actions": [
     {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.stat",
-      "Name": "Usage Stat",
-      "Tooltip": "Display one usage stat (session %, weekly %, credits, …) with a dynamic fill icon.",
-      "Icon": "assets/action-stat",
+      "UUID": "io.github.anthonybaldwin.UsageButtons.claude",
+      "Name": "Claude",
+      "Tooltip": "Claude usage stats — session %, weekly %, Sonnet %, extras, costs.",
+      "Icon": "assets/action-claude",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
       "States": [
         {
-          "Image": "assets/action-stat-key",
+          "Image": "assets/action-claude-key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.codex",
+      "Name": "Codex",
+      "Tooltip": "Codex usage stats — session %, weekly %, credits, costs.",
+      "Icon": "assets/action-codex",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "assets/action-codex-key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.copilot",
+      "Name": "Copilot",
+      "Tooltip": "GitHub Copilot usage stats — premium %, chat %.",
+      "Icon": "assets/action-copilot",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "assets/action-copilot-key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.cursor",
+      "Name": "Cursor",
+      "Tooltip": "Cursor usage stats — total %, auto %, API %, on-demand spend.",
+      "Icon": "assets/action-cursor",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "assets/action-cursor-key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.openrouter",
+      "Name": "OpenRouter",
+      "Tooltip": "OpenRouter usage stats — credit balance, total usage.",
+      "Icon": "assets/action-openrouter",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "assets/action-openrouter-key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.warp",
+      "Name": "Warp",
+      "Tooltip": "Warp usage stats — credits %, bonus credits.",
+      "Icon": "assets/action-warp",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "assets/action-warp-key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.zai",
+      "Name": "z.ai",
+      "Tooltip": "z.ai usage stats — token usage %, MCP usage %.",
+      "Icon": "assets/action-zai",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "assets/action-zai-key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.kimi-k2",
+      "Name": "Kimi K2",
+      "Tooltip": "Kimi K2 usage stats — credits remaining.",
+      "Icon": "assets/action-kimi-k2",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "assets/action-kimi-k2-key",
           "ShowTitle": false
         }
       ]

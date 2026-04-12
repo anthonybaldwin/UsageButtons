@@ -633,7 +633,19 @@ export class ClaudeProvider implements Provider {
       "Weekly Sonnet remaining",
       response.seven_day_sonnet ?? response.seven_day_opus,
     );
-    if (modelSpecific) metrics.push(modelSpecific);
+    if (modelSpecific) {
+      // The model-specific window often lacks its own resets_at, but
+      // it shares the same 7-day reset cycle as the overall weekly
+      // window. Inherit the weekly countdown so SONNET shows "4d"
+      // instead of a bare "Remaining" label.
+      if (
+        modelSpecific.resetInSeconds === undefined &&
+        weekly?.resetInSeconds !== undefined
+      ) {
+        modelSpecific.resetInSeconds = weekly.resetInSeconds;
+      }
+      metrics.push(modelSpecific);
+    }
 
     // Extra usage resolution — three-way branch driven by
     // `providers.claude.source`:

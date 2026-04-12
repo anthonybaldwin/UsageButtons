@@ -6,6 +6,8 @@ per-model quotas, and more. Each button renders a dynamic icon whose
 background fills (or de-fills) in proportion to the current value, so
 you can tell at a glance how much runway you have left.
 
+![Usage Buttons in Stream Deck](docs/main.png)
+
 Inspired by [CodexBar](https://github.com/steipete/CodexBar) (macOS menu
 bar); this project targets the Stream Deck and runs on **macOS and
 Windows**. It is not a fork of CodexBar — we consume the same public
@@ -15,6 +17,16 @@ provider data sources but ship an entirely separate plugin.
 
 Early scaffolding. See `tmp/CodexBar/` (gitignored) for the reference
 implementation we're porting concepts from.
+
+## Settings
+
+Each provider is its own action — drag **Claude**, **Codex**, **Copilot**,
+etc. onto a key and configure the metric, colors, and thresholds from the
+Property Inspector.
+
+| Per-button settings | Plugin-wide defaults |
+|---|---|
+| ![Button settings](docs/button-settings.png) | ![Plugin settings](docs/plugin-settings.png) |
 
 ## Runtime
 
@@ -46,7 +58,7 @@ UsageButtons/
 └── README.md
 ```
 
-## Install (dev)
+## Build from source
 
 ### Windows
 
@@ -55,8 +67,8 @@ UsageButtons/
 3. `bun run install:dev --restart` — junctions the .sdPlugin folder
    into `%APPDATA%\Elgato\StreamDeck\Plugins\` and relaunches
    Stream Deck
-4. Add a "Usage Stat" action to a key and configure the provider +
-   metric from the Property Inspector
+4. Drag a provider (e.g. **Claude**, **Codex**, **Copilot**) onto a key
+   and pick a metric from the Property Inspector
 
 ### macOS (Apple Silicon or Intel)
 

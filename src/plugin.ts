@@ -310,15 +310,22 @@ async function refreshKey(
   if (snapshot.error && snapshot.metrics.length === 0) {
     // Cool-down state with nothing to show. Render a friendly
     // "WAIT" / "rate limit" face rather than the raw provider name
-    // so the user can tell the button from a hard error.
+    // so the user can tell the button from a hard error. Uses the
+    // placeholderFace() helper so the rate-limit tile still carries
+    // the provider's brand color + logo watermark — otherwise a
+    // rate-limited Claude button is indistinguishable from a
+    // rate-limited Codex button.
     const rate = isRateLimit(snapshot.error);
-    const errInput: Parameters<typeof renderButtonSvg>[0] = {
-      label: provider.name.toUpperCase(),
-      value: rate ? "WAIT" : "ERR",
-      stale: true,
-    };
-    if (rate) errInput.subvalue = "rate limit";
-    conn.setImage(context, renderButtonSvg(errInput));
+    conn.setImage(
+      context,
+      placeholderFace({
+        provider,
+        label: provider.name.toUpperCase(),
+        value: rate ? "WAIT" : "ERR",
+        subvalue: rate ? "rate limit" : undefined,
+        keySettings: key.settings,
+      }),
+    );
     return;
   }
 
@@ -371,13 +378,17 @@ async function refreshKey(
     // Genuinely missing metric (provider doesn't expose it for
     // this account / plan) — fall back to a quiet placeholder
     // with the metric's natural label so the user knows which
-    // button is the empty one.
+    // button is the empty one. placeholderFace() keeps the
+    // provider's glyph + brand color visible so the tile still
+    // reads as "this is an assigned Claude/Codex button with no
+    // data right now" instead of a black tile with no context.
     conn.setImage(
       context,
-      renderButtonSvg({
+      placeholderFace({
+        provider,
         label: deriveLabelFromMetricId(metricId),
         value: "—",
-        stale: true,
+        keySettings: key.settings,
       }),
     );
     return;
@@ -390,6 +401,71 @@ async function refreshKey(
 
 function isRateLimit(errorMessage: string): boolean {
   return /429|rate.?limit/i.test(errorMessage);
+}
+
+/**
+ * Render a "no data right now" placeholder tile that still carries
+ * the provider's identity. Used for two cases:
+ *
+ *   1. The metric a button is configured for doesn't exist in the
+ *      current snapshot (e.g. CODEX credits-balance on a Plus
+ *      plan). Shows the metric label + "—" value.
+ *
+ *   2. The provider is in cool-down from a rate limit and has no
+ *      cached data. Shows the provider name + "WAIT" / "ERR" with
+ *      an optional "rate limit" subvalue.
+ *
+ * Both cases used to render as a flat dark tile (label + value on
+ * a stale-dimmed #111827 background, no glyph, no brand color),
+ * which made them visually indistinguishable from each other AND
+ * from a broken/unassigned button. Now every placeholder carries:
+ *
+ *   - the provider's watermark glyph (same layout as a live tile)
+ *   - the provider's brand color as the fill (even though ratio=0
+ *     suppresses the meter rect, keeping it in the input lets the
+ *     glyph sit against the expected color family)
+ *   - no `stale: true` — the whole-tile 0.45 opacity dim turned
+ *     the glyph into an invisible ghost. The "—" value + empty
+ *     meter already signal "nothing to show" without dimming
+ *     everything into a blur.
+ *
+ * Respects the global/per-key showGlyph toggle so a user who
+ * explicitly hid glyphs on a button sees a glyph-less placeholder
+ * too (consistency with the live metric view).
+ */
+function placeholderFace(opts: {
+  provider: Provider;
+  label: string;
+  value: string;
+  subvalue?: string | undefined;
+  keySettings: KeySettings;
+}): string {
+  const input: Parameters<typeof renderButtonSvg>[0] = {
+    label: opts.label,
+    value: opts.value,
+    fill: opts.provider.brandColor,
+  };
+  if (opts.subvalue) input.subvalue = opts.subvalue;
+  if (opts.keySettings.bgColor && /^#[0-9a-fA-F]{3,8}$/.test(opts.keySettings.bgColor)) {
+    input.bg = opts.keySettings.bgColor;
+  }
+  if (opts.keySettings.textColor && /^#[0-9a-fA-F]{3,8}$/.test(opts.keySettings.textColor)) {
+    input.fg = opts.keySettings.textColor;
+  }
+  if (opts.keySettings.showBorder === false) input.border = false;
+  input.valueSize = opts.keySettings.valueSize ?? getDefaultValueSize();
+  input.subvalueSize = opts.keySettings.subvalueSize ?? getDefaultSubvalueSize();
+  const wantGlyph = getShowGlyphs() && opts.keySettings.showGlyph !== false;
+  if (wantGlyph) {
+    const glyph = PROVIDER_ICONS[opts.provider.id];
+    if (glyph) {
+      input.glyph = glyph;
+      input.glyphMode = "watermark";
+    }
+  } else {
+    input.showGlyph = false;
+  }
+  return renderButtonSvg(input);
 }
 
 /**

@@ -8,15 +8,8 @@ you can tell at a glance how much runway you have left.
 
 ![Usage Buttons in Stream Deck](docs/main.png)
 
-Inspired by [CodexBar](https://github.com/steipete/CodexBar) (macOS menu
-bar); this project targets the Stream Deck and runs on **macOS and
-Windows**. It is not a fork of CodexBar — we consume the same public
-provider data sources but ship an entirely separate plugin.
-
-## Status
-
-Early scaffolding. See `tmp/CodexBar/` (gitignored) for the reference
-implementation we're porting concepts from.
+Inspired by [CodexBar](https://github.com/steipete/CodexBar) for macOS.
+Runs on **Windows and macOS**.
 
 ## Settings
 
@@ -98,8 +91,4 @@ Full dev workflow lives in [AGENTS.md](AGENTS.md).
 
 ## License
 
-[MIT](LICENSE) — same as [CodexBar](https://github.com/steipete/CodexBar),
-the Swift macOS menu bar app this plugin takes its design cues from.
-Provider icon paths and brand colors under `src/providers/` are adapted
-from CodexBar's MIT-licensed resources; see
-[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for full attribution.
+[MIT](LICENSE) · [Third-party licenses](THIRD_PARTY_LICENSES.md)

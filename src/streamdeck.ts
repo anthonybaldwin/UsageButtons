@@ -87,6 +87,10 @@ export type OutboundEvent =
   | {
       event: "showOk";
       context: string;
+    }
+  | {
+      event: "openUrl";
+      payload: { url: string };
     };
 
 /** Events we receive from Stream Deck → plugin. */
@@ -239,6 +243,10 @@ export class StreamDeckConnection {
       context,
       payload: { title, target: 0 },
     });
+  }
+
+  openUrl(url: string): void {
+    this.send({ event: "openUrl", payload: { url } });
   }
 
   log(message: string): void {

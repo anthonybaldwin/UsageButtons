@@ -290,7 +290,7 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
           renderButtonSvg({
             label: "UPDATE",
             value: `v${latest}`,
-            subvalue: "new version",
+            subvalue: "New Version",
             fill: "#f59e0b",
             valueSize: "medium",
           }),
@@ -409,10 +409,21 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
       return;
     }
     case "keyDown": {
-      // User-initiated refresh: force a cache bypass (still gated
-      // by the per-provider cool-down so we don't fight rate limits).
       const ctx = event.context;
-      if (ctx) void refreshKey(conn, ctx, { force: true });
+      if (!ctx) return;
+      // If an update is available, pressing any button opens the
+      // GitHub Releases page in the user's default browser instead
+      // of refreshing data (the buttons are all showing "UPDATE"
+      // anyway, so a data refresh isn't useful).
+      if (!getSkipUpdateCheck() && isUpdateAvailable()) {
+        conn.openUrl(
+          "https://github.com/anthonybaldwin/UsageButtons/releases/latest",
+        );
+        return;
+      }
+      // Normal: force a cache bypass (still gated by the per-provider
+      // cool-down so we don't fight rate limits).
+      void refreshKey(conn, ctx, { force: true });
       return;
     }
     default:
@@ -655,7 +666,7 @@ function showUpdateFace(conn: StreamDeckConnection): void {
   const svg = renderButtonSvg({
     label: "UPDATE",
     value: `v${latest}`,
-    subvalue: "new version",
+    subvalue: "New Version",
     fill: "#f59e0b",
     valueSize: "medium",
   });

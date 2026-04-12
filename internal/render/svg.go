@@ -198,11 +198,18 @@ func RenderButton(in ButtonInput) string {
 			xf := ContentFitTransform(in.Glyph.D, gxOff, gyOff, gSize, gSize)
 
 			fillLum := hexLuminance(fill)
-			frontColor := bg
-			frontOpacity := 0.30
-			if fillLum < 0.15 {
+			var frontColor string
+			var frontOpacity float64
+			if fillLum > 0.3 {
+				// Bright fill (brand colors like Claude orange) — dark
+				// knockout so the glyph doesn't wash out the color.
+				frontColor = bg
+				frontOpacity = 0.30
+			} else {
+				// Dark fill (reference cards, empty meters) — white
+				// glyph so it's actually visible against the dark bg.
 				frontColor = fg
-				frontOpacity = 0.25
+				frontOpacity = 0.40
 			}
 
 			glyphBack = fmt.Sprintf(

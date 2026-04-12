@@ -51,6 +51,17 @@ export interface MetricValue {
    * critical for "low-is-good" metrics).
    */
   numericMax?: number;
+  /**
+   * Pre-percentage raw count remaining (e.g. 42 credits remaining).
+   * Used by `showRawCounts` to display `rawCount/rawMax` instead of
+   * the normal subtext. Only meaningful when `rawMax` is also set.
+   */
+  rawCount?: number;
+  /**
+   * Pre-percentage raw total (e.g. 56 total credits). Pair with
+   * `rawCount` to enable the `showRawCounts` display.
+   */
+  rawMax?: number;
   /** Optional unit string for display, e.g. `"%"`, `" credits"`. */
   unit?: string;
   /** Optional 0..1 ratio driving the button fill. */

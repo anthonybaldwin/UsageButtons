@@ -158,7 +158,8 @@ export class WarpProvider implements Provider {
           unit: "%",
           ratio: remainingPct / 100,
           direction: "up",
-          caption: `${remaining}/${info.requestLimit}`,
+          rawCount: remaining,
+          rawMax: info.requestLimit,
           updatedAt: now,
         };
         if (resetSecs !== undefined) m.resetInSeconds = resetSecs;
@@ -187,7 +188,8 @@ export class WarpProvider implements Provider {
           unit: "%",
           ratio: remainPct / 100,
           direction: "up",
-          caption: `${totalRemaining}/${totalGranted}`,
+          rawCount: totalRemaining,
+          rawMax: totalGranted,
           updatedAt: now,
         });
       }

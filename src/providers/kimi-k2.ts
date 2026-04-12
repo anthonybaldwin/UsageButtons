@@ -158,7 +158,8 @@ export class KimiK2Provider implements Provider {
           unit: "%",
           ratio: remainPct / 100,
           direction: "up",
-          caption: `${Math.round(r)}/${Math.round(total)}`,
+          rawCount: Math.round(r),
+          rawMax: Math.round(total),
           updatedAt: now,
         });
       } else if (r > 0) {

@@ -463,10 +463,6 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       unit: "%",
       ratio: remPct / 100,
       direction: "up",
-      // Static "Monthly" caption disambiguates what the percentage
-      // is relative to (monthly extras cap, not the session or
-      // weekly windows which are on their own countdowns).
-      caption: "Monthly",
       updatedAt: now,
     },
     {

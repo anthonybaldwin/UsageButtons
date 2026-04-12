@@ -229,7 +229,11 @@ const key: "win" | "mac" =
     ? positional
     : currentTargetKey();
 
-const reload = !noReload;
+// Only kill/relaunch Stream Deck when building for the current
+// platform. Cross-compiling (e.g. bun build:mac on Windows) doesn't
+// touch the running plugin binary, so restarting is pointless.
+const isNativeBuild = key === currentTargetKey();
+const reload = !noReload && isNativeBuild;
 const wasRunning = reload && (await isStreamDeckRunning());
 
 if (wasRunning) {

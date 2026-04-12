@@ -609,25 +609,51 @@ function renderMetric(
   metric: MetricValue,
   settings: KeySettings,
 ): string {
-  // Inverted view: when the plugin-wide `invertFill` setting is on,
+  // Inverted view — when the plugin-wide `invertFill` setting is on,
   // every PERCENT metric renders as "X% used" instead of
-  // "X% remaining" (or vice versa) across the entire plugin. Flip
-  // BOTH the displayed number and the fill ratio together —
-  // flipping just the ratio would render a 2% bar with "98%" text,
-  // which is nonsense.
+  // "X% remaining" (or vice versa). Flips BOTH the displayed number
+  // AND the fill ratio together; flipping just the ratio would
+  // produce a 2% bar with "98%" text on top, which is nonsense.
   //
-  // CRITICAL: invert applies only to percent metrics (unit === "%"),
-  // never to dollar / count metrics. A "$50 LIMIT" button with a
-  // usage-progress meter should NOT have its meter flipped just
-  // because the user wants percent metrics to read as "used" — the
-  // dollar metric's ratio is already the right semantic at rest
-  // and inverting it would either drain the bar as you spend more
-  // (wrong direction) or display "$50" with a full bar at $0
-  // spent (also wrong).
+  // Gate: `numericUnit === "percent"` ONLY.
+  //
+  // Deliberately NOT flipping three other classes of metric, each
+  // for its own reason:
+  //
+  //   1. Reference tiles (BALANCE, LIMIT, CREDITS) — pinned to
+  //      ratio: 1 by design. Inverting ratio 1 → 0 just empties
+  //      the tile, which doesn't express any valid alternate
+  //      viewpoint. A "static reference tile, but now invisible"
+  //      isn't the flip of anything useful. The numericUnit check
+  //      catches these today because they're all dollar metrics.
+  //
+  //   2. Dollar progress meters (SPENT) — they DO have a progress
+  //      axis (spent / limit), so technically they could flip to
+  //      a "headroom in dollars" view. We deliberately don't,
+  //      because the display number flip is semantically ugly:
+  //      "$0.00 SPENT" flipping to "$50.00 SPENT" reads as a lie
+  //      about the label's meaning. The HEADROOM metric already
+  //      provides the exact "how much left" viewpoint this would
+  //      be trying to express — users who want that view should
+  //      add a HEADROOM tile instead of toggling a global flip
+  //      that mangles dollar figures.
+  //
+  //   3. Binary state tiles (EXTRA USAGE ON/OFF, RELOAD ON/OFF) —
+  //      ratio is 1 or 0 based on a state flag, not progress.
+  //      Inverting "ON" to "OFF" would lie about the provider's
+  //      actual state. The numericUnit check catches these because
+  //      they have no numericUnit at all.
+  //
+  // Using `numericUnit === "percent"` rather than the old
+  // `unit === "%"` display-string match, because numericUnit is
+  // the semantic enum field — a future metric could legitimately
+  // want a display unit of "%" without being conceptually a
+  // percent metric, and we shouldn't flip it just because it
+  // matched a display string.
   const invert = getInvertFill();
   let effectiveValue: number | string = metric.value;
   let effectiveRatio = metric.ratio;
-  if (invert && metric.unit === "%") {
+  if (invert && metric.numericUnit === "percent") {
     if (typeof effectiveValue === "number") {
       effectiveValue = Math.max(0, Math.min(100, 100 - effectiveValue));
     }

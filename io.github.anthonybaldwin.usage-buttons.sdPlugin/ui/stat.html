@@ -124,6 +124,16 @@
       <label for="hideLabel">Hide built-in label</label>
     </div>
 
+    <label for="captionOverride">Subtext override (blank = metric default)</label>
+    <input id="captionOverride" type="text" placeholder="e.g. Work, Monthly, Prepaid">
+    <p class="hint">
+      Replaces the static subvalue text under the big number
+      (e.g. "Prepaid" on BALANCE, "Monthly" on LIMIT). Reset
+      countdowns always win over this — if the metric has a
+      live timer, uncheck <strong>Show reset countdown</strong>
+      below to let the override through.
+    </p>
+
     <label for="valueSize">Big-number size</label>
     <select id="valueSize">
       <option value="">Use plugin default</option>
@@ -387,6 +397,7 @@
         settings.refreshMinutes != null ? String(settings.refreshMinutes) : "";
       document.getElementById("labelOverride").value = settings.labelOverride || "";
       document.getElementById("hideLabel").checked = !!settings.hideLabel;
+      document.getElementById("captionOverride").value = settings.captionOverride || "";
       document.getElementById("showResetTimer").checked = settings.showResetTimer !== false;
       document.getElementById("showBorder").checked = settings.showBorder !== false;
       document.getElementById("showGlyph").checked = settings.showGlyph !== false;
@@ -467,6 +478,7 @@
         refreshMinutes: refreshRaw === "" ? undefined : Number(refreshRaw),
         labelOverride:  document.getElementById("labelOverride").value,
         hideLabel:      document.getElementById("hideLabel").checked,
+        captionOverride: document.getElementById("captionOverride").value,
         showResetTimer: document.getElementById("showResetTimer").checked,
         showBorder:     document.getElementById("showBorder").checked,
         showGlyph:      document.getElementById("showGlyph").checked,
@@ -528,6 +540,7 @@
     });
     for (const id of [
       "metric", "refreshMinutes", "labelOverride", "hideLabel",
+      "captionOverride",
       "showResetTimer", "showBorder", "showGlyph",
       "valueSize", "subvalueSize",
       "fillDirection", "fillColor", "bgColor", "textColor",

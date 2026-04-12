@@ -332,9 +332,14 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
       // of meter position:
       //
       //   - Back copy: inside the clip path, BEHIND the fill rect,
-      //     in the foreground color (usually white) at 0.50
-      //     opacity. Reads strongly against the dark un-filled bg
-      //     like a bright watermark.
+      //     in the foreground color (usually white) at 0.70
+      //     opacity. Reads clearly against the dark un-filled bg.
+      //     Was 0.50 originally — bumped because thin-line glyphs
+      //     (Claude's in particular) blend with the dark bg at
+      //     0.50 and drop below comfortable legibility on a
+      //     144px tile. 0.70 over #111827 blends to ~#B3B6BB
+      //     which reads as a proper watermark without feeling
+      //     like a foreground element.
       //
       //   - Front copy: OVER the fill rect, in the BACKGROUND
       //     color at 0.55 opacity. Reads as a dark cut-out of the

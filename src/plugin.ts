@@ -52,6 +52,17 @@ interface KeySettings {
   labelOverride?: string;
   /** Hide the inner SVG label entirely (e.g. when using the Stream Deck native title). */
   hideLabel?: boolean;
+  /**
+   * Optional override for the static caption (subvalue slot).
+   * Blank = use the metric's default caption if it has one, else
+   * nothing. ONLY applies when the metric has no live countdown
+   * to render — a reset countdown ALWAYS wins over both the
+   * metric's default caption and this override, because countdowns
+   * are dynamic data and the override is for static labeling.
+   * To hide the countdown and show a custom caption instead, set
+   * `showResetTimer: false` AND `captionOverride: "..."`.
+   */
+  captionOverride?: string;
   /** Fill color hex, e.g. "#10b981". Blank = metric default. */
   fillColor?: string;
   /** Background color hex. Blank = dark default. */
@@ -746,23 +757,39 @@ function renderMetric(
     input.showGlyph = false;
   }
 
-  // Subvalue slot priority:
-  //   1. live reset-countdown (`resetInSeconds`) if the user hasn't
-  //      hidden it via showResetTimer
-  //   2. static caption (e.g. "Prepaid" on BALANCE) as a fallback
-  //      label for metrics that have no countdown but want a
-  //      descriptive line under the big number
+  // Subvalue slot priority (highest to lowest):
   //
-  // This lets the Claude extra-usage-balance tile render
-  // "$204.80" + "Prepaid" even though the balance doesn't expire
-  // on a timer, without needing a brand-new rendering path.
+  //   1. Live reset-countdown (`resetInSeconds`) — only when the
+  //      user hasn't hidden it via showResetTimer. Countdowns are
+  //      dynamic data and always win over static captions, because
+  //      "4h 12m" is more useful than "Session" under the big %.
+  //
+  //   2. Per-key captionOverride — the user's custom subtext for
+  //      THIS button. Lets you tag one BALANCE tile with "Work"
+  //      and another with "Personal", or override the default
+  //      "Prepaid" caption with whatever label makes sense on
+  //      your specific dashboard.
+  //
+  //   3. Metric's default caption (e.g. "Prepaid" on BALANCE,
+  //      "Monthly" on HEADROOM / LIMIT) — the provider-specified
+  //      fallback label when the metric has no countdown.
+  //
+  // To pin a custom caption on a metric that normally shows a
+  // countdown, the user sets `showResetTimer: false` AND
+  // `captionOverride: "..."` — the countdown is hidden, the
+  // override takes priority #2 → #1 (since #1 no longer applies).
   if (
     metric.resetInSeconds !== undefined &&
     settings.showResetTimer !== false
   ) {
     input.subvalue = formatCountdown(metric.resetInSeconds);
-  } else if (metric.caption && metric.caption.trim().length > 0) {
-    input.subvalue = metric.caption;
+  } else {
+    const override = settings.captionOverride?.trim();
+    if (override && override.length > 0) {
+      input.subvalue = override;
+    } else if (metric.caption && metric.caption.trim().length > 0) {
+      input.subvalue = metric.caption;
+    }
   }
   if (metric.stale !== undefined) input.stale = metric.stale;
   return renderButtonSvg(input);

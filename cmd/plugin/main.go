@@ -15,6 +15,7 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/render"
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 	"github.com/anthonybaldwin/UsageButtons/internal/streamdeck"
+	"github.com/anthonybaldwin/UsageButtons/internal/update"
 
 	// Register all providers via init().
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/claude"
@@ -54,8 +55,9 @@ func main() {
 	}
 	defer conn.Close()
 
-	// Wire cache logging to Stream Deck's log file.
+	// Wire logging sinks to Stream Deck's log file.
 	providers.LogSink = func(msg string) { conn.Log(msg) }
+	update.LogSink = func(msg string) { conn.Log(msg) }
 
 	// Request global settings before first tick.
 	conn.GetGlobalSettings()
@@ -91,6 +93,15 @@ func displayRefreshLoop(conn *streamdeck.Connection) {
 }
 
 func scheduleDueKeys(conn *streamdeck.Connection) {
+	// Update check — no-ops internally unless the 6h cache expired.
+	if !settings.SkipUpdateCheckEnabled() {
+		update.Check()
+		if update.IsAvailable() {
+			showUpdateFace(conn)
+			return
+		}
+	}
+
 	mu.Lock()
 	now := time.Now()
 	var due []string
@@ -170,6 +181,25 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 				break
 			}
 		}
+	}
+
+	// If an update is pending, show the update face.
+	if !settings.SkipUpdateCheckEnabled() && update.IsAvailable() {
+		mu.Lock()
+		visibleKeys[ev.Context] = &visibleKey{
+			context: ev.Context, action: ev.Action,
+			settings: ks, lastPollAt: time.Now(),
+		}
+		mu.Unlock()
+		latest := update.LatestVersion()
+		if latest == "" {
+			latest = "?"
+		}
+		conn.SetImage(ev.Context, render.RenderButton(render.ButtonInput{
+			Label: "UPDATE", Value: "v" + latest,
+			Subvalue: "New Version", Fill: "#f59e0b", ValueSize: "medium",
+		}))
+		return
 	}
 
 	// Try to render from cache immediately (avoid loading flash).
@@ -270,7 +300,32 @@ func handleKeyDown(conn *streamdeck.Connection, ev streamdeck.Event) {
 	if ev.Context == "" {
 		return
 	}
+	// If an update is available, pressing any button opens the
+	// appropriate URL instead of refreshing data.
+	if !settings.SkipUpdateCheckEnabled() && update.IsAvailable() {
+		conn.OpenURL(update.URL())
+		return
+	}
 	go refreshKey(conn, ev.Context, true)
+}
+
+func showUpdateFace(conn *streamdeck.Connection) {
+	latest := update.LatestVersion()
+	if latest == "" {
+		latest = "?"
+	}
+	svg := render.RenderButton(render.ButtonInput{
+		Label:     "UPDATE",
+		Value:     "v" + latest,
+		Subvalue:  "New Version",
+		Fill:      "#f59e0b",
+		ValueSize: "medium",
+	})
+	mu.Lock()
+	for ctx := range visibleKeys {
+		conn.SetImage(ctx, svg)
+	}
+	mu.Unlock()
 }
 
 func refreshKey(conn *streamdeck.Connection, context string, force bool) {

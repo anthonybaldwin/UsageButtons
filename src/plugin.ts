@@ -11,7 +11,7 @@ import type { InboundEvent, WillAppearEvent } from "./streamdeck.ts";
 import { renderButtonSvg, renderLoadingSvg } from "./render.ts";
 import { PROVIDER_ICONS } from "./providers/provider-icons.generated.ts";
 import { getProvider } from "./providers/registry.ts";
-import { getSnapshot, setCacheLogSink } from "./providers/cache.ts";
+import { getSnapshot, peekSnapshot, setCacheLogSink } from "./providers/cache.ts";
 import { setClaudeDebugLogSink } from "./providers/claude.ts";
 import { setClaudeWebLogSink } from "./providers/claude-web.ts";
 import type { MetricValue, Provider } from "./providers/types.ts";
@@ -201,22 +201,58 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
       const e = event as WillAppearEvent;
       if (e.action !== ACTION_UUID) return;
       const settings = e.payload.settings as KeySettings;
+      const providerId = settings.providerId ?? DEFAULT_PROVIDER;
+      const metricId = settings.metricId ?? DEFAULT_METRIC;
+
+      // Check if we already have cached data for this provider.
+      // If so, render directly from cache — no loading face, no
+      // async fetch, no flicker. This is the key fix for the
+      // page-switch rate-limit problem: switching Stream Deck pages
+      // fires willAppear on every key, and the old code kicked off
+      // a fresh fetch for each one. Now we serve from cache and
+      // let the scheduler handle the next poll at the normal cadence.
+      const cached = peekSnapshot(providerId);
+      const provider = getProvider(providerId);
+      if (cached && provider) {
+        const metric = cached.metrics.find((m) => m.id === metricId);
+        visibleKeys.set(e.context, {
+          context: e.context,
+          settings,
+          lastPollAt: Date.now(),
+        });
+        if (metric) {
+          conn.setImage(
+            e.context,
+            renderMetric(provider, cached.providerName, metric, settings),
+          );
+        } else {
+          conn.setImage(
+            e.context,
+            placeholderFace({
+              provider,
+              label: deriveLabelFromMetricId(metricId),
+              value: "—",
+              keySettings: settings,
+            }),
+          );
+        }
+        conn.log(
+          `key appeared with cached data (now tracking ${visibleKeys.size} visible key(s))`,
+        );
+        return;
+      }
+
+      // No cache — first-ever fetch. Show loading face + kick off
+      // the real fetch.
       visibleKeys.set(e.context, {
         context: e.context,
         settings,
         lastPollAt: 0,
       });
-      // Paint a loading face synchronously so the button doesn't
-      // show the static manifest placeholder while the first
-      // async fetch resolves. This is what the user sees for ~1-2s
-      // on plugin start / key drag — had to be clean.
       conn.setImage(e.context, loadingFaceFor(settings));
       conn.log(
-        `key appeared (now tracking ${visibleKeys.size} visible key(s))`,
+        `key appeared, no cache (now tracking ${visibleKeys.size} visible key(s))`,
       );
-      // Kick off the real fetch. refreshKey will overwrite the
-      // loading face with the real data (or an error face) when
-      // the snapshot arrives.
       void refreshKey(conn, e.context, { force: false });
       return;
     }
@@ -500,6 +536,8 @@ function deriveLabelFromMetricId(metricId: string): string {
     "extra-usage-enabled": "EXTRA USAGE",
     "credits-balance": "CREDITS",
     "credits": "CREDITS",
+    "cost-today": "TODAY",
+    "cost-30d": "30 DAYS",
   };
   if (KNOWN[metricId]) return KNOWN[metricId];
   // Fallback: first hyphen-segment uppercase.

@@ -39,7 +39,7 @@ new provider.
 | **Amp** | browser cookies → settings HTML scrape | ⚠️ | manual only |
 | **Ollama** | browser cookies → settings HTML scrape | ⚠️ | manual only |
 | **Perplexity** | browser cookies | ⚠️ | manual only |
-| **Antigravity** | LSP port detection via `lsof`/`ps` | ❌ | deprioritize; needs Windows process enumeration + localhost probe |
+| **Antigravity** | LSP port detection via `lsof`/`ps` — probes `language_server_macos` process | ❌ | **macOS-only.** Hardcodes process name `language_server_macos`, uses `ps`/`lsof` for port detection + localhost TLS probe. No Windows equivalent exists. CodexBar's 2026-04-12 commit (69a715f) added TLS certificate handling but didn't change the macOS-only architecture. |
 
 **Shipping order:** the ✅ rows first, in roughly the order listed
 above (start with OpenRouter — cleanest contract — then Claude and
@@ -61,10 +61,23 @@ so any of these can be bound to a button.
 | `credits-percent` | credits / limit | up | monthly or n/a |
 | `plan-percent` | monthly plan usage | up | 30d |
 | `code-review-percent` | Codex OpenAI dashboard extras | up | 5h |
-| `cost-session-usd` / `cost-30d-usd` | local log scan totals | none | n/a |
+| `cost-today` / `cost-30d` | local JSONL log scan — token costs in USD | none (ratio=1) | n/a |
 | `overage-spent-usd` / `overage-limit-usd` | Claude Extra usage | down | monthly |
+| `premium-percent` / `chat-percent` | Copilot premium interactions / chat remaining | up | monthly |
+| `total-percent` / `auto-percent` / `api-percent` | Cursor plan usage remaining | up | billing cycle |
+| `ondemand-spent` | Cursor on-demand spend in USD | up | billing cycle |
+| `tokens-percent` / `mcp-percent` | z.ai token / MCP usage remaining | up | variable |
+| `credits-balance` / `credits-used` | OpenRouter / Kimi K2 credit balance | up | n/a |
+| `credits-percent` / `bonus-credits` | Warp request credits + bonus | up | refresh cycle |
 | `status-indicator` | operational / degraded / outage | none | n/a |
 | `reset-countdown` | seconds until next reset | down | matches window |
+
+### Pace (derived metric)
+
+The weekly meter's `caption` field now carries a pace label when the
+reset countdown is hidden: "On pace", "Behind (-X%)", or "Ahead (+X%)".
+Computed as `delta = actualUsed% - (elapsed / windowDuration * 100)`.
+Applied to both Claude and Codex weekly metrics.
 
 All "remaining" metrics render with fill **up** (button fills as you
 have more runway) — the intuitive "tank of gas" feel. "Used" metrics

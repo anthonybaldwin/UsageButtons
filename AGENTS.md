@@ -68,15 +68,21 @@ with an "UPDATE" face on your own dev machine.
 
 ## GitHub repo metadata
 
-Keep the repo description, topics, and homepage in sync when
-providers are added/removed or the project scope changes:
+**When adding/removing a provider, changing the runtime, or shifting
+project scope, update ALL of these in the same commit or PR:**
 
-```
-gh repo edit --description "..." --add-topic foo --remove-topic bar
-```
+1. GitHub topics: `gh repo edit --add-topic foo --remove-topic bar`
+2. GitHub description: `gh repo edit --description "..."`
+3. README.md (repo layout, provider list, build instructions)
+4. docs/index.html (website — providers list, install steps, features)
+5. AGENTS.md (this file — topics list, build commands)
+
+This is a hard rule, not a nice-to-have. Stale metadata confuses
+users and search engines.
 
 Current topics: `go`, `golang`, `stream-deck`, `stream-deck-plugin`,
-`elgato`, `ai-tools`, `usage-monitoring`, `claude`, `copilot`, `cursor`.
+`elgato`, `ai-tools`, `usage-monitoring`, `claude`, `copilot`,
+`cursor`, `openrouter`, `openai-codex`, `warp`.
 
 ## Stream Deck plugin notes
 

@@ -106,6 +106,17 @@ function escapeXml(text: string): string {
     .replace(/'/g, "&apos;");
 }
 
+/** Relative luminance of a hex color (0 = black, 1 = white). */
+function hexLuminance(hex: string): number {
+  const m = /^#?([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/.exec(hex);
+  if (!m) return 0;
+  const vals = [m[1]!, m[2]!, m[3]!].map((c) => {
+    const v = parseInt(c, 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * vals[0]! + 0.7152 * vals[1]! + 0.0722 * vals[2]!;
+}
+
 /**
  * Compute the fill rectangle for a given direction + ratio.
  * All coordinates are in the 0..CANVAS space.
@@ -385,8 +396,15 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
       const gxOff = (CANVAS - gSize) / 2;
       const gyOff = Math.round(zoneTop + (zoneHeight - gSize) / 2);
       const gScale = gSize / vbW;
+      // Pick glyph front color based on fill brightness. On bright
+      // fills (brand colors), use dark bg at low opacity for a
+      // subtle knockout. On dark fills (reference card gray), use
+      // light fg so the logo is actually visible.
+      const fillLum = hexLuminance(fill);
+      const frontColor = fillLum < 0.15 ? fg : bg;
+      const frontOpacity = fillLum < 0.15 ? 0.25 : 0.30;
       glyphElementBack = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${fg}" fill-opacity="0.70"><path d="${input.glyph.d}"/></g>`;
-      glyphElementFront = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${bg}" fill-opacity="0.30"><path d="${input.glyph.d}"/></g>`;
+      glyphElementFront = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${frontColor}" fill-opacity="${frontOpacity}"><path d="${input.glyph.d}"/></g>`;
     } else if (glyphMode === "centered") {
       // 60px focal logo. Smaller than the watermark so it doesn't
       // crowd the border + label + countdown around it. Currently

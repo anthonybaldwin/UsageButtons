@@ -133,11 +133,10 @@
     <label for="captionOverride">Subtext override (blank = metric default)</label>
     <input id="captionOverride" type="text" placeholder="e.g. Work, Monthly, Prepaid">
     <p class="hint">
-      Replaces the static subvalue text under the big number
-      (e.g. "Prepaid" on BALANCE, "Monthly" on LIMIT). Reset
-      countdowns always win over this — if the metric has a
-      live timer, uncheck <strong>Show reset countdown</strong>
-      below to let the override through.
+      Replaces the subtext under the big number (e.g. "Remaining",
+      "Used", "Prepaid"). Reset countdowns always win — if the
+      metric has a live timer, uncheck <strong>Show reset
+      countdown</strong> below to let the override through.
     </p>
 
     <label for="valueSize">Big-number size</label>
@@ -148,7 +147,7 @@
       <option value="large">Large</option>
     </select>
 
-    <label for="subvalueSize">Reset-countdown size</label>
+    <label for="subvalueSize">Subtext size</label>
     <select id="subvalueSize">
       <option value="">Use plugin default</option>
       <option value="small">Small</option>
@@ -156,31 +155,37 @@
       <option value="large">Large</option>
     </select>
 
-    <div class="checkbox-row">
-      <input id="showResetTimer" type="checkbox" checked>
-      <label for="showResetTimer">Show reset countdown under the number</label>
+    <div class="feature-timer">
+      <div class="checkbox-row">
+        <input id="showResetTimer" type="checkbox" checked>
+        <label for="showResetTimer">Show reset countdown under the number</label>
+      </div>
     </div>
 
-    <div class="checkbox-row">
-      <input id="showRawCounts" type="checkbox">
-      <label for="showRawCounts">Show raw counts (e.g. 42/56)</label>
+    <div class="feature-rawCounts">
+      <div class="checkbox-row">
+        <input id="showRawCounts" type="checkbox">
+        <label for="showRawCounts">Show raw counts (e.g. 42/56)</label>
+      </div>
+      <p class="hint">
+        When checked, percent metrics with raw count data show the
+        underlying count instead of "Remaining" / "Used". Auto-enables
+        for credit-based providers (Warp, Kimi K2, z.ai, Copilot) when
+        the API returns raw counts. Uncheck to force off.
+      </p>
     </div>
-    <p class="hint">
-      When checked, percent metrics with raw count data show the
-      underlying count instead of "Remaining" / "Used". Auto-enables
-      for credit-based providers (Warp, Kimi K2, z.ai, Copilot) when
-      the API returns raw counts. Uncheck to force off.
-    </p>
 
-    <div class="group-heading">Fill</div>
+    <div class="feature-meter">
+      <div class="group-heading">Fill</div>
 
-    <label for="fillDirection">Fill direction</label>
-    <select id="fillDirection">
-      <option value="up">Up (default)</option>
-      <option value="down">Down</option>
-      <option value="right">Right</option>
-      <option value="left">Left</option>
-    </select>
+      <label for="fillDirection">Fill direction</label>
+      <select id="fillDirection">
+        <option value="up">Up (default)</option>
+        <option value="down">Down</option>
+        <option value="right">Right</option>
+        <option value="left">Left</option>
+      </select>
+    </div>
 
     <div class="group-heading">Colors</div>
 
@@ -209,24 +214,24 @@
       <label for="showGlyph">Show provider logo on this button</label>
     </div>
 
-    <div class="group-heading">Warn / critical thresholds</div>
-    <p class="hint" style="margin: 0 0 8px">
-      When the metric's value drops below these thresholds, the
-      fill switches to the warn / critical color. For percent
-      metrics the units are 0–100; for dollar metrics they're raw
-      dollars. Leave blank to use per-metric defaults (20/10 for
-      percent metrics, $10/$0 for dollar metrics — so a balance
-      button goes orange below $10 and red when negative).
-    </p>
-    <div class="row">
-      <label for="warnBelow">Warn below</label>
-      <input id="warnBelow" type="text" placeholder="(default)" style="flex: 1">
-      <input id="warnColor" type="color" value="#f59e0b">
-    </div>
-    <div class="row">
-      <label for="criticalBelow">Critical below</label>
-      <input id="criticalBelow" type="text" placeholder="(default)" style="flex: 1">
-      <input id="criticalColor" type="color" value="#ef4444">
+    <div class="feature-thresholds">
+      <div class="group-heading">Warn / critical thresholds</div>
+      <p class="hint" style="margin: 0 0 8px">
+        When the metric's dollar value crosses these thresholds,
+        the tile switches to the warn / critical color. Units are
+        raw dollars. Leave blank for defaults ($10 warn / $0
+        critical for balances; 80% / 100% of cap for spend meters).
+      </p>
+      <div class="row">
+        <label for="warnBelow">Warn below</label>
+        <input id="warnBelow" type="text" placeholder="(default)" style="flex: 1">
+        <input id="warnColor" type="color" value="#f59e0b">
+      </div>
+      <div class="row">
+        <label for="criticalBelow">Critical below</label>
+        <input id="criticalBelow" type="text" placeholder="(default)" style="flex: 1">
+        <input id="criticalColor" type="color" value="#ef4444">
+      </div>
     </div>
 
     <p class="hint">
@@ -287,7 +292,7 @@
       <option value="medium">Medium</option>
       <option value="large" selected>Large</option>
     </select>
-    <label for="defaultSubvalueSize">Reset-countdown size (default for all buttons)</label>
+    <label for="defaultSubvalueSize">Subtext size (default for all buttons)</label>
     <select id="defaultSubvalueSize">
       <option value="small">Small</option>
       <option value="medium">Medium</option>
@@ -409,56 +414,76 @@
   </div>
 
   <script>
+    // Metric type flags control which PI settings groups are visible.
+    //   meter:      has a fill bar (fill direction, fill color meaningful)
+    //   thresholds: warn/critical color thresholds are meaningful
+    //   timer:      can show a reset countdown
+    //   rawCounts:  can show raw count data (e.g. 42/56)
+    // Metrics not listed default to { meter: false, thresholds: false, timer: false, rawCounts: false }
+    const T = { meter: true, thresholds: true, timer: true, rawCounts: false };
+    const METRIC_FLAGS = {
+      // percent meters — full feature set, rawCounts only where providers supply them
+      "pct":       { meter: true, thresholds: false, timer: true,  rawCounts: true  },
+      // dollar meters — real fill bar, thresholds fire, no rawCounts
+      "dollar-m":  { meter: true, thresholds: true,  timer: false, rawCounts: false },
+      // reference cards (dollar) — no bar, but thresholds are meaningful
+      "ref-dollar":{ meter: false, thresholds: true,  timer: false, rawCounts: false },
+      // reference cards (non-dollar) — no bar, no thresholds
+      "ref":       { meter: false, thresholds: false, timer: false, rawCounts: false },
+      // on/off toggles — nothing
+      "toggle":    { meter: false, thresholds: false, timer: false, rawCounts: false },
+    };
+
     const METRICS = {
       mock: [
-        ["session-percent", "Session % remaining"],
-        ["weekly-percent",  "Weekly % remaining"],
-        ["credits",         "Credits remaining"],
+        ["session-percent", "Session % remaining",  "pct"],
+        ["weekly-percent",  "Weekly % remaining",   "pct"],
+        ["credits",         "Credits remaining",    "ref"],
       ],
       claude: [
-        ["session-percent",           "Session % remaining (5h)"],
-        ["weekly-percent",            "Weekly % remaining"],
-        ["weekly-sonnet-percent",     "Sonnet % remaining (weekly)"],
-        ["extra-usage-enabled",       "Extra usage — ON / OFF"],
-        ["extra-usage-percent",       "Extra usage headroom %"],
-        ["extra-usage-limit",         "Extra usage monthly limit ($)"],
-        ["extra-usage-spent",         "Extra usage spent ($)"],
-        ["extra-usage-balance",       "Prepaid balance ($)"],
-        ["extra-usage-auto-reload",   "Auto-reload ON / OFF"],
-        ["cost-today",                "Cost today (local logs)"],
-        ["cost-30d",                  "Cost last 30 days (local logs)"],
+        ["session-percent",           "Session % remaining (5h)",       "pct"],
+        ["weekly-percent",            "Weekly % remaining",             "pct"],
+        ["weekly-sonnet-percent",     "Sonnet % remaining (weekly)",    "pct"],
+        ["extra-usage-enabled",       "Extra usage — ON / OFF",         "toggle"],
+        ["extra-usage-percent",       "Extra usage headroom %",         "pct"],
+        ["extra-usage-limit",         "Extra usage monthly limit ($)",  "ref-dollar"],
+        ["extra-usage-spent",         "Extra usage spent ($)",          "dollar-m"],
+        ["extra-usage-balance",       "Prepaid balance ($)",            "ref-dollar"],
+        ["extra-usage-auto-reload",   "Auto-reload ON / OFF",           "toggle"],
+        ["cost-today",                "Cost today (local logs)",        "ref-dollar"],
+        ["cost-30d",                  "Cost last 30 days (local logs)", "ref-dollar"],
       ],
       codex: [
-        ["session-percent",  "Session % remaining (5h)"],
-        ["weekly-percent",   "Weekly % remaining"],
-        ["credits-balance",  "Credits remaining ($, paid plans only)"],
-        ["cost-today",       "Cost today (local logs)"],
-        ["cost-30d",         "Cost last 30 days (local logs)"],
+        ["session-percent",  "Session % remaining (5h)",              "pct"],
+        ["weekly-percent",   "Weekly % remaining",                    "pct"],
+        ["credits-balance",  "Credits remaining ($, paid plans only)","ref-dollar"],
+        ["cost-today",       "Cost today (local logs)",               "ref-dollar"],
+        ["cost-30d",         "Cost last 30 days (local logs)",        "ref-dollar"],
       ],
       copilot: [
-        ["premium-percent", "Premium interactions remaining %"],
-        ["chat-percent",    "Chat interactions remaining %"],
+        ["premium-percent", "Premium interactions remaining %", "pct"],
+        ["chat-percent",    "Chat interactions remaining %",    "pct"],
       ],
       cursor: [
-        ["total-percent",   "Total plan usage remaining %"],
-        ["auto-percent",    "Auto / Composer usage remaining %"],
-        ["api-percent",     "API / Named model usage remaining %"],
-        ["ondemand-spent",  "On-demand spend ($)"],
+        ["total-percent",   "Total plan usage remaining %",     "pct"],
+        ["auto-percent",    "Auto / Composer usage remaining %","pct"],
+        ["api-percent",     "API / Named model usage remaining %","pct"],
+        ["ondemand-spent",  "On-demand spend ($)",              "dollar-m"],
       ],
       openrouter: [
-        ["credits-balance", "Credit balance ($)"],
-        ["credits-used",    "Total usage ($)"],
+        ["credits-balance", "Credit balance ($)",  "ref-dollar"],
+        ["credits-used",    "Total usage ($)",     "dollar-m"],
       ],
       warp: [
-        ["credits-percent", "Credits remaining %"],
-        ["bonus-credits",   "Bonus credits remaining %"],
+        ["credits-percent", "Credits remaining %",       "pct"],
+        ["bonus-credits",   "Bonus credits remaining %", "pct"],
       ],
       zai: [
-        ["tokens-percent",  "Token usage remaining %"],
-        ["mcp-percent",     "MCP usage remaining %"],
+        ["tokens-percent",  "Token usage remaining %", "pct"],
+        ["mcp-percent",     "MCP usage remaining %",   "pct"],
       ],
       "kimi-k2": [
-        ["credits-balance", "Credits remaining"],
+        ["credits-balance", "Credits remaining", "pct"],
       ],
     };
 
@@ -510,6 +535,35 @@
         return opt;
       });
       metric.replaceChildren(...options);
+      updateFeatureVisibility(providerId, metric.value);
+    }
+
+    const REFERENCE_CARD_COLOR = "#374151";
+
+    // Returns the appropriate default fill color for a given metric.
+    function defaultFillColor(providerId, metricId) {
+      const list = METRICS[providerId] || [];
+      const entry = list.find(([id]) => id === metricId);
+      const flagKey = entry ? entry[2] : undefined;
+      const flags = (flagKey && METRIC_FLAGS[flagKey]) || {};
+      return flags.meter ? (BRAND_COLORS[providerId] || "#3b82f6") : REFERENCE_CARD_COLOR;
+    }
+
+    // Show/hide PI settings groups based on the selected metric's type
+    function updateFeatureVisibility(providerId, metricId) {
+      const list = METRICS[providerId] || [];
+      const entry = list.find(([id]) => id === metricId);
+      const flagKey = entry ? entry[2] : undefined;
+      const flags = (flagKey && METRIC_FLAGS[flagKey]) || {};
+      const show = (cls, visible) => {
+        for (const el of document.querySelectorAll("." + cls)) {
+          el.style.display = visible ? "" : "none";
+        }
+      };
+      show("feature-meter",      !!flags.meter);
+      show("feature-thresholds", !!flags.thresholds);
+      show("feature-timer",      !!flags.timer);
+      show("feature-rawCounts",  !!flags.rawCounts);
     }
 
     // ---------- Settings plumbing ----------
@@ -522,6 +576,7 @@
       const metricId = settings.metricId || "session-percent";
       document.getElementById("provider").value = providerId;
       populateMetrics(providerId, metricId);
+      updateFeatureVisibility(providerId, metricId);
       document.getElementById("refreshMinutes").value =
         settings.refreshMinutes != null ? String(settings.refreshMinutes) : "";
       document.getElementById("labelOverride").value = settings.labelOverride || "";
@@ -535,9 +590,9 @@
       document.getElementById("subvalueSize").value = settings.subvalueSize || "";
       document.getElementById("fillDirection").value = settings.fillDirection || "up";
       // Fill color: user override wins, otherwise default to the
-      // provider's CodexBar brand color.
+      // provider's brand color for meters, neutral gray for reference cards.
       document.getElementById("fillColor").value =
-        settings.fillColor || BRAND_COLORS[providerId] || "#3b82f6";
+        settings.fillColor || defaultFillColor(providerId, metricId);
       if (settings.bgColor)   document.getElementById("bgColor").value   = settings.bgColor;
       if (settings.textColor) document.getElementById("textColor").value = settings.textColor;
       document.getElementById("warnBelow").value =
@@ -689,9 +744,16 @@
     document.getElementById("provider").addEventListener("change", () => {
       const newProvider = document.getElementById("provider").value;
       populateMetrics(newProvider);
-      if (BRAND_COLORS[newProvider]) {
-        document.getElementById("fillColor").value = BRAND_COLORS[newProvider];
-      }
+      const metricId = document.getElementById("metric").value;
+      document.getElementById("fillColor").value = defaultFillColor(newProvider, metricId);
+      pushSettings();
+    });
+    document.getElementById("metric").addEventListener("change", () => {
+      const providerId = document.getElementById("provider").value;
+      const metricId = document.getElementById("metric").value;
+      updateFeatureVisibility(providerId, metricId);
+      // Update fill color default when switching between meter/reference card metrics
+      document.getElementById("fillColor").value = defaultFillColor(providerId, metricId);
       pushSettings();
     });
     for (const id of [
@@ -739,6 +801,7 @@
     });
 
     applyKeySettings({});
+    updateFeatureVisibility("mock", "session-percent");
     window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
   </script>
 </body>

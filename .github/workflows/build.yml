@@ -78,14 +78,14 @@ jobs:
             -x 'io.github.anthonybaldwin.usage-buttons.sdPlugin/logs/*'
 
       - name: Upload Windows binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: plugin-win
           path: io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-win.exe
           if-no-files-found: error
 
       - name: Upload macOS binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: plugin-mac
           path: |
@@ -95,7 +95,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload .streamDeckPlugin bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: streamDeckPlugin
           path: io.github.anthonybaldwin.usage-buttons.streamDeckPlugin

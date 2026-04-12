@@ -1,6 +1,6 @@
 {
   "name": "UsageButtons",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Stream Deck plugin that shows AI-coding-assistant usage stats as live buttons.",
   "type": "module",

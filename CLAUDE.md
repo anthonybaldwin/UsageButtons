@@ -1,10 +1,12 @@
 # CLAUDE.md
 
-Claude-specific guidance for this repo. Shared instructions live in
-[AGENTS.md](AGENTS.md) — read that first. Only put things **here** that
-are genuinely Claude-specific (workflow conveniences, Claude Code tool
-usage, memory notes). Anything a Codex/Cursor agent would also benefit
-from belongs in AGENTS.md.
+**Read [AGENTS.md](AGENTS.md) first. It is the source of truth for
+build commands, commit conventions, repo metadata rules, and project
+context. Everything there applies to you. Do not skip it.**
+
+This file contains only Claude Code-specific guidance (tool usage,
+subagent patterns, memory). Anything a Codex/Cursor agent would also
+benefit from belongs in AGENTS.md, not here.
 
 ## Claude Code workflow
 

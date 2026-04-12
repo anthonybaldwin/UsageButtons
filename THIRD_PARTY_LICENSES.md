@@ -1,6 +1,6 @@
 # Third-party licenses
 
-usage-buttons bundles assets and reference material from other open
+UsageButtons bundles assets and reference material from other open
 source projects. Their licenses are reproduced / referenced below as
 required.
 

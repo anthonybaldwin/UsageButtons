@@ -295,8 +295,13 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
     ? `<rect x="0.75" y="0.75" width="${CANVAS - 1.5}" height="${CANVAS - 1.5}" rx="16" ry="16" fill="none" stroke="${fg}" stroke-opacity="0.18" stroke-width="1.5"/>`
     : "";
 
+  // Auto-fit the subvalue text so longer captions (token counts,
+  // pace labels, "rate limit") don't clip or wrap on the 144px canvas.
+  const subvalueFitSize = hasSub
+    ? fitFontSize(subvalue, CANVAS - 16, subvalueFontSize, 10)
+    : subvalueFontSize;
   const subvalueElement = hasSub
-    ? `<text x="${CANVAS / 2}" y="${subvalueBaselineY}" font-family="Helvetica,Arial,sans-serif" font-size="${subvalueFontSize}" font-weight="700" text-anchor="middle" fill="${fg}" fill-opacity="0.85">${subvalue}</text>`
+    ? `<text x="${CANVAS / 2}" y="${subvalueBaselineY}" font-family="Helvetica,Arial,sans-serif" font-size="${subvalueFitSize}" font-weight="700" text-anchor="middle" fill="${fg}" fill-opacity="0.85">${subvalue}</text>`
     : "";
 
   // Glyph rendering — see ButtonRenderInput.glyphMode docs above

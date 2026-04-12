@@ -1,4 +1,4 @@
-# usage-buttons
+# UsageButtons
 
 Stream Deck plugin that turns every AI-coding-assistant usage stat into a
 live button — session % remaining, weekly %, credits, reset countdowns,
@@ -27,7 +27,7 @@ implementation we're porting concepts from.
 ## Repo layout
 
 ```
-usage-buttons/
+UsageButtons/
 ├── io.github.anthonybaldwin.usage-buttons.sdPlugin/ # Stream Deck plugin bundle
 │   ├── manifest.json
 │   ├── assets/                           # icons shipped with the plugin

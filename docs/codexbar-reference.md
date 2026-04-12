@@ -189,7 +189,7 @@ OpenAI green, Gemini blue. Keep it configurable via action settings.
   for `pollIntervalMs * 0.8` before a re-fetch.
 - **On keyDown:** force-refresh that single key's provider bypassing
   cache.
-- **Cache on disk:** `%APPDATA%/usage-buttons/cache/<provider>.json`
+- **Cache on disk:** `%APPDATA%/UsageButtons/cache/<provider>.json`
   (and the macOS equivalent under `~/Library/Caches/`). Used to bridge
   plugin restarts so the button isn't blank for the first poll cycle.
 - **Stale detection:** if `updatedAt` is > 12h old or the last fetch

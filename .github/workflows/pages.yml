@@ -1,7 +1,7 @@
 name: pages
 
 # Deploy the landing page at docs/index.html to GitHub Pages
-# (https://anthonybaldwin.github.io/usage-buttons/).
+# (https://anthonybaldwin.github.io/UsageButtons/).
 #
 # The repo is configured with build_type: workflow (see
 # `gh api repos/.../pages`), which means Pages expects this

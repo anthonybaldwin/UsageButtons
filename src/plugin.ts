@@ -380,9 +380,9 @@ async function refreshKey(
       key.lastPollAt = Number.MAX_SAFE_INTEGER;
     }
 
-    // Extract a short hint from the error for the subvalue slot.
-    // e.g. "Set OPENROUTER_API_KEY" → "API key needed"
-    const subHint = notConfigured ? "not configured"
+    // Short hint for the subvalue slot — must fit ~10 chars on a
+    // 144px tile without wrapping/clipping.
+    const subHint = notConfigured ? "needs key"
       : rate ? "rate limit"
       : undefined;
 

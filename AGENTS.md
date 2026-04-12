@@ -90,13 +90,25 @@ new GitHub Release, compare it against the stale compiled-in version,
 and block every button with an "UPDATE" face — on your own dev
 machine.
 
+## GitHub repo metadata
+
+Keep the repo description, topics, and homepage in sync when
+providers are added/removed or the project scope changes:
+
+```
+gh repo edit --description "..." --add-topic foo --remove-topic bar
+```
+
+Current topics: `go`, `golang`, `stream-deck`, `stream-deck-plugin`,
+`elgato`, `ai-tools`, `usage-monitoring`, `claude`, `copilot`, `cursor`.
+
 ## Stream Deck plugin notes
 
 - Plugin UUID: `io.github.anthonybaldwin.UsageButtons`
 - Manifest at `io.github.anthonybaldwin.UsageButtons.sdPlugin/manifest.json`
 - `CodePathWin` → `bin/plugin-win.exe`; `CodePathMac` → `bin/plugin-mac`.
 - Plugin connects to Stream Deck over a local WebSocket; see
-  `src/streamdeck.ts` for the protocol wrapper.
+  `internal/streamdeck/` for the protocol wrapper.
 - Button images are sent as SVG data URIs via `setImage` — no canvas
   library, no PNG encoding.
 

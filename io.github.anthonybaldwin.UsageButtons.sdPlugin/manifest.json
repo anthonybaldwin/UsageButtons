@@ -33,6 +33,7 @@
       "Icon": "assets/action-claude",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
       "States": [
         {
           "Image": "assets/action-claude-key",
@@ -47,6 +48,7 @@
       "Icon": "assets/action-codex",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
       "States": [
         {
           "Image": "assets/action-codex-key",
@@ -61,6 +63,7 @@
       "Icon": "assets/action-copilot",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
       "States": [
         {
           "Image": "assets/action-copilot-key",
@@ -75,6 +78,7 @@
       "Icon": "assets/action-cursor",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
       "States": [
         {
           "Image": "assets/action-cursor-key",
@@ -89,6 +93,7 @@
       "Icon": "assets/action-openrouter",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
       "States": [
         {
           "Image": "assets/action-openrouter-key",
@@ -103,6 +108,7 @@
       "Icon": "assets/action-warp",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
       "States": [
         {
           "Image": "assets/action-warp-key",
@@ -117,6 +123,7 @@
       "Icon": "assets/action-zai",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
       "States": [
         {
           "Image": "assets/action-zai-key",
@@ -131,6 +138,7 @@
       "Icon": "assets/action-kimi-k2",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
       "States": [
         {
           "Image": "assets/action-kimi-k2-key",

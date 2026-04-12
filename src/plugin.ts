@@ -274,12 +274,6 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
         }
       }
 
-      // Clear any native title the user may have typed — our SVG
-      // renders its own label and a native title stacked on top
-      // looks broken. ShowTitle is already false in manifest.json
-      // but explicitly blanking guarantees no overlap.
-      conn.setTitle(e.context, "");
-
       // If an update is pending, show the update face immediately
       // instead of provider data. The scheduler will keep checking
       // and re-rendering as long as the update is available.
@@ -434,14 +428,6 @@ async function refreshKey(
   const key = visibleKeys.get(context);
   if (!key) return;
   key.lastPollAt = Date.now();
-
-  // Suppress the native Stream Deck title on every render. The user
-  // can type into the "Title:" field in the PI header, and Stream
-  // Deck will overlay that text on top of our SVG — we own the full
-  // 144×144 canvas so the native title just creates a mess. Clearing
-  // it here (not just in willAppear) ensures it stays gone even if
-  // the user types something after the key first appeared.
-  conn.setTitle(context, "");
 
   const providerId = providerIdFromAction(key.action);
   const metricId = key.settings.metricId ?? DEFAULT_METRIC;

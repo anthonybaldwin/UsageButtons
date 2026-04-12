@@ -3,14 +3,14 @@ name: release
 # Build and publish a GitHub Release when a version tag is pushed.
 #
 # Workflow:
-#   1. git tag v0.1.0 && git push --tags
+#   1. git tag v0.1.0 && git push --tags  (or `bun run release patch`)
 #   2. This workflow fires, cross-compiles for win + mac
 #   3. Injects the tag version into manifest.json
-#   4. Packages the .streamDeckPlugin bundle (zip with renamed ext)
-#   5. Creates a GitHub Release with the bundle attached
+#   4. Packages platform-specific .streamDeckPlugin bundles
+#   5. Creates a GitHub Release with both bundles attached
 #
-# Users download the .streamDeckPlugin file from the Release page
-# and double-click to install it into Stream Deck.
+# Two bundles are published — one per platform — so users only
+# download the ~28 MB binary they need, not all three (~85 MB).
 
 on:
   push:
@@ -23,6 +23,10 @@ jobs:
   release:
     name: build + publish release
     runs-on: ubuntu-latest
+
+    env:
+      PLUGIN_DIR: io.github.anthonybaldwin.UsageButtons.sdPlugin
+      BIN_DIR: io.github.anthonybaldwin.UsageButtons.sdPlugin/bin
 
     steps:
       - name: Checkout
@@ -45,21 +49,17 @@ jobs:
         id: version
         run: |
           TAG="${GITHUB_REF_NAME#v}"
-          # Stream Deck manifest requires exactly 4 dot-separated parts
           IFS='.' read -ra PARTS <<< "$TAG"
           SD_VERSION="${PARTS[0]:-0}.${PARTS[1]:-0}.${PARTS[2]:-0}.${PARTS[3]:-0}"
           echo "semver=$TAG" >> "$GITHUB_OUTPUT"
           echo "sd_version=$SD_VERSION" >> "$GITHUB_OUTPUT"
 
-      # Stamp the version into manifest.json so the installed plugin
-      # reports the correct version inside Stream Deck.
       - name: Inject version into manifest.json
         run: |
           jq --arg v "${{ steps.version.outputs.sd_version }}" \
             '.Version = $v' \
-            io.github.anthonybaldwin.UsageButtons.sdPlugin/manifest.json \
-            > manifest.tmp && mv manifest.tmp \
-            io.github.anthonybaldwin.UsageButtons.sdPlugin/manifest.json
+            $PLUGIN_DIR/manifest.json \
+            > manifest.tmp && mv manifest.tmp $PLUGIN_DIR/manifest.json
 
       - name: Build Windows binary
         run: bun run scripts/build.ts win --no-reload
@@ -67,18 +67,35 @@ jobs:
       - name: Build macOS binaries (arm64 + x64 + wrapper)
         run: bun run scripts/build.ts mac --no-reload
 
-      - name: Package .streamDeckPlugin bundle
+      # Package platform-specific bundles. Each contains only the
+      # binary for that platform, keeping downloads ~28 MB instead
+      # of ~85 MB for a universal bundle.
+      #
+      # Stream Deck resolves CodePathWin / CodePathMac from the
+      # manifest, so including only one platform's binary is fine —
+      # the other CodePath entry just points at a file that doesn't
+      # exist, which Stream Deck ignores on the wrong OS.
+      - name: Package Windows .streamDeckPlugin
         run: |
-          chmod +x io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac \
-                   io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac-arm64 \
-                   io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac-x64
-          zip -ry io.github.anthonybaldwin.UsageButtons.streamDeckPlugin \
-            io.github.anthonybaldwin.UsageButtons.sdPlugin \
-            -x 'io.github.anthonybaldwin.UsageButtons.sdPlugin/logs/*'
+          rm -f $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
+          zip -ry UsageButtons-Windows.streamDeckPlugin \
+            $PLUGIN_DIR \
+            -x "$PLUGIN_DIR/logs/*"
+
+      - name: Package macOS .streamDeckPlugin
+        run: |
+          rm -f $BIN_DIR/plugin-win.exe
+          bun run scripts/build.ts mac --no-reload
+          chmod +x $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
+          zip -ry UsageButtons-macOS.streamDeckPlugin \
+            $PLUGIN_DIR \
+            -x "$PLUGIN_DIR/logs/*"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: Usage Buttons ${{ steps.version.outputs.semver }}
           generate_release_notes: true
-          files: io.github.anthonybaldwin.UsageButtons.streamDeckPlugin
+          files: |
+            UsageButtons-Windows.streamDeckPlugin
+            UsageButtons-macOS.streamDeckPlugin

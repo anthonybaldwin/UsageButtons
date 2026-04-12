@@ -99,6 +99,12 @@
       <option value="mock">Mock (dev)</option>
       <option value="claude">Claude</option>
       <option value="codex">Codex</option>
+      <option value="copilot">Copilot</option>
+      <option value="cursor">Cursor</option>
+      <option value="openrouter">OpenRouter</option>
+      <option value="warp">Warp</option>
+      <option value="zai">z.ai</option>
+      <option value="kimi-k2">Kimi K2</option>
     </select>
 
     <label for="metric">Metric</label>
@@ -279,37 +285,103 @@
       the next time they appear.
     </p>
 
-    <div class="group-heading">Claude provider · applies to every Claude button</div>
+    <div class="group-heading">Provider settings</div>
     <p class="hint" style="margin: 0 0 8px">
-      These apply to every button in the plugin that uses the Claude
-      provider, regardless of which button you're currently editing.
-      Codex / Cursor / Ollama / etc. will get their own sections as
-      they ship.
+      Settings below apply to <em>every button</em> that uses the selected
+      provider, not just the one you're editing. Pick a provider to see
+      its auth and config options.
     </p>
 
-    <label for="claudeSource">Data source</label>
-    <select id="claudeSource">
-      <option value="both" selected>Both — OAuth + Cookie (recommended)</option>
-      <option value="oauth">OAuth only — API, no cookie calls</option>
-      <option value="cookie">Cookie — paste required, primary extras source</option>
+    <label for="providerSettingsSelect">Configure provider</label>
+    <select id="providerSettingsSelect">
+      <option value="">— select —</option>
+      <option value="claude">Claude</option>
+      <option value="cursor">Cursor</option>
+      <option value="copilot">Copilot</option>
+      <option value="openrouter">OpenRouter</option>
+      <option value="warp">Warp</option>
+      <option value="zai">z.ai</option>
+      <option value="kimi-k2">Kimi K2</option>
     </select>
-    <p class="hint">
-      <strong>OAuth</strong> uses <code>~/.claude/.credentials.json</code> and
-      <code>api.anthropic.com</code>. Handles session %, weekly %, Sonnet %.
-      <strong>Cookie</strong> calls <code>claude.ai</code> directly — the only
-      way to get the Extra usage block (balance, spend limit, $ spent) for
-      accounts where OAuth returns <code>is_enabled: false</code>.
-      <strong>Both</strong> uses OAuth first and falls through to Cookie for
-      extras when OAuth doesn't have them.
-    </p>
 
-    <div id="claudeCookieRow">
-      <label for="claudeCookie">Session key (claude.ai)</label>
-      <input id="claudeCookie" type="password" placeholder="sk-ant-sid01-..." autocomplete="off" spellcheck="false">
+    <!-- Claude settings -->
+    <div id="providerConfig-claude" class="provider-config" style="display:none">
+      <label for="claudeSource">Data source</label>
+      <select id="claudeSource">
+        <option value="both" selected>Both — OAuth + Cookie (recommended)</option>
+        <option value="oauth">OAuth only — API, no cookie calls</option>
+        <option value="cookie">Cookie — paste required, primary extras source</option>
+      </select>
       <p class="hint">
-        Paste your <code>sessionKey</code> value from claude.ai — it starts
-        with <code>sk-ant-sid01-</code>. The field is masked for privacy. Only
-        sent to <code>claude.ai</code> itself, never logged anywhere.
+        <strong>OAuth</strong> uses <code>~/.claude/.credentials.json</code> and
+        <code>api.anthropic.com</code>. Handles session %, weekly %, Sonnet %.
+        <strong>Cookie</strong> calls <code>claude.ai</code> directly — needed
+        for the Extra usage block when OAuth returns <code>is_enabled: false</code>.
+        <strong>Both</strong> uses OAuth first and falls through to Cookie.
+      </p>
+      <div id="claudeCookieRow">
+        <label for="claudeCookie">Session key (claude.ai)</label>
+        <input id="claudeCookie" type="password" placeholder="sk-ant-sid01-..." autocomplete="off" spellcheck="false">
+        <p class="hint">
+          Paste your <code>sessionKey</code> from claude.ai DevTools.
+          Masked for privacy — only sent to <code>claude.ai</code>.
+        </p>
+      </div>
+    </div>
+
+    <!-- Cursor settings -->
+    <div id="providerConfig-cursor" class="provider-config" style="display:none">
+      <label for="cursorCookie">Cookie header (cursor.com)</label>
+      <input id="cursorCookie" type="password" placeholder="WorkosCursorSessionToken=..." autocomplete="off" spellcheck="false">
+      <p class="hint">
+        Open cursor.com in your browser, open DevTools (F12) → Network tab,
+        reload the page, click any request, and copy the <code>Cookie</code>
+        header value. Paste it here. Only sent to <code>cursor.com</code>.
+      </p>
+    </div>
+
+    <!-- Copilot settings -->
+    <div id="providerConfig-copilot" class="provider-config" style="display:none">
+      <p class="hint">
+        Copilot reads your GitHub token automatically from
+        <code>~/.config/github-copilot/hosts.json</code> (written by
+        <code>gh auth login</code>). You can also set the
+        <code>GITHUB_TOKEN</code> environment variable. No manual
+        configuration needed if <code>gh</code> CLI is installed and
+        authenticated.
+      </p>
+    </div>
+
+    <!-- OpenRouter settings -->
+    <div id="providerConfig-openrouter" class="provider-config" style="display:none">
+      <p class="hint">
+        Set the <code>OPENROUTER_API_KEY</code> environment variable with
+        your API key from
+        <a href="https://openrouter.ai/settings/keys" style="color:#6467f2">openrouter.ai/settings/keys</a>.
+      </p>
+    </div>
+
+    <!-- Warp settings -->
+    <div id="providerConfig-warp" class="provider-config" style="display:none">
+      <p class="hint">
+        Set the <code>WARP_API_KEY</code> environment variable. See
+        <a href="https://docs.warp.dev/reference/cli/api-keys" style="color:#938bb4">Warp docs</a>.
+      </p>
+    </div>
+
+    <!-- z.ai settings -->
+    <div id="providerConfig-zai" class="provider-config" style="display:none">
+      <p class="hint">
+        Set the <code>ZAI_API_TOKEN</code> environment variable with
+        your API token from the z.ai dashboard.
+      </p>
+    </div>
+
+    <!-- Kimi K2 settings -->
+    <div id="providerConfig-kimi-k2" class="provider-config" style="display:none">
+      <p class="hint">
+        Set the <code>KIMI_K2_API_KEY</code> (or <code>KIMI_API_KEY</code>)
+        environment variable.
       </p>
     </div>
   </div>
@@ -331,11 +403,40 @@
         ["extra-usage-spent",         "Extra usage spent ($)"],
         ["extra-usage-balance",       "Prepaid balance ($)"],
         ["extra-usage-auto-reload",   "Auto-reload ON / OFF"],
+        ["cost-today",                "Cost today (local logs)"],
+        ["cost-30d",                  "Cost last 30 days (local logs)"],
       ],
       codex: [
         ["session-percent",  "Session % remaining (5h)"],
         ["weekly-percent",   "Weekly % remaining"],
         ["credits-balance",  "Credits remaining ($, paid plans only)"],
+        ["cost-today",       "Cost today (local logs)"],
+        ["cost-30d",         "Cost last 30 days (local logs)"],
+      ],
+      copilot: [
+        ["premium-percent", "Premium interactions remaining %"],
+        ["chat-percent",    "Chat interactions remaining %"],
+      ],
+      cursor: [
+        ["total-percent",   "Total plan usage remaining %"],
+        ["auto-percent",    "Auto / Composer usage remaining %"],
+        ["api-percent",     "API / Named model usage remaining %"],
+        ["ondemand-spent",  "On-demand spend ($)"],
+      ],
+      openrouter: [
+        ["credits-balance", "Credit balance ($)"],
+        ["credits-used",    "Total usage ($)"],
+      ],
+      warp: [
+        ["credits-percent", "Credits remaining %"],
+        ["bonus-credits",   "Bonus credits remaining %"],
+      ],
+      zai: [
+        ["tokens-percent",  "Token usage remaining %"],
+        ["mcp-percent",     "MCP usage remaining %"],
+      ],
+      "kimi-k2": [
+        ["credits-balance", "Credits remaining"],
       ],
     };
 
@@ -343,9 +444,15 @@
     // src/providers/brand-colors.ts so the Fill color picker shows
     // sensible defaults per provider.
     const BRAND_COLORS = {
-      mock:   "#3b82f6",
-      claude: "#cc7c5e",
-      codex:  "#49a3b0",
+      mock:       "#3b82f6",
+      claude:     "#cc7c5e",
+      codex:      "#49a3b0",
+      copilot:    "#a855f7",
+      cursor:     "#00bfa5",
+      openrouter: "#6467f2",
+      warp:       "#938bb4",
+      zai:        "#e85a6a",
+      "kimi-k2":  "#4c00ff",
     };
 
     // ---------- Tab switching ----------
@@ -430,6 +537,8 @@
         validSize(globals.defaultSubvalueSize);
       document.getElementById("invertFill").checked = globals.invertFill === true;
       document.getElementById("showGlyphs").checked = globals.showGlyphs !== false;
+
+      // Claude settings
       const claude = (globals.providers && globals.providers.claude) || {};
       const src =
         claude.source === "oauth" || claude.source === "cookie"
@@ -437,11 +546,27 @@
           : "both";
       document.getElementById("claudeSource").value = src;
       document.getElementById("claudeCookie").value = claude.cookieHeader || "";
-      // Cookie paste field is only meaningful when cookies are in
-      // play. Hide it in OAuth-only mode.
       document.getElementById("claudeCookieRow").style.display =
         src === "oauth" ? "none" : "";
+
+      // Cursor settings
+      const cursor = (globals.providers && globals.providers.cursor) || {};
+      document.getElementById("cursorCookie").value = cursor.cookieHeader || "";
     }
+
+    // Provider settings dropdown — show/hide the relevant config panel
+    function showProviderConfig(providerId) {
+      for (const el of document.querySelectorAll(".provider-config")) {
+        el.style.display = "none";
+      }
+      if (providerId) {
+        const panel = document.getElementById("providerConfig-" + providerId);
+        if (panel) panel.style.display = "";
+      }
+    }
+    document.getElementById("providerSettingsSelect").addEventListener("change", function() {
+      showProviderConfig(this.value);
+    });
 
     function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
       uuid = inUUID;
@@ -507,18 +632,23 @@
       if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
       const claudeCookie = document.getElementById("claudeCookie").value.trim();
       const source = document.getElementById("claudeSource").value;
+      const cursorCookie = document.getElementById("cursorCookie").value.trim();
+      const providers = {
+        claude: {
+          source,
+          ...(claudeCookie ? { cookieHeader: claudeCookie } : {}),
+        },
+      };
+      if (cursorCookie) {
+        providers.cursor = { cookieHeader: cursorCookie };
+      }
       const payload = {
         defaultRefreshMinutes: Number(document.getElementById("defaultRefresh").value),
         defaultValueSize:      document.getElementById("defaultValueSize").value,
         defaultSubvalueSize:   document.getElementById("defaultSubvalueSize").value,
         invertFill:            document.getElementById("invertFill").checked,
         showGlyphs:            document.getElementById("showGlyphs").checked,
-        providers: {
-          claude: {
-            source,
-            ...(claudeCookie ? { cookieHeader: claudeCookie } : {}),
-          },
-        },
+        providers,
       };
       websocket.send(JSON.stringify({
         event: "setGlobalSettings",
@@ -556,6 +686,7 @@
       "defaultRefresh", "defaultValueSize", "defaultSubvalueSize",
       "invertFill", "showGlyphs",
       "claudeSource", "claudeCookie",
+      "cursorCookie",
     ]) {
       const el = document.getElementById(id);
       el.addEventListener("change", pushGlobalSettings);

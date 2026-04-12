@@ -409,6 +409,9 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
     <clipPath id="card">
       <rect width="${CANVAS}" height="${CANVAS}" rx="16" ry="16"/>
     </clipPath>
+    <filter id="ts" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
   </defs>
   <g clip-path="url(#card)">
     <rect width="${CANVAS}" height="${CANVAS}" fill="${bg}"/>
@@ -417,9 +420,11 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
   </g>
   ${borderElement}
   ${glyphElementFront}
+  <g filter="url(#ts)">
   ${labelElements}
   ${showValueText ? `<text x="${CANVAS / 2}" y="${valueY}" font-family="Helvetica,Arial,sans-serif" font-size="${valueFontSize}" font-weight="800" text-anchor="middle" fill="${fg}">${value}</text>` : ""}
   ${subvalueElement}
+  </g>
 </svg>`;
 }
 

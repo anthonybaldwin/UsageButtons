@@ -204,6 +204,12 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
       const providerId = settings.providerId ?? DEFAULT_PROVIDER;
       const metricId = settings.metricId ?? DEFAULT_METRIC;
 
+      // Clear any native title the user may have typed — our SVG
+      // renders its own label and a native title stacked on top
+      // looks broken. ShowTitle is already false in manifest.json
+      // but explicitly blanking guarantees no overlap.
+      conn.setTitle(e.context, "");
+
       // Check if we already have cached data for this provider.
       // If so, render directly from cache — no loading face, no
       // async fetch, no flicker. This is the key fix for the
@@ -355,21 +361,38 @@ async function refreshKey(
   const snapshot = await getSnapshot(provider, { force: opts.force });
 
   if (snapshot.error && snapshot.metrics.length === 0) {
-    // Cool-down state with nothing to show. Render a friendly
-    // "WAIT" / "rate limit" face rather than the raw provider name
-    // so the user can tell the button from a hard error. Uses the
-    // placeholderFace() helper so the rate-limit tile still carries
-    // the provider's brand color + logo watermark — otherwise a
-    // rate-limited Claude button is indistinguishable from a
-    // rate-limited Codex button.
+    // Categorise the error so the button shows the right face:
+    //
+    //   "not configured" → SETUP face. User hasn't pasted a cookie
+    //     or set an API key. Stop polling (push lastPollAt far out)
+    //     so we don't waste cycles — the user must press the key
+    //     (force=true) or change settings to re-trigger.
+    //
+    //   rate limit → WAIT face. Transient; scheduler will retry.
+    //
+    //   other error → ERR face with the provider name as context.
+    const notConfigured = isNotConfigured(snapshot.error);
     const rate = isRateLimit(snapshot.error);
+
+    if (notConfigured) {
+      // Park this key — don't re-poll until user presses it or
+      // changes settings (which resets lastPollAt to 0).
+      key.lastPollAt = Number.MAX_SAFE_INTEGER;
+    }
+
+    // Extract a short hint from the error for the subvalue slot.
+    // e.g. "Set OPENROUTER_API_KEY" → "API key needed"
+    const subHint = notConfigured ? "not configured"
+      : rate ? "rate limit"
+      : undefined;
+
     conn.setImage(
       context,
       placeholderFace({
         provider,
         label: provider.name.toUpperCase(),
-        value: rate ? "WAIT" : "ERR",
-        subvalue: rate ? "rate limit" : undefined,
+        value: notConfigured ? "SETUP" : rate ? "WAIT" : "ERR",
+        subvalue: subHint,
         keySettings: key.settings,
       }),
     );
@@ -448,6 +471,22 @@ async function refreshKey(
 
 function isRateLimit(errorMessage: string): boolean {
   return /429|rate.?limit/i.test(errorMessage);
+}
+
+/**
+ * Detect "not configured" errors — provider returned a clean "you
+ * haven't set up auth" message rather than a transient failure.
+ * Matches patterns from all provider error constructors:
+ *   - "not found" (credential file missing)
+ *   - "not configured" (explicit kind)
+ *   - "Set OPENROUTER_API_KEY" / "Set WARP_API_KEY" etc.
+ *   - "Paste a Cookie" (cookie-auth providers)
+ *   - "No GitHub token found"
+ */
+function isNotConfigured(errorMessage: string): boolean {
+  return /not.?configured|not found|Set \w+_\w+|Paste a Cookie|No .+ token found/i.test(
+    errorMessage,
+  );
 }
 
 /**

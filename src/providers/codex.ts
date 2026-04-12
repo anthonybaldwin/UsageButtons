@@ -297,6 +297,15 @@ function remainingMetric(
     label,
     name,
     value: Math.round(remaining),
+    // numericValue + numericUnit were missing from the original
+    // Codex port — the old invertFill gate (`unit === "%"`) was
+    // covering for it by matching on the display-string unit, but
+    // the tightened gate (`numericUnit === "percent"`) would
+    // otherwise skip Codex percent metrics entirely. Matches
+    // Claude's remainingMetric shape so both providers go through
+    // the same threshold / invert / render code paths uniformly.
+    numericValue: remaining,
+    numericUnit: "percent",
     unit: "%",
     ratio: remaining / 100,
     direction: "up",

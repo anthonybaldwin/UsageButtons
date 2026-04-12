@@ -332,13 +332,21 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
       // of meter position:
       //
       //   - Back copy: inside the clip path, BEHIND the fill rect,
-      //     at 0.50 opacity in the foreground (usually white).
-      //     Reads strongly against the dark un-filled bg.
+      //     in the foreground color (usually white) at 0.50
+      //     opacity. Reads strongly against the dark un-filled bg
+      //     like a bright watermark.
       //
-      //   - Front copy: OVER the fill rect, at 0.18 opacity. Low
-      //     enough not to wash out the brand-colored fill, high
-      //     enough that the logo's silhouette is still legible
-      //     through the filled portion of the meter.
+      //   - Front copy: OVER the fill rect, in the BACKGROUND
+      //     color at 0.55 opacity. Reads as a dark cut-out of the
+      //     logo against the brand-colored fill — same trick print
+      //     designers use for a knockout on a colored field. The
+      //     old "white-on-brand at 0.18" front copy was nearly
+      //     invisible because white blending with a mid-brightness
+      //     brand color (Claude #cc7c5e) produced a near-color
+      //     match rather than contrast. Swapping to bg gives us
+      //     real darkness-against-light contrast in the filled
+      //     area, mirroring the brightness-against-dark contrast
+      //     of the back copy in the unfilled area.
       //
       // Sizing is clamped to 72px max and shrunk if the available
       // label→subvalue zone is tighter (e.g. multi-line labels).
@@ -350,7 +358,7 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
       const gyOff = Math.round(zoneTop + (zoneHeight - gSize) / 2);
       const gScale = gSize / vbW;
       glyphElementBack = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${fg}" fill-opacity="0.50"><path d="${input.glyph.d}"/></g>`;
-      glyphElementFront = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${fg}" fill-opacity="0.18"><path d="${input.glyph.d}"/></g>`;
+      glyphElementFront = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${bg}" fill-opacity="0.55"><path d="${input.glyph.d}"/></g>`;
     } else if (glyphMode === "centered") {
       // 60px focal logo. Smaller than the watermark so it doesn't
       // crowd the border + label + countdown around it. Currently

@@ -1,9 +1,9 @@
 version: 2
 
-# Dependabot config — keeps npm deps (sweet-cookie, @types/bun,
-# typescript) and GitHub Actions pinned versions up to date via
-# weekly PRs. Runtime is Bun, but Dependabot's npm ecosystem parser
-# handles package.json + bun.lock just fine.
+# Dependabot config — keeps npm deps (@types/bun, typescript) and
+# GitHub Actions pinned versions up to date via weekly PRs. Runtime
+# is Bun, but Dependabot's npm ecosystem parser handles package.json
+# + bun.lock just fine.
 
 updates:
   # Runtime + dev dependencies declared in package.json.

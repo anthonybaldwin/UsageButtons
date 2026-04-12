@@ -31,7 +31,6 @@
  */
 
 import { HttpError, httpJson } from "../util/http.ts";
-import { findClaudeCookie, invalidateCookieCache } from "../util/cookies/index.ts";
 import { getClaudeSettings } from "../settings.ts";
 
 const BASE_URL = "https://claude.ai/api";
@@ -222,36 +221,26 @@ export function setClaudeWebLogSink(fn: (message: string) => void): void {
 }
 
 /**
- * Resolve a cookie header for claude.ai according to global settings:
+ * Resolve a cookie header for claude.ai from global settings:
  *
- *   source === "oauth"          → never use cookies, return undefined
- *   source === "cookie" | "both" → prefer the pasted cookieHeader,
- *                                  fall back to a browser auto-scan.
- *                                  The browser scan succeeds on Edge,
- *                                  Firefox, and closed-Chrome with
- *                                  legacy (v10/v11) cookies. Chrome
- *                                  127+ `v20` cookies are unreadable
- *                                  from outside Chrome regardless of
- *                                  file-lock state, so users on modern
- *                                  Chrome must paste.
+ *   source === "oauth"           → never use cookies, return undefined
+ *   source === "cookie" | "both" → use the pasted cookieHeader if set
+ *
+ * We used to also run a browser auto-scan via @steipete/sweet-cookie
+ * here, scraping `sessionKey` out of Edge / Firefox / closed-Chrome
+ * legacy cookie stores. It was removed because modern Chrome (127+)
+ * uses App-Bound Encryption (v20) that's impossible to decrypt from
+ * outside the browser process, which made the auto-scan useless for
+ * the primary dev/test environment. The dep + ~400 lines of staged-
+ * copy / DPAPI / sweet-cookie plumbing weren't worth keeping alive
+ * for a path users weren't hitting. Paste-only is simpler and works
+ * on every browser.
  */
-async function resolveCookieHeader(): Promise<string | undefined> {
+function resolveCookieHeader(): string | undefined {
   const cs = getClaudeSettings();
   if (cs.source === "oauth") return undefined;
-
-  // Pasted cookie wins when present — it's the only way to cover
-  // Chrome 127+ and it's instantaneous. The auto-scan fallback is
-  // for users on Edge / Firefox / closed Chrome.
   const pasted = normalizeCookieHeader(cs.cookieHeader ?? "");
-  if (pasted) return pasted;
-
-  const scanned = await findClaudeCookie({
-    url: "https://claude.ai/",
-    cookieName: "sessionKey",
-    onLog: (msg) => logSink?.(msg),
-  });
-  if (scanned) return `sessionKey=${scanned}`;
-  return undefined;
+  return pasted ?? undefined;
 }
 
 /**
@@ -275,7 +264,7 @@ export async function fetchClaudeExtraUsage(
   const cookieHeader =
     rawCookieHeader !== undefined
       ? normalizeCookieHeader(rawCookieHeader)
-      : await resolveCookieHeader();
+      : resolveCookieHeader();
   if (!cookieHeader) return undefined;
 
   let orgId: string;
@@ -297,11 +286,11 @@ export async function fetchClaudeExtraUsage(
     });
   } catch (err) {
     // 401 on the overage endpoint usually means the cookie
-    // expired. Clear both the cached org AND the cookie cache so
-    // the next poll re-scans and picks up a fresh value.
+    // expired. Clear the cached org so the next poll re-fetches.
+    // (Previously also invalidated a sweet-cookie cache; that path
+    // was removed when we dropped the auto-scan.)
     if (err instanceof HttpError && err.status === 401) {
       orgIdCache.delete(cookieHeader);
-      invalidateCookieCache("https://claude.ai/");
     }
     return undefined;
   }

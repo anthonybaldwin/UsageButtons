@@ -39,13 +39,3 @@ notice be included in all copies or substantial portions of the
 Software. The Software is provided "AS IS", without warranty of any
 kind.
 
-## @steipete/sweet-cookie — MIT
-
-<https://github.com/steipete/sweet-cookie>
-
-Copyright (c) 2026 Peter Steinberger
-
-Runtime dependency declared in `package.json`. Not modified. Used
-via its public `getCookies()` / `toCookieHeader()` API for
-claude.ai session cookie extraction on Windows. License travels
-with the package itself in `node_modules/@steipete/sweet-cookie`.

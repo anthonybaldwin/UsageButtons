@@ -406,16 +406,12 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       numericValue: bal,
       numericUnit: "dollars",
       numericGoodWhen: "high",
-      // Full-tile fill. The balance isn't a progress meter (no
-      // natural "100%" reference for a standalone dollar figure),
-      // but rendering it as a flat dark text-only tile looked
-      // anemic next to the meter tiles. With ratio=1 the whole
-      // tile carries the provider's brand color, and the
-      // threshold logic still repaints it amber (low balance)
-      // or red ($0 / negative) so the tile is also an alarm
-      // surface — you just can't miss it when the balance drops.
-      ratio: 1,
-      direction: "up",
+      // No ratio — this is a reference card (standalone dollar
+      // figure with no natural "100%" ceiling). The render layer
+      // detects the missing ratio and applies a neutral fill so
+      // it's visually distinct from meter tiles. Threshold colors
+      // (amber/red when balance drops) still fire via numericValue.
+      //
       // Static subvalue label — the prepaid balance isn't a
       // countdown so the subvalue slot would otherwise be empty.
       // "Prepaid" makes the tile's meaning obvious at a glance
@@ -496,8 +492,7 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       numericUnit: "dollars",
       numericGoodWhen: "low",
       numericMax: limit,
-      ratio: 1,
-      direction: "up",
+      // Reference card — no ratio. See BALANCE comment above.
       caption: "Monthly",
       updatedAt: now,
     },
@@ -775,8 +770,7 @@ export class ClaudeProvider implements Provider {
           numericValue: costs.todayCostUsd,
           numericUnit: "dollars",
           numericGoodWhen: "low",
-          ratio: 1,
-          direction: "up",
+          // Reference card — no ratio.
           caption: `${formatTokenCount(costs.todayTokens)} tokens`,
           updatedAt: now,
         });
@@ -788,8 +782,7 @@ export class ClaudeProvider implements Provider {
           numericValue: costs.last30DaysCostUsd,
           numericUnit: "dollars",
           numericGoodWhen: "low",
-          ratio: 1,
-          direction: "up",
+          // Reference card — no ratio.
           caption: `${formatTokenCount(costs.last30DaysTokens)} tokens`,
           updatedAt: now,
         });

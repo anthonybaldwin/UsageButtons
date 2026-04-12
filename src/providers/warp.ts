@@ -130,8 +130,7 @@ export class WarpProvider implements Provider {
           label: "CREDITS",
           name: "Warp credits (unlimited)",
           value: "∞",
-          ratio: 1,
-          direction: "up",
+          // Reference card — no ratio.
           caption: "Unlimited",
           updatedAt: now,
         });

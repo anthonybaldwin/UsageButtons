@@ -72,8 +72,7 @@ export class OpenRouterProvider implements Provider {
       numericValue: balance,
       numericUnit: "dollars",
       numericGoodWhen: "high",
-      ratio: 1,
-      direction: "up",
+      // Reference card — no ratio.
       caption: "Balance",
       updatedAt: now,
     });
@@ -88,8 +87,10 @@ export class OpenRouterProvider implements Provider {
         numericUnit: "dollars",
         numericGoodWhen: "low",
         numericMax: totalCredits > 0 ? totalCredits : undefined,
-        ratio: totalCredits > 0 ? Math.min(1, totalUsage / totalCredits) : 1,
-        direction: "up",
+        // Real meter when totalCredits is known; reference card otherwise.
+        ...(totalCredits > 0
+          ? { ratio: Math.min(1, totalUsage / totalCredits), direction: "up" as const }
+          : {}),
         caption: "Lifetime",
         updatedAt: now,
       });

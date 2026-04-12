@@ -170,8 +170,7 @@ export class KimiK2Provider implements Provider {
           numericValue: r,
           numericUnit: "count",
           numericGoodWhen: "high",
-          ratio: 1,
-          direction: "up",
+          // Reference card — no ratio.
           caption: "Available",
           updatedAt: now,
         });

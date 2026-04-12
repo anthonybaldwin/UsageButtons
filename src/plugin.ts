@@ -777,7 +777,17 @@ function renderMetric(
     }
   }
 
-  if (effectiveRatio !== undefined) {
+  // Reference cards: metrics with no ratio are informational tiles
+  // (dollar amounts, counts, static caps) — not progress meters.
+  // They get a neutral muted fill at ratio=1 so they're visually
+  // distinct from both full meters AND empty meters. Threshold
+  // colors still override when they fire (amber/red on low balance
+  // etc.), and user fillColor overrides are respected.
+  const isReferenceCard = effectiveRatio === undefined;
+
+  if (isReferenceCard) {
+    input.ratio = 1;
+  } else {
     input.ratio = effectiveRatio;
   }
 
@@ -791,7 +801,7 @@ function renderMetric(
   //   1. critical threshold hit (numericValue ≤ criticalBelow)
   //   2. warn threshold hit (numericValue ≤ warnBelow)
   //   3. user fillColor override
-  //   4. provider brand color
+  //   4. neutral gray (reference cards) / provider brand color (meters)
   //
   // Thresholds compare against the metric's raw numericValue so
   // the display format ($204.80 / 42% / "OUT") doesn't need to be
@@ -808,6 +818,8 @@ function renderMetric(
       : "#f59e0b";
   } else if (settings.fillColor && /^#[0-9a-fA-F]{3,8}$/.test(settings.fillColor)) {
     input.fill = settings.fillColor;
+  } else if (isReferenceCard) {
+    input.fill = "#374151";
   } else {
     input.fill = provider.brandColor;
   }

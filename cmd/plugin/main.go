@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/icons"
+	"github.com/anthonybaldwin/UsageButtons/internal/providers/claude"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 	"github.com/anthonybaldwin/UsageButtons/internal/render"
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
@@ -19,7 +20,6 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/update"
 
 	// Register all providers via init().
-	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/claude"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/codex"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/copilot"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/cursor"
@@ -59,6 +59,7 @@ func main() {
 	// Wire logging sinks to Stream Deck's log file.
 	providers.LogSink = func(msg string) { conn.Log(msg) }
 	update.LogSink = func(msg string) { conn.Log(msg) }
+	claude.LogSink = func(msg string) { conn.Log(msg) }
 
 	// Request global settings before first tick.
 	conn.GetGlobalSettings()

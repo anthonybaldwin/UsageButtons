@@ -281,7 +281,10 @@ func fetchOrgID(cookie string) (string, error) {
 
 	var orgs []orgRow
 	err := httputil.GetJSON(baseWebURL+"/organizations", map[string]string{
-		"Cookie": cookie,
+		"Cookie":     cookie,
+		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+		"Accept":     "application/json",
+		"Referer":    "https://claude.ai/",
 	}, 15*time.Second, &orgs)
 	if err != nil {
 		return "", err
@@ -326,21 +329,31 @@ func fetchOrgID(cookie string) (string, error) {
 func fetchWebExtras() *extraUsageSource {
 	cookie := resolveCookie()
 	if cookie == "" {
+		logf("extras: no cookie configured, skipping web path")
 		return nil
 	}
+	logf("extras: cookie resolved (%d chars), fetching org...", len(cookie))
 
 	orgID, err := fetchOrgID(cookie)
 	if err != nil {
+		logf("extras: org fetch failed: %v", err)
 		return nil
 	}
+	logf("extras: org=%s, fetching overage...", orgID)
 
 	var overage overageResponse
 	err = httputil.GetJSON(
 		fmt.Sprintf("%s/organizations/%s/overage_spend_limit", baseWebURL, orgID),
-		map[string]string{"Cookie": cookie},
+		map[string]string{
+			"Cookie":     cookie,
+			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+			"Accept":     "application/json",
+			"Referer":    "https://claude.ai/",
+		},
 		15*time.Second, &overage,
 	)
 	if err != nil {
+		logf("extras: overage fetch failed: %v", err)
 		var httpErr *httputil.Error
 		if errors.As(err, &httpErr) && httpErr.Status == 401 {
 			orgMu.Lock()
@@ -353,7 +366,12 @@ func fetchWebExtras() *extraUsageSource {
 	var prepaid prepaidCreditsResponse
 	prepaidErr := httputil.GetJSON(
 		fmt.Sprintf("%s/organizations/%s/prepaid/credits", baseWebURL, orgID),
-		map[string]string{"Cookie": cookie},
+		map[string]string{
+			"Cookie":     cookie,
+			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+			"Accept":     "application/json",
+			"Referer":    "https://claude.ai/",
+		},
 		10*time.Second, &prepaid,
 	)
 

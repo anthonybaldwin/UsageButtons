@@ -217,7 +217,7 @@ export class StreamDeckConnection {
       // socket isn't open yet. Write straight to stderr instead.
       // eslint-disable-next-line no-console
       console.error(
-        `[usage-buttons] drop outbound (socket not open): ${event.event}`,
+        `[UsageButtons] drop outbound (socket not open): ${event.event}`,
       );
       return;
     }
@@ -247,6 +247,6 @@ export class StreamDeckConnection {
     // it's not, so we can call this safely during startup too.
     this.send({ event: "logMessage", payload: { message } });
     // eslint-disable-next-line no-console
-    console.error(`[usage-buttons] ${message}`);
+    console.error(`[UsageButtons] ${message}`);
   }
 }

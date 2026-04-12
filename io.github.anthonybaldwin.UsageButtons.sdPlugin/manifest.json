@@ -1,6 +1,6 @@
 {
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
-  "UUID": "io.github.anthonybaldwin.usage-buttons",
+  "UUID": "io.github.anthonybaldwin.UsageButtons",
   "Name": "Usage Buttons",
   "Author": "Anthony Baldwin",
   "Description": "Live AI-coding-assistant usage stats (session %, weekly %, credits, resets) as Stream Deck buttons with fill-style icons.",
@@ -21,7 +21,7 @@
   ],
   "Actions": [
     {
-      "UUID": "io.github.anthonybaldwin.usage-buttons.stat",
+      "UUID": "io.github.anthonybaldwin.UsageButtons.stat",
       "Name": "Usage Stat",
       "Tooltip": "Display one usage stat (session %, weekly %, credits, …) with a dynamic fill icon.",
       "Icon": "assets/action-stat",

@@ -70,18 +70,18 @@ jobs:
       # a mode-0644 binary.
       - name: Package .streamDeckPlugin bundle
         run: |
-          chmod +x io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-mac \
-                   io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-mac-arm64 \
-                   io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-mac-x64
-          zip -ry io.github.anthonybaldwin.usage-buttons.streamDeckPlugin \
-            io.github.anthonybaldwin.usage-buttons.sdPlugin \
-            -x 'io.github.anthonybaldwin.usage-buttons.sdPlugin/logs/*'
+          chmod +x io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac \
+                   io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac-arm64 \
+                   io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac-x64
+          zip -ry io.github.anthonybaldwin.UsageButtons.streamDeckPlugin \
+            io.github.anthonybaldwin.UsageButtons.sdPlugin \
+            -x 'io.github.anthonybaldwin.UsageButtons.sdPlugin/logs/*'
 
       - name: Upload Windows binary
         uses: actions/upload-artifact@v7
         with:
           name: plugin-win
-          path: io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-win.exe
+          path: io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe
           if-no-files-found: error
 
       - name: Upload macOS binaries
@@ -89,14 +89,14 @@ jobs:
         with:
           name: plugin-mac
           path: |
-            io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-mac
-            io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-mac-arm64
-            io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-mac-x64
+            io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac
+            io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac-arm64
+            io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac-x64
           if-no-files-found: error
 
       - name: Upload .streamDeckPlugin bundle
         uses: actions/upload-artifact@v7
         with:
           name: streamDeckPlugin
-          path: io.github.anthonybaldwin.usage-buttons.streamDeckPlugin
+          path: io.github.anthonybaldwin.UsageButtons.streamDeckPlugin
           if-no-files-found: error

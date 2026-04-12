@@ -70,8 +70,8 @@ switch natively. Move the resulting bin/ files to a Mac and run
 
 ## Stream Deck plugin notes
 
-- Plugin UUID: `io.github.anthonybaldwin.usage-buttons`
-- Manifest at `io.github.anthonybaldwin.usage-buttons.sdPlugin/manifest.json`
+- Plugin UUID: `io.github.anthonybaldwin.UsageButtons`
+- Manifest at `io.github.anthonybaldwin.UsageButtons.sdPlugin/manifest.json`
 - `CodePathWin` → `bin/plugin-win.exe`; `CodePathMac` → `bin/plugin-mac`.
 - Plugin connects to Stream Deck over a local WebSocket; see
   `src/streamdeck.ts` for the protocol wrapper.

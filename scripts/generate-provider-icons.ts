@@ -83,7 +83,7 @@ const header = `/**
  * Upstream: https://github.com/steipete/CodexBar (MIT)
  * Copyright (c) 2026 Peter Steinberger
  *
- * Used in usage-buttons under the MIT license terms. Full license
+ * Used in UsageButtons under the MIT license terms. Full license
  * text: see tmp/CodexBar/LICENSE or
  * https://github.com/steipete/CodexBar/blob/main/LICENSE
  * ---

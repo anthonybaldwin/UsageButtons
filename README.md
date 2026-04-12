@@ -28,7 +28,7 @@ implementation we're porting concepts from.
 
 ```
 UsageButtons/
-├── io.github.anthonybaldwin.usage-buttons.sdPlugin/ # Stream Deck plugin bundle
+├── io.github.anthonybaldwin.UsageButtons.sdPlugin/  # Stream Deck plugin bundle
 │   ├── manifest.json
 │   ├── assets/                           # icons shipped with the plugin
 │   └── bin/                              # compiled binaries (gitignored)

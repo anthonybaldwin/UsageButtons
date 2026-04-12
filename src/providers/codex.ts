@@ -36,7 +36,7 @@
  *   GET https://chatgpt.com/backend-api/wham/usage
  *   Authorization:      Bearer <access_token>
  *   ChatGPT-Account-Id: <account_id>            (optional)
- *   User-Agent:         usage-buttons
+ *   User-Agent:         UsageButtons
  *   Accept:             application/json
  *
  *   200 → {
@@ -82,7 +82,7 @@ import type {
 } from "./types.ts";
 
 const USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
-const USER_AGENT = "usage-buttons/0.0.1";
+const USER_AGENT = "UsageButtons/0.0.1";
 
 const SESSION_WINDOW_SECONDS = 5 * 60 * 60; // 18000
 const WEEKLY_WINDOW_SECONDS = 7 * 24 * 60 * 60; // 604800

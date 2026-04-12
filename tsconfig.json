@@ -20,5 +20,5 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*.ts", "scripts/**/*.ts"],
-  "exclude": ["node_modules", "tmp", "dist", "io.github.anthonybaldwin.usage-buttons.sdPlugin"]
+  "exclude": ["node_modules", "tmp", "dist", "io.github.anthonybaldwin.UsageButtons.sdPlugin"]
 }

@@ -86,7 +86,9 @@ manifest.Version = `${semver}.0`;
 await Bun.write(MANIFEST, JSON.stringify(manifest, null, 2) + "\n");
 
 // Update package.json version
-await $`npm pkg set version=${semver}`.quiet();
+const pkg = await Bun.file("package.json").json();
+pkg.version = semver;
+await Bun.write("package.json", JSON.stringify(pkg, null, 2) + "\n");
 
 // Commit the version bump, tag it, push both
 await $`git add ${MANIFEST} package.json`;

@@ -35,6 +35,31 @@ type ButtonInput struct {
 	ShowGlyph    *bool  // nil = true
 }
 
+// Font size tables matching the TS renderer exactly.
+var valueFontSizes = map[string]int{"small": 26, "medium": 34, "large": 40}
+var subvalueFontSizes = map[string]int{"small": 14, "medium": 18, "large": 22}
+
+const (
+	valueFontMin  = 22
+	valueEmWidth  = 0.56
+	labelFontMax  = 16
+	labelFontMin  = 10
+	subvalueMin   = 10
+)
+
+// fitFontSize picks a font size that fits text within maxWidth,
+// starting from preferredSize and shrinking to minSize if needed.
+func fitFontSize(text string, maxWidth float64, preferredSize, minSize int) int {
+	if text == "" {
+		return preferredSize
+	}
+	if float64(len(text))*float64(preferredSize)*valueEmWidth <= maxWidth {
+		return preferredSize
+	}
+	solved := int(math.Floor(maxWidth / (float64(len(text)) * valueEmWidth)))
+	return max(minSize, min(preferredSize, solved))
+}
+
 // RenderButton produces an SVG string for a Stream Deck key face.
 func RenderButton(in ButtonInput) string {
 	fg := def(in.Fg, "#f9fafb")
@@ -43,54 +68,102 @@ func RenderButton(in ButtonInput) string {
 	showBorder := in.Border == nil || *in.Border
 	opacity := "1"
 	if in.Stale != nil && *in.Stale {
-		opacity = "0.45"
+		opacity = "0.75" // match TS: 0.75 not 0.45
 	}
 
-	// Value font size
-	valueFontSize := textSizeToFont(in.ValueSize, "value")
-	subvalueFontSize := textSizeToFont(in.SubvalueSize, "subvalue")
+	// Font sizes with auto-fit
+	preferredValueFont := valueFontSizes[in.ValueSize]
+	if preferredValueFont == 0 {
+		preferredValueFont = valueFontSizes["large"]
+	}
+	valueFontSize := fitFontSize(in.Value, float64(Canvas-16), preferredValueFont, valueFontMin)
 
-	// Label
-	hasLabel := in.Label != ""
-	labelBottom := 0.0
-	labelElements := ""
-	if hasLabel {
-		lines := strings.Split(in.Label, "\n")
-		if len(lines) == 1 {
-			labelElements = fmt.Sprintf(
-				`<text x="%d" y="27" font-family="system-ui,sans-serif" font-size="16" font-weight="700" text-anchor="middle" fill="%s" fill-opacity="0.85">%s</text>`,
-				Canvas/2, fg, xmlEscape(lines[0]))
-			labelBottom = 27
-		} else {
-			var parts []string
-			y := 22.0
-			for _, line := range lines {
-				parts = append(parts, fmt.Sprintf(
-					`<text x="%d" y="%.0f" font-family="system-ui,sans-serif" font-size="13" font-weight="700" text-anchor="middle" fill="%s" fill-opacity="0.85">%s</text>`,
-					Canvas/2, y, fg, xmlEscape(line)))
-				y += 15
-			}
-			labelElements = strings.Join(parts, "\n  ")
-			labelBottom = y - 15
+	preferredSubFont := subvalueFontSizes[in.SubvalueSize]
+	if preferredSubFont == 0 {
+		preferredSubFont = subvalueFontSizes["large"]
+	}
+
+	// Label layout — auto-fit font and dynamic positioning
+	labelLinesRaw := []string{}
+	if in.Label != "" {
+		labelLinesRaw = strings.Split(in.Label, "\n")
+	}
+	hasLabel := len(labelLinesRaw) > 0
+	value := xmlEscape(in.Value)
+	subvalue := ""
+	if in.Subvalue != "" {
+		subvalue = xmlEscape(in.Subvalue)
+	}
+	hasSub := subvalue != ""
+
+	// Auto-fit label font
+	longestLabel := 0
+	for _, line := range labelLinesRaw {
+		if len(line) > longestLabel {
+			longestLabel = len(line)
 		}
 	}
+	labelFontSize := labelFontMax
+	if longestLabel > 0 {
+		labelFontSize = fitFontSize(
+			strings.Repeat("M", longestLabel),
+			float64(Canvas-20), labelFontMax, labelFontMin)
+	}
+	labelLineHeight := int(math.Round(float64(labelFontSize) * 1.08))
 
-	// Subvalue
-	hasSub := in.Subvalue != ""
-	subvalueTop := float64(Canvas) - 16.0
+	// Vertical layout
+	labelBlockHeight := 0
+	if hasLabel {
+		labelBlockHeight = len(labelLinesRaw) * labelLineHeight
+	}
+	labelBottom := 0.0
+	if hasLabel {
+		labelBottom = 14.0 + float64(labelBlockHeight)
+	}
+
+	// Subvalue baseline: leave subvalueFontSize*0.35 pixels of bottom padding
+	subvalueBaselineY := float64(Canvas) - math.Round(float64(preferredSubFont)*0.35)
+	subvalueTop := float64(Canvas)
+	if hasSub {
+		subvalueTop = subvalueBaselineY - math.Round(float64(preferredSubFont)*0.85)
+	}
+
+	// Value Y: centered between label bottom and subvalue top
+	top := labelBottom + float64(valueFontSize)*0.75
+	bot := subvalueTop - float64(valueFontSize)*0.15
+	valueY := math.Round((top + bot) / 2)
+
+	// Label elements
+	labelElements := ""
+	if hasLabel {
+		var parts []string
+		for i, line := range labelLinesRaw {
+			y := 14.0 + float64(labelFontSize) + float64(i)*float64(labelLineHeight)
+			parts = append(parts, fmt.Sprintf(
+				`<text x="%d" y="%.0f" font-family="Helvetica,Arial,sans-serif" font-size="%d" font-weight="700" text-anchor="middle" fill="%s" fill-opacity="0.85">%s</text>`,
+				Canvas/2, y, labelFontSize, fg, xmlEscape(line)))
+		}
+		labelElements = strings.Join(parts, "")
+	}
+
+	// Border
+	borderElement := ""
+	if showBorder {
+		borderElement = fmt.Sprintf(
+			`<rect x="0.75" y="0.75" width="%.1f" height="%.1f" rx="16" ry="16" fill="none" stroke="%s" stroke-opacity="0.18" stroke-width="1.5"/>`,
+			float64(Canvas)-1.5, float64(Canvas)-1.5, fg)
+	}
+
+	// Auto-fit subvalue text
+	subvalueFitSize := preferredSubFont
+	if hasSub {
+		subvalueFitSize = fitFontSize(subvalue, float64(Canvas-16), preferredSubFont, subvalueMin)
+	}
 	subvalueElement := ""
 	if hasSub {
 		subvalueElement = fmt.Sprintf(
-			`<text x="%d" y="%.0f" font-family="system-ui,sans-serif" font-size="%d" font-weight="700" text-anchor="middle" fill="%s" fill-opacity="0.85">%s</text>`,
-			Canvas/2, subvalueTop, subvalueFontSize, fg, xmlEscape(in.Subvalue))
-	}
-
-	// Value Y position
-	valueY := 82.0
-	if !hasSub && hasLabel {
-		valueY = 88
-	} else if !hasSub && !hasLabel {
-		valueY = 82
+			`<text x="%d" y="%.0f" font-family="Helvetica,Arial,sans-serif" font-size="%d" font-weight="700" text-anchor="middle" fill="%s" fill-opacity="0.85">%s</text>`,
+			Canvas/2, subvalueBaselineY, subvalueFitSize, fg, subvalue)
 	}
 
 	// Fill rect
@@ -100,14 +173,6 @@ func RenderButton(in ButtonInput) string {
 	}
 	ratio = math.Max(0, math.Min(1, ratio))
 	rect := fillRect(in.Direction, ratio)
-
-	// Border
-	borderElement := ""
-	if showBorder {
-		borderElement = fmt.Sprintf(
-			`<rect x="0.75" y="0.75" width="%d" height="%d" rx="16" ry="16" fill="none" stroke="%s" stroke-opacity="0.18" stroke-width="1.5"/>`,
-			Canvas-2, Canvas-2, fg)
-	}
 
 	// Glyph
 	showGlyph := (in.ShowGlyph == nil || *in.ShowGlyph) && in.Glyph != nil && in.GlyphMode != "none"
@@ -171,8 +236,8 @@ func RenderButton(in ButtonInput) string {
 	valueText := ""
 	if showValueText {
 		valueText = fmt.Sprintf(
-			`<text x="%d" y="%.0f" font-family="system-ui,sans-serif" font-size="%d" font-weight="800" text-anchor="middle" fill="%s">%s</text>`,
-			Canvas/2, valueY, valueFontSize, fg, xmlEscape(in.Value))
+			`<text x="%d" y="%.0f" font-family="Helvetica,Arial,sans-serif" font-size="%d" font-weight="800" text-anchor="middle" fill="%s">%s</text>`,
+			Canvas/2, valueY, valueFontSize, fg, value)
 	}
 
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" opacity="%s">
@@ -237,8 +302,8 @@ func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, sho
 	borderEl := ""
 	if border {
 		borderEl = fmt.Sprintf(
-			`<rect x="0.75" y="0.75" width="%d" height="%d" rx="16" ry="16" fill="none" stroke="%s" stroke-opacity="0.18" stroke-width="1.5"/>`,
-			Canvas-2, Canvas-2, fg)
+			`<rect x="0.75" y="0.75" width="%.1f" height="%.1f" rx="16" ry="16" fill="none" stroke="%s" stroke-opacity="0.18" stroke-width="1.5"/>`,
+			float64(Canvas)-1.5, float64(Canvas)-1.5, fg)
 	}
 
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d">
@@ -285,29 +350,6 @@ func fillRect(direction string, ratio float64) fillRectResult {
 	}
 }
 
-func textSizeToFont(size string, kind string) int {
-	switch kind {
-	case "value":
-		switch size {
-		case "small":
-			return 28
-		case "medium":
-			return 34
-		default: // "large"
-			return 40
-		}
-	default: // "subvalue"
-		switch size {
-		case "small":
-			return 16
-		case "medium":
-			return 19
-		default: // "large"
-			return 22
-		}
-	}
-}
-
 func def(val, fallback string) string {
 	if val == "" {
 		return fallback
@@ -330,7 +372,6 @@ func hexLuminance(hex string) float64 {
 	r, _ := strconv.ParseInt(hex[0:2], 16, 64)
 	g, _ := strconv.ParseInt(hex[2:4], 16, 64)
 	b, _ := strconv.ParseInt(hex[4:6], 16, 64)
-	// Relative luminance (ITU-R BT.709)
 	return (0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(b)) / 255
 }
 

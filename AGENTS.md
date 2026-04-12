@@ -21,7 +21,7 @@ Treat it as prior art to port concepts from, not code to vendor.
 
 - **Go** (1.26+). Single static binary per platform.
 - Only external dep: `github.com/gorilla/websocket`.
-- Binary: ~10MB on disk, ~5MB RSS at runtime.
+- Single static binary per platform, low memory footprint.
 
 ## Repo layout
 

@@ -27,8 +27,8 @@ Written in **Go**. Compiles to a single static binary per platform —
 no runtime dependencies. End users just install the plugin; the
 Stream Deck software launches the binary directly.
 
-- **Binary size**: ~10MB (single executable, no runtime)
-- **Memory**: ~5MB RSS
+- **Single binary**, no runtime dependencies
+- **Low memory footprint**
 - **Only external dep**: [gorilla/websocket](https://github.com/gorilla/websocket)
 
 ## Repo layout

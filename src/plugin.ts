@@ -29,6 +29,7 @@ import {
   checkForUpdate,
   getCurrentVersion,
   getLatestVersion,
+  getUpdateUrl,
   isUpdateAvailable,
   setUpdateCheckerLogSink,
 } from "./update-checker.ts";
@@ -416,9 +417,7 @@ function handleEvent(conn: StreamDeckConnection, event: InboundEvent): void {
       // of refreshing data (the buttons are all showing "UPDATE"
       // anyway, so a data refresh isn't useful).
       if (!getSkipUpdateCheck() && isUpdateAvailable()) {
-        conn.openUrl(
-          "https://github.com/anthonybaldwin/UsageButtons/releases/latest",
-        );
+        conn.openUrl(getUpdateUrl());
         return;
       }
       // Normal: force a cache bypass (still gated by the per-provider

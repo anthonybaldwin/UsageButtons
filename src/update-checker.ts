@@ -8,10 +8,12 @@
  * - Never throws — returns the cached state on network failure.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const REPO = "anthonybaldwin/UsageButtons";
+const RELEASES_URL = `https://github.com/${REPO}/releases/latest`;
+const REPO_URL = `https://github.com/${REPO}`;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 interface UpdateState {
@@ -151,4 +153,30 @@ export function getLatestVersion(): string | null {
 /** The current plugin version. */
 export function getCurrentVersion(): string {
   return state.current;
+}
+
+/**
+ * Detect whether the plugin was installed from a dev build (git clone +
+ * bun run build) vs. a release bundle. Dev installs have a .git
+ * directory in the repo root (two levels up from the binary in
+ * .sdPlugin/bin/). Release bundles only contain the .sdPlugin folder.
+ */
+let devInstall: boolean | undefined;
+function isDevInstall(): boolean {
+  if (devInstall === undefined) {
+    // Binary at .sdPlugin/bin/plugin-win.exe → repo root is ../../
+    const repoRoot = resolve(dirname(process.execPath), "..", "..");
+    devInstall = existsSync(resolve(repoRoot, ".git"));
+    log(`install type: ${devInstall ? "dev (git repo)" : "release bundle"}`);
+  }
+  return devInstall;
+}
+
+/**
+ * URL to direct the user to when an update is available.
+ * Dev installs → repo (they need to git pull + build).
+ * Release installs → releases/latest (download the new bundle).
+ */
+export function getUpdateUrl(): string {
+  return isDevInstall() ? REPO_URL : RELEASES_URL;
 }

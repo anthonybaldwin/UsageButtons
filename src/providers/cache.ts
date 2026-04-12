@@ -51,6 +51,18 @@ const MIN_TTL_MS = 5 * 60 * 1000;
 /** After an upstream error, stop hitting the API for 10 minutes. */
 const COOLDOWN_MS = 10 * 60 * 1000;
 
+/**
+ * Minimum gap between user-initiated (force=true) refreshes per
+ * provider. Prevents button-mashing from hammering upstream APIs
+ * even when the provider hasn't returned an error. The normal TTL
+ * only gates scheduled polls — without this, every keyDown bypasses
+ * the TTL and fires a real HTTP call.
+ *
+ * 30 seconds: responsive enough that "press to refresh" still feels
+ * useful, but a frustrated user mashing won't send 60 requests/min.
+ */
+const MANUAL_COOLDOWN_MS = 30 * 1000;
+
 interface CacheEntry {
   /** Last successful snapshot, if any. */
   snapshot?: ProviderSnapshot;
@@ -60,6 +72,8 @@ interface CacheEntry {
   inflight?: Promise<ProviderSnapshot>;
   /** Error that triggered the current cool-down, if any. */
   lastError?: { message: string; at: number };
+  /** Epoch ms of the last user-initiated (force=true) fetch. */
+  lastForceAt?: number;
 }
 
 const entries = new Map<string, CacheEntry>();
@@ -123,6 +137,25 @@ export async function getSnapshot(
     return errorSnapshot(provider, entry.lastError.message);
   }
 
+  // Manual refresh throttle: even when force=true, don't hit the
+  // API more than once per MANUAL_COOLDOWN_MS. Serves the cached
+  // snapshot instead — the user sees the same data they'd get from
+  // a successful refresh anyway. This protects providers from
+  // button-mashing without degrading the UX (30s is short enough
+  // that a deliberate retry still works).
+  if (
+    options.force &&
+    entry.lastForceAt &&
+    t - entry.lastForceAt < MANUAL_COOLDOWN_MS &&
+    entry.snapshot
+  ) {
+    const waitSec = Math.ceil((MANUAL_COOLDOWN_MS - (t - entry.lastForceAt)) / 1000);
+    logSink(
+      `cache[${provider.id}] manual refresh throttled: ${waitSec}s until next allowed`,
+    );
+    return entry.snapshot;
+  }
+
   // Coalesce concurrent callers behind a single in-flight promise.
   if (entry.inflight) {
     logSink(`cache[${provider.id}] coalesced with in-flight fetch`);
@@ -140,6 +173,8 @@ export async function getSnapshot(
     logSink(`cache[${provider.id}] hit (age=${ageSec}s)`);
     return entry.snapshot;
   }
+
+  if (options.force) entry.lastForceAt = t;
 
   logSink(
     `cache[${provider.id}] miss — ${options.force ? "forced " : ""}fetching upstream`,

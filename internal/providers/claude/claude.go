@@ -257,10 +257,15 @@ func normalizeCookie(raw string) string {
 	if bareKeyRe.MatchString(v) {
 		return "sessionKey=" + v
 	}
-	if !sessionKeyRe.MatchString(v) {
+	// Extract just the sessionKey=sk-ant-... pair from whatever the
+	// user pasted. This handles full Set-Cookie strings like:
+	//   sessionKey=sk-ant-...; Domain=.claude.ai; expires=Sun, ...
+	// as well as multi-cookie headers with other keys mixed in.
+	match := sessionKeyRe.FindString(v)
+	if match == "" {
 		return ""
 	}
-	return v
+	return match
 }
 
 func resolveCookie() string {

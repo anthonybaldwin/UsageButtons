@@ -446,7 +446,7 @@
       <div class="feature">
         <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
         <h3>Standalone native binary</h3>
-        <p>Compiled via <code>bun build --compile</code> into a single <code>.exe</code> / mach-o — users don't install Bun or Node. Just drop and launch.</p>
+        <p>Written in Go — compiles to a ~10MB static binary with ~5MB memory footprint. No runtime dependencies.</p>
       </div>
     </div>
 
@@ -490,33 +490,32 @@
   </section>
 
   <section id="install">
-    <h2>Install</h2>
+    <h2>Build from source</h2>
     <p class="sub">
-      Grab the latest compiled plugin from Releases and double-click. Alternatively, clone
-      and build from source — Bun is the only dev dependency.
+      Written in Go — compiles to a ~10MB static binary with ~5MB memory footprint.
+      No runtime dependencies.
     </p>
 
     <div class="install-steps">
       <div class="step">
         <div>
           <h4>Clone the repo</h4>
-          <p>No Node or npm needed — Bun is the runtime and the compiler.</p>
+          <p>Requires <a href="https://go.dev/dl/">Go</a> and <a href="https://bun.sh">Bun</a> (for the install script).</p>
           <pre>git clone https://github.com/anthonybaldwin/UsageButtons.git
 cd UsageButtons</pre>
         </div>
       </div>
       <div class="step">
         <div>
-          <h4>Install dev deps &amp; build</h4>
-          <p>Cross-compiles to a standalone <code>.exe</code> on Windows or native arm64 + x64 binaries on macOS.</p>
-          <pre>bun install
-bun build</pre>
+          <h4>Build</h4>
+          <p>Compiles to a single native binary. Cross-compilation works out of the box.</p>
+          <pre>go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/</pre>
         </div>
       </div>
       <div class="step">
         <div>
           <h4>Link into Stream Deck</h4>
-          <p>Creates a junction (Windows) or symlink (macOS) so edits to the source propagate without reinstalling.</p>
+          <p>Creates a junction (Windows) or symlink (macOS) so rebuilds take effect without reinstalling.</p>
           <pre>bun install:dev --restart</pre>
         </div>
       </div>

@@ -720,13 +720,23 @@ function renderMetric(
     input.showGlyph = false;
   }
 
-  // Reset-countdown subvalue — user can hide it (e.g. they prefer
-  // maximum value-text space on a "minimal" button style).
+  // Subvalue slot priority:
+  //   1. live reset-countdown (`resetInSeconds`) if the user hasn't
+  //      hidden it via showResetTimer
+  //   2. static caption (e.g. "Prepaid" on BALANCE) as a fallback
+  //      label for metrics that have no countdown but want a
+  //      descriptive line under the big number
+  //
+  // This lets the Claude extra-usage-balance tile render
+  // "$204.80" + "Prepaid" even though the balance doesn't expire
+  // on a timer, without needing a brand-new rendering path.
   if (
     metric.resetInSeconds !== undefined &&
     settings.showResetTimer !== false
   ) {
     input.subvalue = formatCountdown(metric.resetInSeconds);
+  } else if (metric.caption && metric.caption.trim().length > 0) {
+    input.subvalue = metric.caption;
   }
   if (metric.stale !== undefined) input.stale = metric.stale;
   return renderButtonSvg(input);

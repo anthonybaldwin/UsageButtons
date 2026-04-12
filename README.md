@@ -86,4 +86,8 @@ Full dev workflow lives in [AGENTS.md](AGENTS.md).
 
 ## License
 
-TBD.
+[MIT](LICENSE) — same as [CodexBar](https://github.com/steipete/CodexBar),
+the Swift macOS menu bar app this plugin takes its design cues from.
+Provider icon paths and brand colors under `src/providers/` are adapted
+from CodexBar's MIT-licensed resources; see
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for full attribution.

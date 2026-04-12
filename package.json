@@ -4,6 +4,12 @@
   "private": true,
   "description": "Stream Deck plugin that shows AI-coding-assistant usage stats as live buttons.",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthonybaldwin/usage-buttons.git"
+  },
+  "homepage": "https://anthonybaldwin.github.io/usage-buttons/",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "bun run scripts/build.ts",

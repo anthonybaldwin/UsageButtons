@@ -59,6 +59,15 @@ export interface MetricValue {
   direction?: FillDirection;
   /** Seconds until this value resets/refills, if applicable. */
   resetInSeconds?: number;
+  /**
+   * Optional static subvalue line, e.g. `"Prepaid"` on a balance
+   * tile or `"paid"` / `"free"` on a tier indicator. Rendered below
+   * the big number in the subvalue slot, same position as the
+   * reset-countdown text. When both `resetInSeconds` and `caption`
+   * are set, the countdown wins (since it's time-varying and the
+   * caption is a constant label).
+   */
+  caption?: string;
   /** When the source last produced this value. */
   updatedAt?: Date;
   /** True if the value is stale / came from cache / errored. */

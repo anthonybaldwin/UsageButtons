@@ -37,8 +37,10 @@ Facts worth remembering across sessions for this project:
   code into `src/`.
 - Commit-per-task is a hard rule, not a preference.
 
-Save new facts under `~/.claude/projects/C--Users-antho-Repos-usage-buttons/memory/`
-following the normal memory schema.
+Save new facts via Claude Code's built-in auto-memory system
+(stored outside the repo, in the per-project memory directory
+under your `~/.claude/projects/...` tree — the exact path is
+session-derived, don't hardcode it here).
 
 ## SDK quirks Claude should remember
 

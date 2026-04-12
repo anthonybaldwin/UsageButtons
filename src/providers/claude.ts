@@ -404,6 +404,12 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
       numericValue: bal,
       numericUnit: "dollars",
       numericGoodWhen: "high",
+      // Static subvalue label — the prepaid balance isn't a
+      // countdown so the subvalue slot would otherwise be empty.
+      // "Prepaid" makes the tile's meaning obvious at a glance
+      // and visually balances the layout against other tiles
+      // that carry a reset timer.
+      caption: "Prepaid",
       updatedAt: now,
     });
   }

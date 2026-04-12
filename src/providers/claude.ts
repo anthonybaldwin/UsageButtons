@@ -383,18 +383,11 @@ function extraUsageMetrics(extra: ExtraUsageSource | undefined): MetricValue[] {
     updatedAt: now,
   });
 
-  // out-of-credits — red alert when the extras credit pool is dry.
-  if (extra.outOfCredits !== undefined) {
-    out.push({
-      id: "extra-usage-out-of-credits",
-      label: "CREDITS",
-      name: "Out of extras credits",
-      value: extra.outOfCredits ? "OUT" : "OK",
-      ratio: extra.outOfCredits ? 1 : 0,
-      direction: "up",
-      updatedAt: now,
-    });
-  }
+  // (Removed the out-of-credits "OK" / "OUT" status metric — it
+  // was a dumb boolean restating what the BALANCE button already
+  // shows. When balance hits $0 the user sees that directly on the
+  // balance tile; a second "CREDITS OK" button alongside it was
+  // pure redundancy.)
 
   // Prepaid balance from /api/organizations/{orgId}/prepaid/credits.
   // Rendered as a dollar amount with the raw numericValue attached
@@ -516,7 +509,6 @@ export class ClaudeProvider implements Provider {
     "extra-usage-enabled",
     "extra-usage-balance",
     "extra-usage-auto-reload",
-    "extra-usage-out-of-credits",
   ] as const;
 
   async fetch(ctx?: ProviderContext): Promise<ProviderSnapshot> {

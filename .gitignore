@@ -15,8 +15,8 @@ build/
 # .exe, macOS arm64 + x64 native binaries, and the arch-dispatch
 # shell wrapper on Mac). All platform-specific, all reproducible
 # from `bun run build:<target>`, so we don't track any of it.
-com.baldwin.usage-buttons.sdPlugin/bin/
-com.baldwin.usage-buttons.sdPlugin/logs/
+io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/
+io.github.anthonybaldwin.usage-buttons.sdPlugin/logs/
 
 # Editor / OS
 .DS_Store

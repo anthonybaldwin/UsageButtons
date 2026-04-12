@@ -28,7 +28,7 @@ import { platform } from "node:os";
 import { resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "..");
-const SDPLUGIN = resolve(ROOT, "com.baldwin.usage-buttons.sdPlugin");
+const SDPLUGIN = resolve(ROOT, "io.github.anthonybaldwin.usage-buttons.sdPlugin");
 const BIN_DIR = resolve(SDPLUGIN, "bin");
 const ENTRY = resolve(ROOT, "src/plugin.ts");
 

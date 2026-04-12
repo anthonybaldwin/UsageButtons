@@ -21,7 +21,7 @@ import { homedir, platform } from "node:os";
 import { resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "..");
-const PLUGIN_NAME = "com.baldwin.usage-buttons.sdPlugin";
+const PLUGIN_NAME = "io.github.anthonybaldwin.usage-buttons.sdPlugin";
 const SDPLUGIN = resolve(ROOT, PLUGIN_NAME);
 
 const restart = process.argv.includes("--restart");

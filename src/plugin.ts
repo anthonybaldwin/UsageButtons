@@ -2,7 +2,7 @@
  * Stream Deck plugin entry point.
  *
  * Compiled into a native binary via `bun build --compile`, dropped
- * into `com.baldwin.usage-buttons.sdPlugin/bin/plugin-<os>`, and
+ * into `io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-<os>`, and
  * launched by the Stream Deck software with registration args.
  */
 
@@ -84,7 +84,7 @@ interface VisibleKey {
   lastPollAt: number;
 }
 
-const ACTION_UUID = "com.baldwin.usage-buttons.stat";
+const ACTION_UUID = "io.github.anthonybaldwin.usage-buttons.stat";
 const DEFAULT_PROVIDER = "mock";
 const DEFAULT_METRIC = "session-percent";
 /**
@@ -111,7 +111,7 @@ async function main(): Promise<void> {
 
   // Wire the cache's log events through to Stream Deck's per-plugin
   // log file so we can see hit/miss/cool-down decisions in
-  // %APPDATA%/Elgato/StreamDeck/logs/com.baldwin.usage-buttons*.log.
+  // %APPDATA%/Elgato/StreamDeck/logs/io.github.anthonybaldwin.usage-buttons*.log.
   setCacheLogSink((msg) => connection.log(msg));
   setClaudeDebugLogSink((msg) => connection.log(msg));
   setClaudeWebLogSink((msg) => connection.log(msg));

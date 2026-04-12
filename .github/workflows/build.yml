@@ -70,18 +70,18 @@ jobs:
       # a mode-0644 binary.
       - name: Package .streamDeckPlugin bundle
         run: |
-          chmod +x com.baldwin.usage-buttons.sdPlugin/bin/plugin-mac \
-                   com.baldwin.usage-buttons.sdPlugin/bin/plugin-mac-arm64 \
-                   com.baldwin.usage-buttons.sdPlugin/bin/plugin-mac-x64
-          zip -ry com.baldwin.usage-buttons.streamDeckPlugin \
-            com.baldwin.usage-buttons.sdPlugin \
-            -x 'com.baldwin.usage-buttons.sdPlugin/logs/*'
+          chmod +x io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-mac \
+                   io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-mac-arm64 \
+                   io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-mac-x64
+          zip -ry io.github.anthonybaldwin.usage-buttons.streamDeckPlugin \
+            io.github.anthonybaldwin.usage-buttons.sdPlugin \
+            -x 'io.github.anthonybaldwin.usage-buttons.sdPlugin/logs/*'
 
       - name: Upload Windows binary
         uses: actions/upload-artifact@v4
         with:
           name: plugin-win
-          path: com.baldwin.usage-buttons.sdPlugin/bin/plugin-win.exe
+          path: io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-win.exe
           if-no-files-found: error
 
       - name: Upload macOS binaries
@@ -89,14 +89,14 @@ jobs:
         with:
           name: plugin-mac
           path: |
-            com.baldwin.usage-buttons.sdPlugin/bin/plugin-mac
-            com.baldwin.usage-buttons.sdPlugin/bin/plugin-mac-arm64
-            com.baldwin.usage-buttons.sdPlugin/bin/plugin-mac-x64
+            io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-mac
+            io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-mac-arm64
+            io.github.anthonybaldwin.usage-buttons.sdPlugin/bin/plugin-mac-x64
           if-no-files-found: error
 
       - name: Upload .streamDeckPlugin bundle
         uses: actions/upload-artifact@v4
         with:
           name: streamDeckPlugin
-          path: com.baldwin.usage-buttons.streamDeckPlugin
+          path: io.github.anthonybaldwin.usage-buttons.streamDeckPlugin
           if-no-files-found: error

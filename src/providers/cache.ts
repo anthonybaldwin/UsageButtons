@@ -29,7 +29,7 @@ import type { Provider, ProviderSnapshot } from "./types.ts";
 
 /**
  * Observability hook. The plugin sets this to its own `log()` so cache
- * events show up in %APPDATA%/Elgato/StreamDeck/logs/com.baldwin.*.log.
+ * events show up in %APPDATA%/Elgato/StreamDeck/logs/io.github.anthonybaldwin.*.log.
  * Kept as an injected callback so this module stays dependency-free.
  */
 let logSink: (message: string) => void = () => {};

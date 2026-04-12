@@ -404,7 +404,7 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 						ID:           metricID,
 						Label:        deriveLabelFromMetricID(metricID),
 						Name:         deriveLabelFromMetricID(metricID) + " (capped)",
-						Value:        0,
+						Value:        float64(0),
 						NumericValue: &zero,
 						NumericUnit:  "percent",
 						Unit:         "%",
@@ -704,6 +704,8 @@ func formatValue(v any, unit string) string {
 			return fmt.Sprintf("%d%s", int(val), unit)
 		}
 		return fmt.Sprintf("%.1f%s", val, unit)
+	case int:
+		return fmt.Sprintf("%d%s", val, unit)
 	case string:
 		return val
 	default:

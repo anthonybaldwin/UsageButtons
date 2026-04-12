@@ -206,7 +206,16 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
   const fg = input.fg ?? "#f9fafb";
   const fill = input.fill ?? "#3b82f6";
   const bg = input.bg ?? "#111827";
-  const opacity = input.stale ? "0.45" : "1";
+  // Stale dim — applied to the root <svg> element when a snapshot
+  // comes back from the per-provider cache in cool-down state. Was
+  // 0.45 originally, which looked "broken" rather than "slightly
+  // out of date": at 0.45, Claude's #cc7c5e brand orange blended
+  // over the Stream Deck device's black background to ~#5B372A, a
+  // muddy brown that's easy to mistake for a bug. Bumped to 0.75
+  // which blends to ~#995D47 — still noticeably muted (so the
+  // stale state remains distinguishable) but preserves enough of
+  // the brand color to not look like the tile is broken.
+  const opacity = input.stale ? "0.75" : "1";
   const rect = fillRect(ratio, direction);
   const valueSize: ValueSize = input.valueSize ?? "large";
   const preferredValueFont = VALUE_FONT_SIZE[valueSize];
@@ -342,16 +351,25 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
       //     like a foreground element.
       //
       //   - Front copy: OVER the fill rect, in the BACKGROUND
-      //     color at 0.55 opacity. Reads as a dark cut-out of the
-      //     logo against the brand-colored fill — same trick print
-      //     designers use for a knockout on a colored field. The
-      //     old "white-on-brand at 0.18" front copy was nearly
-      //     invisible because white blending with a mid-brightness
-      //     brand color (Claude #cc7c5e) produced a near-color
-      //     match rather than contrast. Swapping to bg gives us
-      //     real darkness-against-light contrast in the filled
-      //     area, mirroring the brightness-against-dark contrast
-      //     of the back copy in the unfilled area.
+      //     color at 0.30 opacity. Reads as a subtle dark cut-out
+      //     of the logo against the brand-colored fill — same
+      //     knockout trick print designers use on a colored
+      //     field, but dialed back to stay visible without
+      //     meaningfully darkening the tile's overall brightness.
+      //
+      //     Tuning history:
+      //       - 0.18 white-on-brand (original): invisible, blended
+      //         into a near-color match with Claude's mid-tone
+      //         brand orange.
+      //       - 0.55 bg-on-brand: visible but too aggressive —
+      //         the knockout over the middle 50% of a filled tile
+      //         made the average perceived brightness of the tile
+      //         drop noticeably, so the user read it as "the
+      //         orange got darker". Overshoot.
+      //       - 0.30 bg-on-brand (current): visible at a glance,
+      //         preserves enough brand-color around the glyph
+      //         shape that the tile still reads as bright orange
+      //         with a darkened logo mark, not as a dimmed tile.
       //
       // Sizing is clamped to 72px max and shrunk if the available
       // label→subvalue zone is tighter (e.g. multi-line labels).
@@ -362,8 +380,8 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
       const gxOff = (CANVAS - gSize) / 2;
       const gyOff = Math.round(zoneTop + (zoneHeight - gSize) / 2);
       const gScale = gSize / vbW;
-      glyphElementBack = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${fg}" fill-opacity="0.50"><path d="${input.glyph.d}"/></g>`;
-      glyphElementFront = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${bg}" fill-opacity="0.55"><path d="${input.glyph.d}"/></g>`;
+      glyphElementBack = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${fg}" fill-opacity="0.70"><path d="${input.glyph.d}"/></g>`;
+      glyphElementFront = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${bg}" fill-opacity="0.30"><path d="${input.glyph.d}"/></g>`;
     } else if (glyphMode === "centered") {
       // 60px focal logo. Smaller than the watermark so it doesn't
       // crowd the border + label + countdown around it. Currently

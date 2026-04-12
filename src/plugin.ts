@@ -341,6 +341,14 @@ async function refreshKey(
   if (!key) return;
   key.lastPollAt = Date.now();
 
+  // Suppress the native Stream Deck title on every render. The user
+  // can type into the "Title:" field in the PI header, and Stream
+  // Deck will overlay that text on top of our SVG — we own the full
+  // 144×144 canvas so the native title just creates a mess. Clearing
+  // it here (not just in willAppear) ensures it stays gone even if
+  // the user types something after the key first appeared.
+  conn.setTitle(context, "");
+
   const providerId = key.settings.providerId ?? DEFAULT_PROVIDER;
   const metricId = key.settings.metricId ?? DEFAULT_METRIC;
   const provider = getProvider(providerId);

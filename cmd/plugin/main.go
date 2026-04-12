@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anthonybaldwin/UsageButtons/internal/icons"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 	"github.com/anthonybaldwin/UsageButtons/internal/render"
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
@@ -771,8 +772,6 @@ func resolveTextSize(perKey settings.TextSize, global settings.TextSize) setting
 	return global
 }
 
-// TODO: Wire up provider glyphs from icons package.
 func getProviderGlyph(providerID string) *render.ProviderGlyph {
-	// Will be populated in the icons package.
-	return nil
+	return icons.ProviderIcons[providerID]
 }

@@ -68,6 +68,28 @@ Cross-compilation from Windows to Mac works via
 switch natively. Move the resulting bin/ files to a Mac and run
 `bun run install:dev` there to fix executable bits + quarantine.
 
+## Releasing
+
+```
+bun run release patch   # or minor / major / explicit version
+```
+
+The release script bumps the version in `manifest.json` and
+`package.json`, commits, tags, and pushes. The GitHub Actions
+workflow builds and publishes the release from the tag.
+
+**Important:** after cutting a release, always rebuild and reinstall
+locally so the running binary matches the new version:
+
+```
+bun run build
+```
+
+If you skip this, the plugin's built-in update checker will see the
+new GitHub Release, compare it against the stale compiled-in version,
+and block every button with an "UPDATE" face — on your own dev
+machine.
+
 ## Stream Deck plugin notes
 
 - Plugin UUID: `io.github.anthonybaldwin.UsageButtons`

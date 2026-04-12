@@ -145,6 +145,13 @@ function providerIdFromAction(actionUUID: string): string | undefined {
  */
 const SCHEDULER_TICK_MS = 30_000;
 
+/**
+ * How often to re-render visible keys from cached data (no API call).
+ * Keeps countdown timers ("4h 12m") reasonably fresh between polls.
+ * Only touches keys currently on-screen — off-page keys are skipped.
+ */
+const DISPLAY_REFRESH_MS = 60_000;
+
 const visibleKeys = new Map<string, VisibleKey>();
 
 async function main(): Promise<void> {
@@ -173,6 +180,11 @@ async function main(): Promise<void> {
   connection.send({ event: "getGlobalSettings", context: args.pluginUUID });
 
   setInterval(() => void scheduleDueKeys(connection), SCHEDULER_TICK_MS);
+
+  // Display-only refresh: re-render visible keys from cache every 60s
+  // so countdown timers stay reasonably accurate between data polls.
+  // No API calls — just peekSnapshot → renderMetric → setImage.
+  setInterval(() => void refreshAllVisibleKeys(connection), DISPLAY_REFRESH_MS);
 }
 
 /**

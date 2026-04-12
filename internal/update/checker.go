@@ -17,7 +17,7 @@ import (
 const (
 	repo          = "anthonybaldwin/UsageButtons"
 	checkInterval = 6 * time.Hour
-	releasesURL   = "https://github.com/" + repo + "/releases/latest"
+	websiteURL    = "https://anthonybaldwin.github.io/UsageButtons/"
 	repoURL       = "https://github.com/" + repo
 )
 
@@ -172,11 +172,11 @@ func CurrentVersion() string {
 }
 
 // URL returns the appropriate update URL based on install type.
-// Dev installs (.git exists) → repo URL. Release bundles → releases/latest.
+// Dev installs (.git exists) → repo URL. Release bundles → website.
 func URL() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return releasesURL
+		return websiteURL
 	}
 	repoRoot := filepath.Join(filepath.Dir(exe), "..", "..")
 	if _, err := os.Stat(filepath.Join(repoRoot, ".git")); err == nil {
@@ -184,5 +184,5 @@ func URL() string {
 		return repoURL
 	}
 	logf("install type: release bundle")
-	return releasesURL
+	return websiteURL
 }

@@ -6,7 +6,7 @@ working on this repo. Claude-specific notes live in `CLAUDE.md`.
 ## Mission
 
 This is a Stream Deck plugin that displays AI-coding-assistant usage
-stats (session %, weekly %, credits, reset countdowns, …) as live
+stats (session %, weekly %, credits, reset countdowns, ...) as live
 buttons. Each stat can be added to a Stream Deck key, and each button
 renders a dynamic SVG icon whose background fill grows or shrinks to
 reflect the current value.
@@ -19,11 +19,9 @@ Treat it as prior art to port concepts from, not code to vendor.
 
 ## Runtime
 
-- **Bun** (already installed). Do not add a Node requirement.
-- TypeScript with strict mode.
-- Ship via `bun build --compile` → standalone native binary per OS
-  (`bin/plugin-win.exe`, `bin/plugin-mac`). End users install **no**
-  runtime.
+- **Go** (1.26+). Single static binary per platform.
+- Only external dep: `github.com/gorilla/websocket`.
+- Binary: ~10MB on disk, ~5MB RSS at runtime.
 
 ## Repo layout
 
@@ -32,63 +30,41 @@ See `README.md`.
 ## Build & run
 
 ```
-bun install               # install dev dependencies
-bun typecheck         # tsc --noEmit
-bun build             # compile platform binary (auto-detects host)
-bun build:win         # force Windows target
-bun build:mac         # force macOS target (builds BOTH arm64 + x64)
-bun install:dev       # link the .sdPlugin into SD's Plugins dir
-bun install:dev --restart   # + kill & relaunch Stream Deck
-bun sync:codexbar     # refresh tmp/CodexBar from upstream
+go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/   # Windows
+GOOS=darwin GOARCH=arm64 go build -o ...sdPlugin/bin/plugin-mac-arm64 ./cmd/plugin/            # macOS arm64
+GOOS=darwin GOARCH=amd64 go build -o ...sdPlugin/bin/plugin-mac-x64 ./cmd/plugin/              # macOS x64
+go vet ./...                                                                                    # lint
+./scripts/install-dev.sh --restart                                                              # link + restart SD
+./scripts/sync-codexbar.sh                                                                      # refresh CodexBar ref
 ```
 
-`bun build` auto-stops Stream Deck before compiling (to release
-the exclusive lock on the running .exe / mach-o binary) and
-auto-relaunches it after. Pass `--no-reload` to skip the
-kill/relaunch dance (useful for CI or cross-compilation from a
-different host).
+### macOS dual-arch
 
-### macOS native dual-arch build
+The release workflow builds two binaries (`plugin-mac-arm64`, `plugin-mac-x64`)
+and writes a shell wrapper (`plugin-mac`) that dispatches via `uname -m`.
+`manifest.json` points `CodePathMac` at the wrapper.
 
-`build:mac` produces THREE files in `bin/`:
-
-  plugin-mac-arm64    — native Apple Silicon (bun-darwin-arm64)
-  plugin-mac-x64      — native Intel          (bun-darwin-x64)
-  plugin-mac          — shell wrapper that exec's the right one
-                        based on `uname -m` at launch time
-
-Stream Deck's `manifest.json` points `CodePathMac` at the wrapper.
-First byte dispatched natively, zero Rosetta. `install:dev` on a
-Mac host also runs `chmod +x` on all three files + strips any
-`com.apple.quarantine` xattr so Gatekeeper doesn't prompt on first
-launch.
-
-Cross-compilation from Windows to Mac works via
-`bun build:mac` on a Windows host — Bun handles the target
-switch natively. Move the resulting bin/ files to a Mac and run
-`bun install:dev` there to fix executable bits + quarantine.
+Cross-compilation from any host: `GOOS=darwin GOARCH=arm64 go build ...`
 
 ## Releasing
 
 ```
-bun release patch   # or minor / major / explicit version
+./scripts/release.sh patch   # or minor / major / explicit version
 ```
 
-The release script bumps the version in `manifest.json` and
-`package.json`, commits, tags, and pushes. The GitHub Actions
-workflow builds and publishes the release from the tag.
+The release script bumps the version in `manifest.json`, commits,
+tags, and pushes. The GitHub Actions workflow builds and publishes
+the release from the tag.
 
-**Important:** after cutting a release, always rebuild and reinstall
-locally so the running binary matches the new version:
+**Important:** after cutting a release, always rebuild locally so the
+running binary matches the new version:
 
 ```
-bun build
+go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/
 ```
 
-If you skip this, the plugin's built-in update checker will see the
-new GitHub Release, compare it against the stale compiled-in version,
-and block every button with an "UPDATE" face — on your own dev
-machine.
+If you skip this, the plugin's update checker will block every button
+with an "UPDATE" face on your own dev machine.
 
 ## GitHub repo metadata
 
@@ -106,18 +82,18 @@ Current topics: `go`, `golang`, `stream-deck`, `stream-deck-plugin`,
 
 - Plugin UUID: `io.github.anthonybaldwin.UsageButtons`
 - Manifest at `io.github.anthonybaldwin.UsageButtons.sdPlugin/manifest.json`
-- `CodePathWin` → `bin/plugin-win.exe`; `CodePathMac` → `bin/plugin-mac`.
+- `CodePathWin` -> `bin/plugin-win.exe`; `CodePathMac` -> `bin/plugin-mac`.
 - Plugin connects to Stream Deck over a local WebSocket; see
   `internal/streamdeck/` for the protocol wrapper.
-- Button images are sent as SVG data URIs via `setImage` — no canvas
-  library, no PNG encoding.
+- Button images are sent as SVG data URIs via `setImage`.
+- `UserTitleEnabled: false` on all actions — we own the full 144x144
+  canvas. Never use `setTitle()` or re-enable native titles.
 
 ## CodexBar reference
 
 - `tmp/CodexBar/` is a git clone of
   https://github.com/steipete/CodexBar — gitignored.
-- Refresh with `bun sync:codexbar` (or
-  `./scripts/sync-codexbar.sh`). This is a one-way pull, not a submodule.
+- Refresh with `./scripts/sync-codexbar.sh`.
 - When implementing or modifying a provider, read the matching file
   under `tmp/CodexBar/Sources/CodexBarCore/Providers/<Name>/` and the
   doc at `tmp/CodexBar/docs/<provider>.md` first.
@@ -139,23 +115,14 @@ Allowed types:
 | `feat`     | new feature visible to the user                   |
 | `fix`      | bug fix                                           |
 | `docs`     | README / CLAUDE.md / AGENTS.md / inline docs      |
-| `chore`    | tooling, config, deps, gitignore, lockfile        |
+| `chore`    | tooling, config, deps, gitignore                  |
 | `refactor` | code change that is neither feat nor fix          |
 | `perf`     | performance improvement                           |
 | `test`     | adding or fixing tests                            |
-| `build`    | build system, bun compile scripts                 |
+| `build`    | build system, compile scripts                     |
 | `ci`       | CI config                                         |
 | `style`    | formatting only, no code change                   |
 | `revert`   | reverting a prior commit                          |
-
-Examples:
-
-```
-feat(providers): add Claude OAuth fetcher
-fix(render): clamp fill to [0,100] to avoid SVG overflow
-chore: gitignore tmp/ and plugin bin output
-docs(agents): document bun build --compile workflow
-```
 
 Rules:
 
@@ -164,17 +131,15 @@ Rules:
 2. **Before saying a task is complete** or moving to the next task,
    commit the work for that task. A task is not done until it is
    committed.
-3. Keep the subject ≤ 72 chars, imperative mood ("add", not "added").
+3. Keep the subject <= 72 chars, imperative mood ("add", not "added").
 4. Put the *why* in the body when the change is non-obvious.
 5. Never use `git commit --amend` on anything that has been pushed.
 6. Never use `--no-verify` to skip hooks.
 
 ## What NOT to do
 
-- Do not vendor CodexBar code into `src/`. Port ideas, write fresh TS.
-- Do not add a Node.js dependency to the runtime. Dev deps are fine.
+- Do not vendor CodexBar code. Port ideas, write fresh Go.
 - Do not store secrets in the repo. Use Stream Deck action settings
-  (per-action) or `~/.codexbar/config.json` (shared with CodexBar) or
-  env vars.
+  or env vars.
 - Do not crawl the user's filesystem. Only read the specific well-known
   paths a given provider documents.

@@ -28,7 +28,7 @@ no runtime dependencies. End users just install the plugin; the
 Stream Deck software launches the binary directly.
 
 - **Binary size**: ~10MB (single executable, no runtime)
-- **Memory**: ~5MB RSS (vs ~500MB with the previous Bun/JS runtime)
+- **Memory**: ~5MB RSS
 - **Only external dep**: [gorilla/websocket](https://github.com/gorilla/websocket)
 
 ## Repo layout
@@ -70,7 +70,7 @@ UsageButtons/
 
 1. Install [Go](https://go.dev/dl/)
 2. `go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/`
-3. `bun install:dev --restart` — junctions the .sdPlugin folder
+3. `./scripts/install-dev.sh --restart` — junctions the .sdPlugin folder
    into `%APPDATA%\Elgato\StreamDeck\Plugins\` and relaunches
    Stream Deck
 4. Drag a provider (e.g. **Claude**, **Codex**, **Copilot**) onto a key
@@ -80,7 +80,7 @@ UsageButtons/
 
 1. Install [Go](https://go.dev/dl/)
 2. `GOOS=darwin GOARCH=arm64 go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac ./cmd/plugin/`
-3. `bun install:dev --restart`
+3. `./scripts/install-dev.sh --restart`
 4. Same Property Inspector flow as Windows
 
 Cross-compilation from Windows: `GOOS=darwin GOARCH=arm64 go build ...`

@@ -28,3 +28,4 @@ Thumbs.db
 # Secrets / user config
 .env
 .env.local
+plugin.exe

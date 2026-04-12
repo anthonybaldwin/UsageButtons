@@ -3,21 +3,18 @@ name: release
 # Build and publish a GitHub Release when a version tag is pushed.
 #
 # Workflow:
-#   1. git tag v0.1.0 && git push --tags  (or `bun run release patch`)
+#   1. ./scripts/release.sh patch  (tags + pushes)
 #   2. This workflow fires, cross-compiles for win + mac
 #   3. Injects the tag version into manifest.json
 #   4. Packages platform-specific .streamDeckPlugin bundles
 #   5. Creates a GitHub Release with both bundles attached
-#
-# Two bundles are published — one per platform — so users only
-# download the ~28 MB binary they need, not all three (~85 MB).
 
 on:
   push:
     tags: ['v*']
 
 permissions:
-  contents: write   # needed to create releases
+  contents: write
 
 jobs:
   release:
@@ -32,16 +29,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          bun-version: latest
+          go-version: '1.26'
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Typecheck
-        run: bun run typecheck
+      - name: Vet
+        run: go vet ./...
 
       # Extract semver from tag (v0.1.0 → 0.1.0) and convert to
       # Stream Deck's four-part format (0.1.0 → 0.1.0.0).
@@ -62,19 +56,31 @@ jobs:
             > manifest.tmp && mv manifest.tmp $PLUGIN_DIR/manifest.json
 
       - name: Build Windows binary
-        run: bun run scripts/build.ts win --no-reload
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: go build -o $BIN_DIR/plugin-win.exe ./cmd/plugin/
 
-      - name: Build macOS binaries (arm64 + x64 + wrapper)
-        run: bun run scripts/build.ts mac --no-reload
+      - name: Build macOS binaries
+        run: |
+          GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/plugin-mac-arm64 ./cmd/plugin/
+          GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/plugin-mac-x64 ./cmd/plugin/
 
-      # Package platform-specific bundles. Each contains only the
-      # binary for that platform, keeping downloads ~28 MB instead
-      # of ~85 MB for a universal bundle.
-      #
-      # Stream Deck resolves CodePathWin / CodePathMac from the
-      # manifest, so including only one platform's binary is fine —
-      # the other CodePath entry just points at a file that doesn't
-      # exist, which Stream Deck ignores on the wrong OS.
+      - name: Write macOS arch-dispatch wrapper
+        run: |
+          cat > $BIN_DIR/plugin-mac << 'WRAPPER'
+          #!/bin/sh
+          set -e
+          dir="$(cd "$(dirname "$0")" && pwd)"
+          case "$(uname -m)" in
+            arm64|aarch64) exec "$dir/plugin-mac-arm64" "$@" ;;
+            x86_64)        exec "$dir/plugin-mac-x64" "$@" ;;
+            *)             echo "UsageButtons: unsupported arch: $(uname -m)" >&2; exit 1 ;;
+          esac
+          WRAPPER
+          chmod +x $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
+
+      # Package platform-specific bundles
       - name: Package Windows .streamDeckPlugin
         run: |
           rm -f $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
@@ -85,7 +91,18 @@ jobs:
       - name: Package macOS .streamDeckPlugin
         run: |
           rm -f $BIN_DIR/plugin-win.exe
-          bun run scripts/build.ts mac --no-reload
+          GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/plugin-mac-arm64 ./cmd/plugin/
+          GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/plugin-mac-x64 ./cmd/plugin/
+          cat > $BIN_DIR/plugin-mac << 'WRAPPER'
+          #!/bin/sh
+          set -e
+          dir="$(cd "$(dirname "$0")" && pwd)"
+          case "$(uname -m)" in
+            arm64|aarch64) exec "$dir/plugin-mac-arm64" "$@" ;;
+            x86_64)        exec "$dir/plugin-mac-x64" "$@" ;;
+            *)             echo "UsageButtons: unsupported arch: $(uname -m)" >&2; exit 1 ;;
+          esac
+          WRAPPER
           chmod +x $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
           zip -ry UsageButtons-macOS.streamDeckPlugin \
             $PLUGIN_DIR \

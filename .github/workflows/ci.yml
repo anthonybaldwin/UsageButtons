@@ -1,9 +1,5 @@
 name: ci
 
-# Validate every push and PR: typecheck + cross-compile.
-# This does NOT produce releases — see release.yml for that.
-# Artifacts are uploaded with short retention for ad-hoc testing.
-
 on:
   push:
     branches: [main]
@@ -20,32 +16,39 @@ permissions:
 
 jobs:
   build:
-    name: typecheck + cross-compile
+    name: build + vet
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          bun-version: latest
+          go-version: '1.26'
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Typecheck
-        run: bun run typecheck
+      - name: Vet
+        run: go vet ./...
 
       - name: Build Windows binary
-        run: bun run scripts/build.ts win --no-reload
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/
 
-      - name: Build macOS binaries (arm64 + x64 + wrapper)
-        run: bun run scripts/build.ts mac --no-reload
+      - name: Build macOS arm64 binary
+        env:
+          GOOS: darwin
+          GOARCH: arm64
+        run: go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac-arm64 ./cmd/plugin/
 
-      # Upload artifacts with short retention for ad-hoc testing.
-      # These are NOT releases — just CI validation artifacts.
+      - name: Build macOS amd64 binary
+        env:
+          GOOS: darwin
+          GOARCH: amd64
+        run: go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac-x64 ./cmd/plugin/
+
       - name: Upload binaries
         uses: actions/upload-artifact@v7
         with:
@@ -53,7 +56,6 @@ jobs:
           retention-days: 7
           path: |
             io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe
-            io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac
             io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac-arm64
             io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac-x64
           if-no-files-found: error

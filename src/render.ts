@@ -128,22 +128,45 @@ function fillRect(
   }
 }
 
+/**
+ * Value text sizes. Dropped from the original 32/40/48 set because
+ * "large = 48" made short strings like "OFF" / "3%" feel
+ * overweighted for a 144px key, and forced the auto-fit to shrink
+ * medium-length strings like "$204.80" all the way down to ~29px
+ * where they looked cramped. 26/34/40 gives short strings breathing
+ * room AND leaves the auto-fit with headroom for 5–7 char dollar
+ * values without dropping below ~30px.
+ */
 const VALUE_FONT_SIZE: Record<ValueSize, number> = {
-  small: 32,
-  medium: 40,
-  large: 48,
+  small: 26,
+  medium: 34,
+  large: 40,
 };
 
 /**
+ * Floor the auto-fit never shrinks below, so a long value like
+ * "$1,234.56" still renders at a legible size even if it means
+ * clipping a pixel off the ends. Was 14 — too small to read on a
+ * 144px key.
+ */
+const VALUE_FONT_MIN = 22;
+
+/**
+ * Average em-width for a Helvetica Bold glyph in the set of chars
+ * our value text actually contains (digits, currency symbols, "%",
+ * "OFF"/"ON", "d"/"h"/"m"/"s"). Helvetica Bold is narrower than
+ * the 0.58 that works for headline-weight sans — dropping to 0.56
+ * lets slightly-too-long strings still render at their preferred
+ * size instead of getting shrunk unnecessarily.
+ */
+const VALUE_EM_WIDTH = 0.56;
+
+/**
  * Estimate how many pixels wide a string renders at a given
- * font-size in Helvetica Bold. 0.58em per character is the
- * average across digits, currency glyphs, and the few letters we
- * use. Good enough for auto-fit decisions — we only use the
- * estimate to decide whether to shrink the font, never to position
- * anything precisely.
+ * font-size in Helvetica Bold. See VALUE_EM_WIDTH above.
  */
 function estimateTextWidth(text: string, fontSize: number): number {
-  return text.length * fontSize * 0.58;
+  return text.length * fontSize * VALUE_EM_WIDTH;
 }
 
 /**
@@ -156,12 +179,12 @@ function fitFontSize(
   text: string,
   maxWidth: number,
   preferredSize: number,
-  minSize = 14,
+  minSize = VALUE_FONT_MIN,
 ): number {
   if (!text) return preferredSize;
   if (estimateTextWidth(text, preferredSize) <= maxWidth) return preferredSize;
   // Solve for the size that fits exactly, clamped to minSize.
-  const solved = Math.floor(maxWidth / (text.length * 0.58));
+  const solved = Math.floor(maxWidth / (text.length * VALUE_EM_WIDTH));
   return Math.max(minSize, Math.min(preferredSize, solved));
 }
 const LABEL_FONT_MAX = 16;
@@ -187,14 +210,15 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
   const rect = fillRect(ratio, direction);
   const valueSize: ValueSize = input.valueSize ?? "large";
   const preferredValueFont = VALUE_FONT_SIZE[valueSize];
-  // Auto-fit the big-number text to the canvas width. Leave ~12px
-  // of horizontal padding on each side (to account for the
-  // rounded-corner inset + border stroke). This shrinks long
-  // strings like "$1,234.56" at Large from 48px to whatever fits
-  // without clipping, while leaving short strings ("42%") at full size.
+  // Auto-fit the big-number text to the canvas width. Leave 8px
+  // of horizontal padding on each side (the rounded-corner inset
+  // only eats ~6px at the midline height, so 8 is enough). Pairs
+  // with the narrower VALUE_EM_WIDTH estimate so strings like
+  // "$204.80" stay at full preferred size instead of getting
+  // shrunk down to an unreadable 29px.
   const valueFontSize = fitFontSize(
     input.value,
-    CANVAS - 24,
+    CANVAS - 16,
     preferredValueFont,
   );
   const subvalueSize: ValueSize = input.subvalueSize ?? "large";
@@ -287,14 +311,46 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
   let glyphElementBack = "";
   let glyphElementFront = "";
   if (showGlyph && input.glyph) {
+    // Parse the glyph's viewBox so the render scale matches the
+    // source path's own coordinate space. CodexBar's paths are
+    // mostly 0 0 100 100, but a handful (alibaba 200×200, amp 28×28)
+    // use different sizes, so hardcoding /100 would distort them.
+    const vb = input.glyph.viewBox.trim().split(/\s+/).map(Number);
+    const vbW = vb.length >= 4 && !Number.isNaN(vb[2]!) && vb[2]! > 0 ? vb[2]! : 100;
     if (glyphMode === "watermark") {
-      // 76px centered watermark BEHIND the fill rect at 0.40
-      // opacity. White-on-dark is highly visible at 40%; the
-      // brand-colored fill rect covers the bottom portion as the
-      // meter rises.
-      const gSize = 76;
-      const gOff = (CANVAS - gSize) / 2;
-      glyphElementBack = `<g transform="translate(${gOff} ${gOff}) scale(${gSize / 100})" fill="${fg}" fill-opacity="0.40"><path d="${input.glyph.d}"/></g>`;
+      // Watermark logo — positioned in the vertical zone BETWEEN
+      // the label and subvalue, not just canvas-centered. The old
+      // "dead-center 84px" placement put the glyph's top edge at
+      // y=30, exactly where the label baseline is, so the label
+      // text was sitting on top of the logo with zero visual
+      // breathing room. Centering in the label→subvalue gap gives
+      // the label a clean top strip and the subvalue a clean
+      // bottom strip and puts the logo exactly where the eye
+      // expects a brand mark — right behind the big number.
+      //
+      // We render the logo TWICE so it stays visible regardless
+      // of meter position:
+      //
+      //   - Back copy: inside the clip path, BEHIND the fill rect,
+      //     at 0.50 opacity in the foreground (usually white).
+      //     Reads strongly against the dark un-filled bg.
+      //
+      //   - Front copy: OVER the fill rect, at 0.18 opacity. Low
+      //     enough not to wash out the brand-colored fill, high
+      //     enough that the logo's silhouette is still legible
+      //     through the filled portion of the meter.
+      //
+      // Sizing is clamped to 72px max and shrunk if the available
+      // label→subvalue zone is tighter (e.g. multi-line labels).
+      const zoneTop = (hasLabel ? labelBottom : 6) + 6;
+      const zoneBot = (hasSub ? subvalueTop : CANVAS - 6) - 6;
+      const zoneHeight = zoneBot - zoneTop;
+      const gSize = Math.max(44, Math.min(72, zoneHeight));
+      const gxOff = (CANVAS - gSize) / 2;
+      const gyOff = Math.round(zoneTop + (zoneHeight - gSize) / 2);
+      const gScale = gSize / vbW;
+      glyphElementBack = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${fg}" fill-opacity="0.50"><path d="${input.glyph.d}"/></g>`;
+      glyphElementFront = `<g transform="translate(${gxOff} ${gyOff}) scale(${gScale})" fill="${fg}" fill-opacity="0.18"><path d="${input.glyph.d}"/></g>`;
     } else if (glyphMode === "centered") {
       // 60px focal logo. Smaller than the watermark so it doesn't
       // crowd the border + label + countdown around it. Currently
@@ -303,12 +359,12 @@ export function renderButtonSvg(input: ButtonRenderInput): string {
       // future render path that wants the focal logo treatment.
       const gSize = 60;
       const gOff = (CANVAS - gSize) / 2;
-      glyphElementFront = `<g transform="translate(${gOff} ${gOff}) scale(${gSize / 100})" fill="${fg}" fill-opacity="0.92"><path d="${input.glyph.d}"/></g>`;
+      glyphElementFront = `<g transform="translate(${gOff} ${gOff}) scale(${gSize / vbW})" fill="${fg}" fill-opacity="0.92"><path d="${input.glyph.d}"/></g>`;
     } else if (glyphMode === "corner") {
       const gSize = 20;
       const gx = CANVAS - gSize - 6;
       const gy = 6;
-      glyphElementFront = `<g transform="translate(${gx} ${gy}) scale(${gSize / 100})" fill="${fg}" fill-opacity="0.7"><path d="${input.glyph.d}"/></g>`;
+      glyphElementFront = `<g transform="translate(${gx} ${gy}) scale(${gSize / vbW})" fill="${fg}" fill-opacity="0.7"><path d="${input.glyph.d}"/></g>`;
     }
   }
 
@@ -361,8 +417,13 @@ export function renderLoadingSvg(opts: {
   const glyphSize = 56;
   const glyphOffset = (CANVAS - glyphSize) / 2;
   const glyphColor = opts.fill ?? fg;
+  const loadingVb = opts.glyph?.viewBox.trim().split(/\s+/).map(Number);
+  const loadingVbW =
+    loadingVb && loadingVb.length >= 4 && !Number.isNaN(loadingVb[2]!) && loadingVb[2]! > 0
+      ? loadingVb[2]!
+      : 100;
   const glyphElement = opts.glyph
-    ? `<g transform="translate(${glyphOffset} ${glyphOffset}) scale(${glyphSize / 100})" fill="${glyphColor}" fill-opacity="0.85"><path d="${opts.glyph.d}"/></g>`
+    ? `<g transform="translate(${glyphOffset} ${glyphOffset}) scale(${glyphSize / loadingVbW})" fill="${glyphColor}" fill-opacity="0.85"><path d="${opts.glyph.d}"/></g>`
     : // Fallback when no glyph is available for the provider: a
       // simple centered dot so the user still sees *something*.
       `<circle cx="${CANVAS / 2}" cy="${CANVAS / 2}" r="4" fill="${fg}" fill-opacity="0.4"/>`;

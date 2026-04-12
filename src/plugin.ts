@@ -625,6 +625,25 @@ function renderMetric(
   input.subvalueSize = settings.subvalueSize ?? getDefaultSubvalueSize();
   if (settings.showBorder === false) input.border = false;
 
+  // Provider glyph watermark. Wire the logo through to the renderer
+  // whenever both the global and per-key toggles say yes. Without
+  // this pass-through the renderer silently skips glyph drawing
+  // (see renderButtonSvg — the glyph block is gated on `input.glyph`
+  // being truthy), so the logo NEVER appears on a live metric face,
+  // only on the loading face. This was the "I can't see any logos
+  // on my buttons" bug.
+  const wantGlyph =
+    getShowGlyphs() && settings.showGlyph !== false;
+  if (wantGlyph) {
+    const glyph = PROVIDER_ICONS[provider.id];
+    if (glyph) {
+      input.glyph = glyph;
+      input.glyphMode = "watermark";
+    }
+  } else {
+    input.showGlyph = false;
+  }
+
   // Reset-countdown subvalue — user can hide it (e.g. they prefer
   // maximum value-text space on a "minimal" button style).
   if (

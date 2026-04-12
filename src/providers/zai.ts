@@ -123,6 +123,7 @@ export class ZaiProvider implements Provider {
       const remainPct = 100 - usedPct;
       const resetSecs = resetSecondsFromLimit(limit);
 
+      const remaining = cap - used;
       const m: MetricValue = {
         id: isTokens ? "tokens-percent" : isMcp ? "mcp-percent" : `${type}-percent`,
         label: isTokens ? "TOKENS" : isMcp ? "MCP" : type.toUpperCase(),
@@ -133,6 +134,8 @@ export class ZaiProvider implements Provider {
         unit: "%",
         ratio: remainPct / 100,
         direction: "up",
+        rawCount: remaining,
+        rawMax: cap,
         updatedAt: now,
       };
       if (resetSecs !== undefined) m.resetInSeconds = resetSecs;

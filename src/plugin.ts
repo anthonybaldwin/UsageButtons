@@ -90,6 +90,13 @@ interface KeySettings {
   /** Show the reset countdown as a subvalue under the big number. Default true. */
   showResetTimer?: boolean;
   /**
+   * Show raw count/max in the subvalue slot instead of the normal
+   * subtext. When `undefined`, auto-enables for metrics that carry
+   * `rawCount`+`rawMax` (credit-based providers). Set to `true` to
+   * force on, `false` to force off.
+   */
+  showRawCounts?: boolean;
+  /**
    * Per-key refresh cadence in minutes. One of 5, 10, 15, 30, 60.
    * When undefined, the key uses the plugin's global default.
    */
@@ -930,9 +937,16 @@ function renderMetric(
   //      "Prepaid" caption with whatever label makes sense on
   //      your specific dashboard.
   //
-  //   3. Metric's default caption (e.g. "Prepaid" on BALANCE,
-  //      "Monthly" on HEADROOM / LIMIT) — the provider-specified
-  //      fallback label when the metric has no countdown.
+  //   3. showRawCounts — when enabled (explicitly true, or auto
+  //      when the metric has rawCount+rawMax), shows "42/56" or
+  //      "$12.00/$50.00" instead of the normal subtext.
+  //
+  //   4. Metric's default caption (e.g. "Prepaid" on BALANCE,
+  //      "Monthly" on LIMIT) — the provider-specified fallback
+  //      label when the metric has no countdown.
+  //
+  //   5. Auto "Remaining" / "Used" — for percent metrics with no
+  //      other subtext, automatically label based on invertFill.
   //
   // To pin a custom caption on a metric that normally shows a
   // countdown, the user sets `showResetTimer: false` AND
@@ -947,12 +961,63 @@ function renderMetric(
     const override = settings.captionOverride?.trim();
     if (override && override.length > 0) {
       input.subvalue = override;
+    } else if (resolveShowRawCounts(metric, settings)) {
+      input.subvalue = formatRawCounts(metric);
     } else if (metric.caption && metric.caption.trim().length > 0) {
       input.subvalue = metric.caption;
+    } else if (metric.numericUnit === "percent") {
+      // Auto-label percent metrics: "Remaining" in normal mode,
+      // "Used" when invertFill is on.
+      input.subvalue = invert ? "Used" : "Remaining";
     }
   }
   if (metric.stale !== undefined) input.stale = metric.stale;
   return renderButtonSvg(input);
+}
+
+/**
+ * Resolve whether to show raw counts for this metric + key.
+ *
+ *   - `showRawCounts === true` → force on (if data exists)
+ *   - `showRawCounts === false` → force off
+ *   - `showRawCounts === undefined` → auto: on when rawCount+rawMax exist
+ */
+function resolveShowRawCounts(metric: MetricValue, settings: KeySettings): boolean {
+  if (settings.showRawCounts === false) return false;
+
+  // Raw count/max pair available?
+  if (typeof metric.rawCount === "number" && typeof metric.rawMax === "number") {
+    return settings.showRawCounts === true || settings.showRawCounts === undefined;
+  }
+
+  // Dollar metrics with numericMax: only when explicitly requested
+  if (
+    settings.showRawCounts === true &&
+    typeof metric.numericValue === "number" &&
+    typeof metric.numericMax === "number" &&
+    metric.numericUnit === "dollars"
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Format raw counts for the subvalue slot.
+ */
+function formatRawCounts(metric: MetricValue): string {
+  if (typeof metric.rawCount === "number" && typeof metric.rawMax === "number") {
+    return `${metric.rawCount}/${metric.rawMax}`;
+  }
+  if (
+    typeof metric.numericValue === "number" &&
+    typeof metric.numericMax === "number" &&
+    metric.numericUnit === "dollars"
+  ) {
+    return `$${metric.numericValue.toFixed(2)}/$${metric.numericMax.toFixed(2)}`;
+  }
+  return "";
 }
 
 function formatCountdown(seconds: number): string {

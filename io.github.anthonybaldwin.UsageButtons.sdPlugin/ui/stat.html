@@ -161,6 +161,17 @@
       <label for="showResetTimer">Show reset countdown under the number</label>
     </div>
 
+    <div class="checkbox-row">
+      <input id="showRawCounts" type="checkbox">
+      <label for="showRawCounts">Show raw counts (e.g. 42/56)</label>
+    </div>
+    <p class="hint">
+      When checked, percent metrics with raw count data show the
+      underlying count instead of "Remaining" / "Used". Auto-enables
+      for credit-based providers (Warp, Kimi K2, z.ai, Copilot) when
+      the API returns raw counts. Uncheck to force off.
+    </p>
+
     <div class="group-heading">Fill</div>
 
     <label for="fillDirection">Fill direction</label>
@@ -517,6 +528,7 @@
       document.getElementById("hideLabel").checked = !!settings.hideLabel;
       document.getElementById("captionOverride").value = settings.captionOverride || "";
       document.getElementById("showResetTimer").checked = settings.showResetTimer !== false;
+      document.getElementById("showRawCounts").checked = !!settings.showRawCounts;
       document.getElementById("showBorder").checked = settings.showBorder !== false;
       document.getElementById("showGlyph").checked = settings.showGlyph !== false;
       document.getElementById("valueSize").value = settings.valueSize || "";
@@ -617,6 +629,7 @@
         hideLabel:      document.getElementById("hideLabel").checked,
         captionOverride: document.getElementById("captionOverride").value,
         showResetTimer: document.getElementById("showResetTimer").checked,
+        showRawCounts:  document.getElementById("showRawCounts").checked || undefined,
         showBorder:     document.getElementById("showBorder").checked,
         showGlyph:      document.getElementById("showGlyph").checked,
         // Empty-string "Use plugin default" omits the field so it
@@ -684,7 +697,7 @@
     for (const id of [
       "metric", "refreshMinutes", "labelOverride", "hideLabel",
       "captionOverride",
-      "showResetTimer", "showBorder", "showGlyph",
+      "showResetTimer", "showRawCounts", "showBorder", "showGlyph",
       "valueSize", "subvalueSize",
       "fillDirection", "fillColor", "bgColor", "textColor",
       "warnBelow", "criticalBelow", "warnColor", "criticalColor",

@@ -135,7 +135,7 @@ export class CopilotProvider implements Provider {
         ? 100 - q.percent_remaining
         : 0;
       const remaining = 100 - used;
-      metrics.push({
+      const m: MetricValue = {
         id: "premium-percent",
         label: "PREMIUM",
         name: "Premium interactions remaining",
@@ -146,7 +146,13 @@ export class CopilotProvider implements Provider {
         ratio: remaining / 100,
         direction: "up",
         updatedAt: now,
-      });
+      };
+      // Copilot exposes raw entitlement/remaining counts
+      if (typeof q.entitlement === "number" && typeof q.remaining === "number") {
+        m.rawCount = q.remaining;
+        m.rawMax = q.entitlement;
+      }
+      metrics.push(m);
     }
 
     if (snapshots?.chat) {
@@ -155,7 +161,7 @@ export class CopilotProvider implements Provider {
         ? 100 - q.percent_remaining
         : 0;
       const remaining = 100 - used;
-      metrics.push({
+      const m: MetricValue = {
         id: "chat-percent",
         label: "CHAT",
         name: "Chat interactions remaining",
@@ -166,7 +172,12 @@ export class CopilotProvider implements Provider {
         ratio: remaining / 100,
         direction: "up",
         updatedAt: now,
-      });
+      };
+      if (typeof q.entitlement === "number" && typeof q.remaining === "number") {
+        m.rawCount = q.remaining;
+        m.rawMax = q.entitlement;
+      }
+      metrics.push(m);
     }
 
     const planName = response.copilot_plan

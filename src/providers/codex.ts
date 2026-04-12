@@ -72,6 +72,8 @@ import {
   CredentialNotFoundError,
 } from "../util/credentials.ts";
 import { httpJson, HttpError } from "../util/http.ts";
+import { computePace } from "../util/pace.ts";
+import { getCodexCosts, formatTokenCount } from "./cost-scanner.ts";
 import { CODEXBAR_BRAND_COLORS } from "./brand-colors.ts";
 import type {
   MetricValue,
@@ -333,6 +335,8 @@ export class CodexProvider implements Provider {
     "session-percent",
     "weekly-percent",
     "credits-balance",
+    "cost-today",
+    "cost-30d",
   ] as const;
 
   async fetch(): Promise<ProviderSnapshot> {
@@ -391,7 +395,12 @@ export class CodexProvider implements Provider {
       "Weekly window remaining",
       windows.weekly,
     );
-    if (weekly) metrics.push(weekly);
+    if (weekly) {
+      const weeklyUsed = windows.weekly?.used_percent ?? 0;
+      const pace = computePace(weeklyUsed, weekly.resetInSeconds, WEEKLY_WINDOW_SECONDS);
+      if (pace) weekly.caption = pace.label;
+      metrics.push(weekly);
+    }
 
     // Credits metric: only emit for accounts that ACTUALLY have a
     // credits-based plan with a positive balance. Free-plan users
@@ -426,6 +435,42 @@ export class CodexProvider implements Provider {
         caption: "Prepaid",
         updatedAt: new Date(),
       });
+    }
+
+    // Cost metrics from local JSONL session logs.
+    try {
+      const costs = await getCodexCosts();
+      const now = new Date();
+      if (costs.todayTokens > 0 || costs.last30DaysTokens > 0) {
+        metrics.push({
+          id: "cost-today",
+          label: "TODAY",
+          name: "Cost today (local logs)",
+          value: `$${costs.todayCostUsd.toFixed(2)}`,
+          numericValue: costs.todayCostUsd,
+          numericUnit: "dollars",
+          numericGoodWhen: "low",
+          ratio: 1,
+          direction: "up",
+          caption: `${formatTokenCount(costs.todayTokens)} tokens`,
+          updatedAt: now,
+        });
+        metrics.push({
+          id: "cost-30d",
+          label: "30 DAYS",
+          name: "Cost last 30 days (local logs)",
+          value: `$${costs.last30DaysCostUsd.toFixed(2)}`,
+          numericValue: costs.last30DaysCostUsd,
+          numericUnit: "dollars",
+          numericGoodWhen: "low",
+          ratio: 1,
+          direction: "up",
+          caption: `${formatTokenCount(costs.last30DaysTokens)} tokens`,
+          updatedAt: now,
+        });
+      }
+    } catch {
+      // Cost scanning is best-effort
     }
 
     const planName = humanPlan(response.plan_type) ?? this.name;

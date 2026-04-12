@@ -175,6 +175,19 @@ export async function getSnapshot(
   return fetchPromise;
 }
 
+/**
+ * Synchronously peek at the cached snapshot for a provider WITHOUT
+ * triggering a fetch. Returns the most recent snapshot if one exists
+ * (regardless of age), or undefined if the provider was never fetched.
+ *
+ * Used by the willAppear handler to render directly from cache when
+ * switching Stream Deck pages — avoids the loading-face flicker that
+ * happens when every key fires willAppear → async fetch → render.
+ */
+export function peekSnapshot(providerId: string): ProviderSnapshot | undefined {
+  return entries.get(providerId)?.snapshot;
+}
+
 /** Clear the cache — used by tests or by an explicit user action. */
 export function clearCache(providerId?: string): void {
   if (providerId) entries.delete(providerId);

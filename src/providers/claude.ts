@@ -62,8 +62,10 @@ import {
   CredentialNotFoundError,
 } from "../util/credentials.ts";
 import { httpJson, HttpError } from "../util/http.ts";
+import { computePace } from "../util/pace.ts";
 import { getClaudeSettings } from "../settings.ts";
 import { fetchClaudeExtraUsage, type WebExtraUsage } from "./claude-web.ts";
+import { getClaudeCosts, formatTokenCount } from "./cost-scanner.ts";
 import { CODEXBAR_BRAND_COLORS } from "./brand-colors.ts";
 import type {
   MetricValue,
@@ -532,6 +534,8 @@ export class ClaudeProvider implements Provider {
     "extra-usage-enabled",
     "extra-usage-balance",
     "extra-usage-auto-reload",
+    "cost-today",
+    "cost-30d",
   ] as const;
 
   async fetch(ctx?: ProviderContext): Promise<ProviderSnapshot> {
@@ -614,7 +618,15 @@ export class ClaudeProvider implements Provider {
       "Weekly window remaining",
       response.seven_day,
     );
-    if (weekly) metrics.push(weekly);
+    if (weekly) {
+      // Attach pace as caption — visible when the user disables the
+      // reset countdown, or when there's no reset timer at all.
+      const weeklyUsed = response.seven_day?.utilization ?? 0;
+      const weeklyReset = weekly.resetInSeconds;
+      const pace = computePace(weeklyUsed, weeklyReset, 7 * 24 * 60 * 60);
+      if (pace) weekly.caption = pace.label;
+      metrics.push(weekly);
+    }
 
     // Match CodexBar: there is ONE model-specific slot, labeled
     // "Sonnet", populated from `seven_day_sonnet` first and falling
@@ -748,6 +760,43 @@ export class ClaudeProvider implements Provider {
     debugLogSink?.(
       `claude windows: five_hour=${windowLabel(response.five_hour)} seven_day=${windowLabel(response.seven_day)} sonnet=${windowLabel(response.seven_day_sonnet)} opus=${windowLabel(response.seven_day_opus)} cowork=${windowLabel(cowork)}`,
     );
+
+    // Cost metrics from local JSONL session logs. Best-effort —
+    // if the logs don't exist or scanning fails, we just skip.
+    try {
+      const costs = await getClaudeCosts();
+      const now = new Date();
+      if (costs.todayTokens > 0 || costs.last30DaysTokens > 0) {
+        metrics.push({
+          id: "cost-today",
+          label: "TODAY",
+          name: "Cost today (local logs)",
+          value: `$${costs.todayCostUsd.toFixed(2)}`,
+          numericValue: costs.todayCostUsd,
+          numericUnit: "dollars",
+          numericGoodWhen: "low",
+          ratio: 1,
+          direction: "up",
+          caption: `${formatTokenCount(costs.todayTokens)} tokens`,
+          updatedAt: now,
+        });
+        metrics.push({
+          id: "cost-30d",
+          label: "30 DAYS",
+          name: "Cost last 30 days (local logs)",
+          value: `$${costs.last30DaysCostUsd.toFixed(2)}`,
+          numericValue: costs.last30DaysCostUsd,
+          numericUnit: "dollars",
+          numericGoodWhen: "low",
+          ratio: 1,
+          direction: "up",
+          caption: `${formatTokenCount(costs.last30DaysTokens)} tokens`,
+          updatedAt: now,
+        });
+      }
+    } catch {
+      // Cost scanning is best-effort — never fail the main fetch
+    }
 
     return {
       providerId: this.id,

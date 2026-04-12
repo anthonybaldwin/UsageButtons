@@ -67,9 +67,15 @@ export interface ClaudeProviderSettings {
   cookieHeader?: string;
 }
 
+/** Cursor requires a cookie header from cursor.com DevTools. */
+export interface CursorProviderSettings {
+  cookieHeader?: string;
+}
+
 export interface ProviderSettingsMap {
   claude?: ClaudeProviderSettings;
-  // Future: codex, cursor, droid, kimi, ollama, openrouter, …
+  cursor?: CursorProviderSettings;
+  // Future: droid, kimi, ollama, …
 }
 
 /**
@@ -147,6 +153,17 @@ export function setGlobalSettings(next: GlobalSettings): void {
     providers.claude = entry;
   }
 
+  const cursor = rawProviders.cursor;
+  if (cursor) {
+    const entry: CursorProviderSettings = {};
+    const cookie =
+      typeof cursor.cookieHeader === "string"
+        ? cursor.cookieHeader.trim()
+        : "";
+    if (cookie.length > 0) entry.cookieHeader = cookie;
+    providers.cursor = entry;
+  }
+
   current = {
     defaultRefreshMinutes: refresh,
     defaultValueSize: normaliseTextSize(next.defaultValueSize, "large"),
@@ -177,6 +194,11 @@ export function getGlobalSettings(): Readonly<GlobalSettings> {
 /** Convenience: Claude provider settings with defaults applied. */
 export function getClaudeSettings(): Readonly<ClaudeProviderSettings> {
   return current.providers?.claude ?? { source: "both" };
+}
+
+/** Convenience: Cursor provider settings. */
+export function getCursorSettings(): Readonly<CursorProviderSettings> {
+  return current.providers?.cursor ?? {};
 }
 
 /**

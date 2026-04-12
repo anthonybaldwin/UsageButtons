@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Usage Buttons — AI-assistant usage stats for Stream Deck</title>
+  <meta name="description" content="A Stream Deck plugin that turns Claude, Codex, and other AI coding-assistant usage stats into live buttons with dynamic fill icons.">
+  <meta name="theme-color" content="#0a0a0f">
+  <meta property="og:title" content="Usage Buttons">
+  <meta property="og:description" content="AI-coding-assistant usage stats as live Stream Deck buttons.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://anthonybaldwin.github.io/usage-buttons/">
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23cc7c5e'/><text x='50' y='66' font-family='system-ui' font-size='56' font-weight='800' text-anchor='middle' fill='%230a0a0f'>%25</text></svg>">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --bg-card: #141420;
+      --bg-card-hover: #1c1c2a;
+      --border: #2a2a3a;
+      --fg: #f9fafb;
+      --fg-muted: #a0a0b0;
+      --accent-claude: #cc7c5e;
+      --accent-codex: #49a3b0;
+      --accent-warn: #f59e0b;
+      --radius: 14px;
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+      font-size: 16px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background:
+        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(204,124,94,0.18), transparent 60%),
+        radial-gradient(ellipse 60% 40% at 85% 20%, rgba(73,163,176,0.12), transparent 60%),
+        var(--bg);
+      min-height: 100vh;
+    }
+
+    a { color: var(--accent-claude); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    code, pre {
+      font-family: var(--mono);
+      font-size: 0.92em;
+    }
+
+    .container {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Nav */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 24px 0;
+      font-size: 0.95rem;
+    }
+    nav .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    nav .brand svg { width: 28px; height: 28px; }
+    nav .links { display: flex; gap: 22px; color: var(--fg-muted); }
+    nav .links a { color: inherit; }
+    nav .links a:hover { color: var(--fg); text-decoration: none; }
+
+    /* Hero */
+    .hero {
+      padding: 72px 0 56px;
+      text-align: center;
+    }
+    .hero .eyebrow {
+      display: inline-block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent-claude);
+      background: rgba(204,124,94,0.08);
+      border: 1px solid rgba(204,124,94,0.28);
+      border-radius: 999px;
+      padding: 6px 14px;
+      margin-bottom: 22px;
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 5.5vw, 3.8rem);
+      line-height: 1.05;
+      letter-spacing: -0.025em;
+      margin: 0 0 18px;
+      font-weight: 800;
+    }
+    .hero h1 .accent {
+      background: linear-gradient(120deg, var(--accent-claude) 0%, #e89b7d 50%, var(--accent-codex) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero p.lede {
+      font-size: clamp(1.05rem, 2vw, 1.25rem);
+      color: var(--fg-muted);
+      max-width: 640px;
+      margin: 0 auto 34px;
+    }
+    .hero .cta-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 22px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: transform 0.12s ease, background 0.18s, border-color 0.18s;
+    }
+    .btn:hover { transform: translateY(-1px); text-decoration: none; }
+    .btn-primary {
+      background: var(--accent-claude);
+      color: #1a0c06;
+    }
+    .btn-primary:hover { background: #e89b7d; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--fg);
+      border-color: var(--border);
+    }
+    .btn-ghost:hover { background: var(--bg-card); border-color: #40405a; }
+
+    /* Button preview strip */
+    .preview {
+      padding: 12px 0 56px;
+    }
+    .preview .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+      gap: 12px;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 22px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .preview .key {
+      aspect-ratio: 1 / 1;
+      max-width: 144px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .preview .key svg { width: 100%; height: 100%; display: block; }
+    .preview .caption {
+      text-align: center;
+      color: var(--fg-muted);
+      font-size: 0.82rem;
+      margin-top: 16px;
+    }
+
+    /* Sections */
+    section { padding: 56px 0; }
+    section h2 {
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      letter-spacing: -0.015em;
+      margin: 0 0 8px;
+    }
+    section .sub {
+      color: var(--fg-muted);
+      margin: 0 0 36px;
+      max-width: 640px;
+    }
+
+    /* Features grid */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .feature {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      transition: background 0.2s, border-color 0.2s, transform 0.12s;
+    }
+    .feature:hover {
+      background: var(--bg-card-hover);
+      border-color: #3a3a52;
+      transform: translateY(-2px);
+    }
+    .feature .icon {
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 8px;
+      background: rgba(204,124,94,0.14);
+      color: var(--accent-claude);
+      margin-bottom: 14px;
+    }
+    .feature .icon svg { width: 18px; height: 18px; }
+    .feature h3 { margin: 0 0 6px; font-size: 1.02rem; }
+    .feature p { margin: 0; color: var(--fg-muted); font-size: 0.92rem; }
+
+    /* Providers strip */
+    .providers-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-top: 12px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.85rem;
+      color: var(--fg-muted);
+    }
+    .pill.active {
+      color: var(--fg);
+      border-color: rgba(204,124,94,0.4);
+      background: rgba(204,124,94,0.08);
+    }
+    .pill svg { width: 14px; height: 14px; }
+    .pill.dim { opacity: 0.55; }
+
+    /* Install section */
+    .install-steps { display: grid; gap: 14px; counter-reset: step; }
+    .step {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 16px;
+      align-items: start;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+    }
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(204,124,94,0.14);
+      color: var(--accent-claude);
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+    .step h4 { margin: 0 0 6px; font-size: 1rem; }
+    .step p { margin: 0 0 8px; color: var(--fg-muted); font-size: 0.92rem; }
+    .step pre {
+      background: #05050a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin: 0;
+      overflow-x: auto;
+      color: #d4d4e8;
+    }
+
+    /* Footer */
+    footer {
+      padding: 48px 0 40px;
+      text-align: center;
+      color: var(--fg-muted);
+      border-top: 1px solid var(--border);
+      margin-top: 40px;
+      font-size: 0.88rem;
+    }
+    footer a { color: inherit; text-decoration: underline; text-decoration-color: rgba(204,124,94,0.4); }
+    footer a:hover { color: var(--fg); }
+
+    @media (max-width: 640px) {
+      nav .links { display: none; }
+      .hero { padding: 48px 0 40px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <nav>
+    <div class="brand">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <rect width="100" height="100" rx="18" fill="#cc7c5e"/>
+        <text x="50" y="66" font-family="system-ui" font-size="56" font-weight="800" text-anchor="middle" fill="#0a0a0f">%</text>
+      </svg>
+      <span>Usage Buttons</span>
+    </div>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/anthonybaldwin/usage-buttons">GitHub</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <span class="eyebrow">Stream Deck plugin · Windows + macOS</span>
+    <h1>
+      Your AI assistant budget,<br>
+      <span class="accent">glanceable.</span>
+    </h1>
+    <p class="lede">
+      Turn every AI-coding-assistant usage stat — session %, weekly %, credits balance,
+      reset countdowns, per-model quotas — into a live Stream Deck button with a dynamic
+      fill icon. Know exactly how much runway you have left without leaving your editor.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/anthonybaldwin/usage-buttons/releases">
+        Download
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/anthonybaldwin/usage-buttons">
+        View on GitHub
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.38 7.86 10.9.57.1.78-.25.78-.55v-2c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.28-1.68-1.28-1.68-1.04-.72.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.8 1.18 1.83 1.18 3.09 0 4.44-2.69 5.41-5.25 5.69.41.36.78 1.07.78 2.16v3.2c0 .31.2.67.79.55A11.51 11.51 0 0 0 23.5 12c0-6.35-5.15-11.5-11.5-11.5z"/></svg>
+      </a>
+    </div>
+  </header>
+
+  <section class="preview" aria-label="Live button previews">
+    <div class="grid" role="presentation">
+
+      <!-- SESSION 38% remaining -->
+      <figure class="key" aria-label="Claude session 38% remaining">
+        <svg viewBox="0 0 144 144" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <clipPath id="c1"><rect width="144" height="144" rx="16" ry="16"/></clipPath>
+          </defs>
+          <g clip-path="url(#c1)">
+            <rect width="144" height="144" fill="#111827"/>
+            <!-- watermark glyph back -->
+            <g transform="translate(30 41) scale(0.84)" fill="#f9fafb" fill-opacity="0.50">
+              <path d="M25.71 63.22L41.44 54.39 41.7 53.62 41.44 53.2H40.67L38.04 53.04 29.05 52.79 21.26 52.47 13.71 52.06 11.81 51.66 10.03 49.31 10.21 48.14 11.81 47.07 14.1 47.27 19.16 47.61 26.75 48.14 32.25 48.46 40.41 49.31H41.7L41.88 48.79 41.44 48.46 41.1 48.14 33.24 42.82 24.74 37.19 20.29 33.95 17.88 32.31 16.67 30.77 16.14 27.41 18.33 25 21.26 25.21 22.01 25.41 24.99 27.7 31.34 32.62 39.64 38.73 40.85 39.74 41.34 39.39 41.4 39.15 40.85 38.24 36.34 30.09 31.52 21.79 29.38 18.35 28.81 16.28C28.61 15.43 28.47 14.73 28.47 13.85L30.96 10.48 32.33 10.03 35.65 10.48 37.05 11.69 39.11 16.41 42.45 23.83 47.63 33.93 49.15 36.93 49.96 39.7 50.26 40.55H50.79V40.06L51.21 34.38 52 27.39 52.77 18.41 53.04 15.88 54.29 12.84 56.78 11.2 58.72 12.14 60.32 14.42 60.1 15.9 59.15 22.07 57.29 31.75 56.07 38.22 56.78 38.22 57.59 37.41 60.87 33.06 66.37 26.18 68.8 23.45 71.63 20.43 73.46 19 76.9 19 79.43 22.76 78.29 26.65 74.75 31.14 71.82 34.94 67.61 40.61 64.98 45.14 65.22 45.51 65.85 45.45 75.36 43.42 80.5 42.49 86.63 41.44 89.4 42.73 89.71 44.05 88.61 46.74 82.06 48.36 74.37 49.9 62.91 52.61 62.77 52.71 62.93 52.91 68.09 53.4 70.3 53.52H75.7L85.76 54.27 88.39 56.01 89.97 58.14 89.71 59.75 85.66 61.82 80.19 60.52 67.45 57.49 63.07 56.4H62.47V56.76L66.11 60.32 72.79 66.35 81.15 74.12 81.57 76.05 80.5 77.56 79.36 77.4 72.02 71.88 69.19 69.39 62.77 63.98H62.35V64.55L63.82 66.72 71.63 78.45 72.04 82.06 71.47 83.23 69.45 83.94 67.22 83.53 62.65 77.12 57.93 69.89 54.13 63.42 53.66 63.68 51.42 87.87 50.36 89.1 47.94 90.03 45.91 88.49 44.84 86 45.91 81.09 47.21 74.67 48.26 69.57 49.21 63.24 49.78 61.13 49.74 60.99 49.27 61.05 44.5 67.61 37.23 77.42 31.48 83.57 30.11 84.12 27.72 82.89 27.94 80.68 29.28 78.72 37.23 68.6 42.03 62.32 45.12 58.7 45.1 58.18H44.92L23.79 71.9 20.03 72.38 18.41 70.87 18.61 68.38 19.38 67.57 25.73 63.2Z"/>
+            </g>
+            <!-- fill rect 38% up -->
+            <rect x="0" y="89" width="144" height="55" fill="#cc7c5e"/>
+            <!-- watermark glyph front -->
+            <g transform="translate(30 41) scale(0.84)" fill="#f9fafb" fill-opacity="0.18">
+              <path d="M25.71 63.22L41.44 54.39 41.7 53.62 41.44 53.2H40.67L38.04 53.04 29.05 52.79 21.26 52.47 13.71 52.06 11.81 51.66 10.03 49.31 10.21 48.14 11.81 47.07 14.1 47.27 19.16 47.61 26.75 48.14 32.25 48.46 40.41 49.31H41.7L41.88 48.79 41.44 48.46 41.1 48.14 33.24 42.82 24.74 37.19 20.29 33.95 17.88 32.31 16.67 30.77 16.14 27.41 18.33 25 21.26 25.21 22.01 25.41 24.99 27.7 31.34 32.62 39.64 38.73 40.85 39.74 41.34 39.39 41.4 39.15 40.85 38.24 36.34 30.09 31.52 21.79 29.38 18.35 28.81 16.28C28.61 15.43 28.47 14.73 28.47 13.85L30.96 10.48 32.33 10.03 35.65 10.48 37.05 11.69 39.11 16.41 42.45 23.83 47.63 33.93 49.15 36.93 49.96 39.7 50.26 40.55H50.79V40.06L51.21 34.38 52 27.39 52.77 18.41 53.04 15.88 54.29 12.84 56.78 11.2 58.72 12.14 60.32 14.42 60.1 15.9 59.15 22.07 57.29 31.75 56.07 38.22 56.78 38.22 57.59 37.41 60.87 33.06 66.37 26.18 68.8 23.45 71.63 20.43 73.46 19 76.9 19 79.43 22.76 78.29 26.65 74.75 31.14 71.82 34.94 67.61 40.61 64.98 45.14 65.22 45.51 65.85 45.45 75.36 43.42 80.5 42.49 86.63 41.44 89.4 42.73 89.71 44.05 88.61 46.74 82.06 48.36 74.37 49.9 62.91 52.61 62.77 52.71 62.93 52.91 68.09 53.4 70.3 53.52H75.7L85.76 54.27 88.39 56.01 89.97 58.14 89.71 59.75 85.66 61.82 80.19 60.52 67.45 57.49 63.07 56.4H62.47V56.76L66.11 60.32 72.79 66.35 81.15 74.12 81.57 76.05 80.5 77.56 79.36 77.4 72.02 71.88 69.19 69.39 62.77 63.98H62.35V64.55L63.82 66.72 71.63 78.45 72.04 82.06 71.47 83.23 69.45 83.94 67.22 83.53 62.65 77.12 57.93 69.89 54.13 63.42 53.66 63.68 51.42 87.87 50.36 89.1 47.94 90.03 45.91 88.49 44.84 86 45.91 81.09 47.21 74.67 48.26 69.57 49.21 63.24 49.78 61.13 49.74 60.99 49.27 61.05 44.5 67.61 37.23 77.42 31.48 83.57 30.11 84.12 27.72 82.89 27.94 80.68 29.28 78.72 37.23 68.6 42.03 62.32 45.12 58.7 45.1 58.18H44.92L23.79 71.9 20.03 72.38 18.41 70.87 18.61 68.38 19.38 67.57 25.73 63.2Z"/>
+            </g>
+          </g>
+          <rect x="0.75" y="0.75" width="142.5" height="142.5" rx="16" ry="16" fill="none" stroke="#f9fafb" stroke-opacity="0.18" stroke-width="1.5"/>
+          <text x="72" y="27" font-family="system-ui,sans-serif" font-size="16" font-weight="700" text-anchor="middle" fill="#f9fafb" fill-opacity="0.85">SESSION</text>
+          <text x="72" y="82" font-family="system-ui,sans-serif" font-size="40" font-weight="800" text-anchor="middle" fill="#f9fafb">38%</text>
+          <text x="72" y="128" font-family="system-ui,sans-serif" font-size="22" font-weight="700" text-anchor="middle" fill="#f9fafb" fill-opacity="0.85">2h 15m</text>
+        </svg>
+      </figure>
+
+      <!-- WEEKLY 72% -->
+      <figure class="key" aria-label="Claude weekly 72% remaining">
+        <svg viewBox="0 0 144 144" xmlns="http://www.w3.org/2000/svg">
+          <defs><clipPath id="c2"><rect width="144" height="144" rx="16" ry="16"/></clipPath></defs>
+          <g clip-path="url(#c2)">
+            <rect width="144" height="144" fill="#111827"/>
+            <g transform="translate(30 41) scale(0.84)" fill="#f9fafb" fill-opacity="0.50">
+              <path d="M25.71 63.22L41.44 54.39 41.7 53.62 41.44 53.2H40.67L38.04 53.04 29.05 52.79 21.26 52.47 13.71 52.06 11.81 51.66 10.03 49.31 10.21 48.14 11.81 47.07 14.1 47.27 19.16 47.61 26.75 48.14 32.25 48.46 40.41 49.31H41.7L41.88 48.79 41.44 48.46 41.1 48.14 33.24 42.82 24.74 37.19 20.29 33.95 17.88 32.31 16.67 30.77 16.14 27.41 18.33 25 21.26 25.21 22.01 25.41 24.99 27.7 31.34 32.62 39.64 38.73 40.85 39.74 41.34 39.39 41.4 39.15 40.85 38.24 36.34 30.09 31.52 21.79 29.38 18.35 28.81 16.28C28.61 15.43 28.47 14.73 28.47 13.85L30.96 10.48 32.33 10.03 35.65 10.48 37.05 11.69 39.11 16.41 42.45 23.83 47.63 33.93 49.15 36.93 49.96 39.7 50.26 40.55H50.79V40.06L51.21 34.38 52 27.39 52.77 18.41 53.04 15.88 54.29 12.84 56.78 11.2 58.72 12.14 60.32 14.42 60.1 15.9 59.15 22.07 57.29 31.75 56.07 38.22 56.78 38.22 57.59 37.41 60.87 33.06 66.37 26.18 68.8 23.45 71.63 20.43 73.46 19 76.9 19 79.43 22.76 78.29 26.65 74.75 31.14 71.82 34.94 67.61 40.61 64.98 45.14 65.22 45.51 65.85 45.45 75.36 43.42 80.5 42.49 86.63 41.44 89.4 42.73 89.71 44.05 88.61 46.74 82.06 48.36 74.37 49.9 62.91 52.61 62.77 52.71 62.93 52.91 68.09 53.4 70.3 53.52H75.7L85.76 54.27 88.39 56.01 89.97 58.14 89.71 59.75 85.66 61.82 80.19 60.52 67.45 57.49 63.07 56.4H62.47V56.76L66.11 60.32 72.79 66.35 81.15 74.12 81.57 76.05 80.5 77.56 79.36 77.4 72.02 71.88 69.19 69.39 62.77 63.98H62.35V64.55L63.82 66.72 71.63 78.45 72.04 82.06 71.47 83.23 69.45 83.94 67.22 83.53 62.65 77.12 57.93 69.89 54.13 63.42 53.66 63.68 51.42 87.87 50.36 89.1 47.94 90.03 45.91 88.49 44.84 86 45.91 81.09 47.21 74.67 48.26 69.57 49.21 63.24 49.78 61.13 49.74 60.99 49.27 61.05 44.5 67.61 37.23 77.42 31.48 83.57 30.11 84.12 27.72 82.89 27.94 80.68 29.28 78.72 37.23 68.6 42.03 62.32 45.12 58.7 45.1 58.18H44.92L23.79 71.9 20.03 72.38 18.41 70.87 18.61 68.38 19.38 67.57 25.73 63.2Z"/>
+            </g>
+            <rect x="0" y="40" width="144" height="104" fill="#cc7c5e"/>
+            <g transform="translate(30 41) scale(0.84)" fill="#f9fafb" fill-opacity="0.18">
+              <path d="M25.71 63.22L41.44 54.39 41.7 53.62 41.44 53.2H40.67L38.04 53.04 29.05 52.79 21.26 52.47 13.71 52.06 11.81 51.66 10.03 49.31 10.21 48.14 11.81 47.07 14.1 47.27 19.16 47.61 26.75 48.14 32.25 48.46 40.41 49.31H41.7L41.88 48.79 41.44 48.46 41.1 48.14 33.24 42.82 24.74 37.19 20.29 33.95 17.88 32.31 16.67 30.77 16.14 27.41 18.33 25 21.26 25.21 22.01 25.41 24.99 27.7 31.34 32.62 39.64 38.73 40.85 39.74 41.34 39.39 41.4 39.15 40.85 38.24 36.34 30.09 31.52 21.79 29.38 18.35 28.81 16.28C28.61 15.43 28.47 14.73 28.47 13.85L30.96 10.48 32.33 10.03 35.65 10.48 37.05 11.69 39.11 16.41 42.45 23.83 47.63 33.93 49.15 36.93 49.96 39.7 50.26 40.55H50.79V40.06L51.21 34.38 52 27.39 52.77 18.41 53.04 15.88 54.29 12.84 56.78 11.2 58.72 12.14 60.32 14.42 60.1 15.9 59.15 22.07 57.29 31.75 56.07 38.22 56.78 38.22 57.59 37.41 60.87 33.06 66.37 26.18 68.8 23.45 71.63 20.43 73.46 19 76.9 19 79.43 22.76 78.29 26.65 74.75 31.14 71.82 34.94 67.61 40.61 64.98 45.14 65.22 45.51 65.85 45.45 75.36 43.42 80.5 42.49 86.63 41.44 89.4 42.73 89.71 44.05 88.61 46.74 82.06 48.36 74.37 49.9 62.91 52.61 62.77 52.71 62.93 52.91 68.09 53.4 70.3 53.52H75.7L85.76 54.27 88.39 56.01 89.97 58.14 89.71 59.75 85.66 61.82 80.19 60.52 67.45 57.49 63.07 56.4H62.47V56.76L66.11 60.32 72.79 66.35 81.15 74.12 81.57 76.05 80.5 77.56 79.36 77.4 72.02 71.88 69.19 69.39 62.77 63.98H62.35V64.55L63.82 66.72 71.63 78.45 72.04 82.06 71.47 83.23 69.45 83.94 67.22 83.53 62.65 77.12 57.93 69.89 54.13 63.42 53.66 63.68 51.42 87.87 50.36 89.1 47.94 90.03 45.91 88.49 44.84 86 45.91 81.09 47.21 74.67 48.26 69.57 49.21 63.24 49.78 61.13 49.74 60.99 49.27 61.05 44.5 67.61 37.23 77.42 31.48 83.57 30.11 84.12 27.72 82.89 27.94 80.68 29.28 78.72 37.23 68.6 42.03 62.32 45.12 58.7 45.1 58.18H44.92L23.79 71.9 20.03 72.38 18.41 70.87 18.61 68.38 19.38 67.57 25.73 63.2Z"/>
+            </g>
+          </g>
+          <rect x="0.75" y="0.75" width="142.5" height="142.5" rx="16" ry="16" fill="none" stroke="#f9fafb" stroke-opacity="0.18" stroke-width="1.5"/>
+          <text x="72" y="27" font-family="system-ui,sans-serif" font-size="16" font-weight="700" text-anchor="middle" fill="#f9fafb" fill-opacity="0.85">WEEKLY</text>
+          <text x="72" y="82" font-family="system-ui,sans-serif" font-size="40" font-weight="800" text-anchor="middle" fill="#f9fafb">72%</text>
+          <text x="72" y="128" font-family="system-ui,sans-serif" font-size="22" font-weight="700" text-anchor="middle" fill="#f9fafb" fill-opacity="0.85">5d</text>
+        </svg>
+      </figure>
+
+      <!-- BALANCE $204.80 -->
+      <figure class="key" aria-label="Claude extras balance $204.80">
+        <svg viewBox="0 0 144 144" xmlns="http://www.w3.org/2000/svg">
+          <defs><clipPath id="c3"><rect width="144" height="144" rx="16" ry="16"/></clipPath></defs>
+          <g clip-path="url(#c3)">
+            <rect width="144" height="144" fill="#111827"/>
+            <g transform="translate(30 41) scale(0.84)" fill="#f9fafb" fill-opacity="0.50">
+              <path d="M25.71 63.22L41.44 54.39 41.7 53.62 41.44 53.2H40.67L38.04 53.04 29.05 52.79 21.26 52.47 13.71 52.06 11.81 51.66 10.03 49.31 10.21 48.14 11.81 47.07 14.1 47.27 19.16 47.61 26.75 48.14 32.25 48.46 40.41 49.31H41.7L41.88 48.79 41.44 48.46 41.1 48.14 33.24 42.82 24.74 37.19 20.29 33.95 17.88 32.31 16.67 30.77 16.14 27.41 18.33 25 21.26 25.21 22.01 25.41 24.99 27.7 31.34 32.62 39.64 38.73 40.85 39.74 41.34 39.39 41.4 39.15 40.85 38.24 36.34 30.09 31.52 21.79 29.38 18.35 28.81 16.28C28.61 15.43 28.47 14.73 28.47 13.85L30.96 10.48 32.33 10.03 35.65 10.48 37.05 11.69 39.11 16.41 42.45 23.83 47.63 33.93 49.15 36.93 49.96 39.7 50.26 40.55H50.79V40.06L51.21 34.38 52 27.39 52.77 18.41 53.04 15.88 54.29 12.84 56.78 11.2 58.72 12.14 60.32 14.42 60.1 15.9 59.15 22.07 57.29 31.75 56.07 38.22 56.78 38.22 57.59 37.41 60.87 33.06 66.37 26.18 68.8 23.45 71.63 20.43 73.46 19 76.9 19 79.43 22.76 78.29 26.65 74.75 31.14 71.82 34.94 67.61 40.61 64.98 45.14 65.22 45.51 65.85 45.45 75.36 43.42 80.5 42.49 86.63 41.44 89.4 42.73 89.71 44.05 88.61 46.74 82.06 48.36 74.37 49.9 62.91 52.61 62.77 52.71 62.93 52.91 68.09 53.4 70.3 53.52H75.7L85.76 54.27 88.39 56.01 89.97 58.14 89.71 59.75 85.66 61.82 80.19 60.52 67.45 57.49 63.07 56.4H62.47V56.76L66.11 60.32 72.79 66.35 81.15 74.12 81.57 76.05 80.5 77.56 79.36 77.4 72.02 71.88 69.19 69.39 62.77 63.98H62.35V64.55L63.82 66.72 71.63 78.45 72.04 82.06 71.47 83.23 69.45 83.94 67.22 83.53 62.65 77.12 57.93 69.89 54.13 63.42 53.66 63.68 51.42 87.87 50.36 89.1 47.94 90.03 45.91 88.49 44.84 86 45.91 81.09 47.21 74.67 48.26 69.57 49.21 63.24 49.78 61.13 49.74 60.99 49.27 61.05 44.5 67.61 37.23 77.42 31.48 83.57 30.11 84.12 27.72 82.89 27.94 80.68 29.28 78.72 37.23 68.6 42.03 62.32 45.12 58.7 45.1 58.18H44.92L23.79 71.9 20.03 72.38 18.41 70.87 18.61 68.38 19.38 67.57 25.73 63.2Z"/>
+            </g>
+            <rect x="0" y="0" width="144" height="144" fill="#cc7c5e" fill-opacity="0.0"/>
+          </g>
+          <rect x="0.75" y="0.75" width="142.5" height="142.5" rx="16" ry="16" fill="none" stroke="#f9fafb" stroke-opacity="0.18" stroke-width="1.5"/>
+          <text x="72" y="27" font-family="system-ui,sans-serif" font-size="16" font-weight="700" text-anchor="middle" fill="#f9fafb" fill-opacity="0.85">BALANCE</text>
+          <text x="72" y="85" font-family="system-ui,sans-serif" font-size="32" font-weight="800" text-anchor="middle" fill="#f9fafb">$204.80</text>
+          <text x="72" y="128" font-family="system-ui,sans-serif" font-size="14" font-weight="700" text-anchor="middle" fill="#f9fafb" fill-opacity="0.6">prepaid</text>
+        </svg>
+      </figure>
+
+      <!-- CODEX SESSION 55% -->
+      <figure class="key" aria-label="Codex session 55% remaining">
+        <svg viewBox="0 0 144 144" xmlns="http://www.w3.org/2000/svg">
+          <defs><clipPath id="c4"><rect width="144" height="144" rx="16" ry="16"/></clipPath></defs>
+          <g clip-path="url(#c4)">
+            <rect width="144" height="144" fill="#111827"/>
+            <g transform="translate(30 41) scale(0.84)" fill="#f9fafb" fill-opacity="0.50">
+              <path d="M83.77 42.81C84.67 40.11 84.98 37.26 84.68 34.44 84.38 31.62 83.49 28.89 82.05 26.44 77.69 18.84 68.92 14.94 60.35 16.77 57.98 14.13 54.96 12.17 51.59 11.07 48.21 9.97 44.61 9.77 41.14 10.51 37.67 11.24 34.45 12.88 31.81 15.25 29.17 17.62 27.2 20.64 26.1 24.01 23.32 24.58 20.69 25.74 18.4 27.41 16.1 29.07 14.18 31.21 12.78 33.68 8.37 41.26 9.37 50.83 15.25 57.33 14.35 60.03 14.04 62.88 14.34 65.7 14.63 68.52 15.52 71.25 16.96 73.7 21.32 81.3 30.1 85.21 38.67 83.37 40.56 85.49 42.87 87.19 45.46 88.34 48.05 89.5 50.86 90.09 53.7 90.07 62.48 90.08 70.26 84.41 72.94 76.05 75.72 75.48 78.35 74.32 80.64 72.66 82.94 70.99 84.86 68.85 86.26 66.38 90.62 58.81 89.62 49.3 83.77 42.81ZM53.7 84.84C50.2 84.84 46.8 83.61 44.11 81.37L44.58 81.1 60.51 71.9C60.91 71.67 61.24 71.34 61.47 70.94 61.7 70.54 61.82 70.09 61.82 69.63V47.18L68.56 51.07C68.62 51.11 68.67 51.17 68.68 51.25V69.85C68.66 78.12 61.97 84.82 53.7 84.84ZM21.5 71.08C19.74 68.05 19.11 64.49 19.72 61.04L20.19 61.32 36.13 70.52C36.53 70.75 36.98 70.87 37.43 70.87 37.89 70.87 38.34 70.75 38.73 70.52L58.21 59.29V67.06C58.21 67.1 58.2 67.14 58.18 67.18 58.16 67.21 58.13 67.24 58.1 67.27L41.97 76.57C34.8 80.7 25.64 78.25 21.5 71.08ZM17.3 36.39C19.07 33.34 21.87 31.01 25.19 29.81V48.74C25.18 49.19 25.3 49.65 25.53 50.04 25.75 50.44 26.08 50.77 26.48 50.99L45.86 62.17 39.13 66.07C39.09 66.09 39.05 66.1 39.01 66.1 38.97 66.1 38.93 66.09 38.89 66.07L22.79 56.78C15.64 52.63 13.18 43.48 17.3 36.31V36.39ZM72.62 49.24L53.18 37.95 59.9 34.07C59.93 34.05 59.97 34.04 60.02 34.04 60.06 34.04 60.1 34.05 60.13 34.07L76.24 43.38C78.7 44.8 80.7 46.89 82.02 49.41 83.34 51.92 83.91 54.77 83.68 57.6 83.44 60.43 82.4 63.14 80.69 65.4 78.97 67.67 76.64 69.4 73.98 70.39V51.47C73.97 51.01 73.83 50.56 73.6 50.17 73.36 49.79 73.02 49.46 72.62 49.24ZM79.33 39.17L78.85 38.88 62.94 29.61C62.54 29.38 62.09 29.25 61.63 29.25 61.17 29.25 60.72 29.38 60.32 29.61L40.86 40.84V33.06C40.86 33.02 40.87 32.98 40.88 32.95 40.9 32.91 40.92 32.88 40.96 32.86L57.06 23.57C59.53 22.15 62.35 21.46 65.19 21.58 68.04 21.7 70.79 22.63 73.13 24.26 75.46 25.89 77.28 28.15 78.38 30.78 79.48 33.41 79.81 36.3 79.33 39.1V39.17ZM37.19 52.95L30.46 49.07C30.42 49.05 30.39 49.02 30.37 48.99 30.35 48.96 30.33 48.92 30.33 48.88V30.32C30.33 27.47 31.15 24.68 32.68 22.28 34.21 19.88 36.39 17.96 38.97 16.76 41.54 15.55 44.41 15.1 47.24 15.46 50.06 15.83 52.72 16.99 54.91 18.81L54.44 19.07 38.51 28.27C38.12 28.5 37.79 28.83 37.56 29.23 37.33 29.63 37.21 30.08 37.2 30.54L37.19 52.95ZM40.85 45.06L49.52 40.06 58.21 45.06V55.06L49.55 60.06 40.86 55.06 40.85 45.06Z"/>
+            </g>
+            <rect x="0" y="65" width="144" height="79" fill="#49a3b0"/>
+            <g transform="translate(30 41) scale(0.84)" fill="#f9fafb" fill-opacity="0.18">
+              <path d="M83.77 42.81C84.67 40.11 84.98 37.26 84.68 34.44 84.38 31.62 83.49 28.89 82.05 26.44 77.69 18.84 68.92 14.94 60.35 16.77 57.98 14.13 54.96 12.17 51.59 11.07 48.21 9.97 44.61 9.77 41.14 10.51 37.67 11.24 34.45 12.88 31.81 15.25 29.17 17.62 27.2 20.64 26.1 24.01 23.32 24.58 20.69 25.74 18.4 27.41 16.1 29.07 14.18 31.21 12.78 33.68 8.37 41.26 9.37 50.83 15.25 57.33 14.35 60.03 14.04 62.88 14.34 65.7 14.63 68.52 15.52 71.25 16.96 73.7 21.32 81.3 30.1 85.21 38.67 83.37 40.56 85.49 42.87 87.19 45.46 88.34 48.05 89.5 50.86 90.09 53.7 90.07 62.48 90.08 70.26 84.41 72.94 76.05 75.72 75.48 78.35 74.32 80.64 72.66 82.94 70.99 84.86 68.85 86.26 66.38 90.62 58.81 89.62 49.3 83.77 42.81ZM53.7 84.84C50.2 84.84 46.8 83.61 44.11 81.37L44.58 81.1 60.51 71.9C60.91 71.67 61.24 71.34 61.47 70.94 61.7 70.54 61.82 70.09 61.82 69.63V47.18L68.56 51.07C68.62 51.11 68.67 51.17 68.68 51.25V69.85C68.66 78.12 61.97 84.82 53.7 84.84Z"/>
+            </g>
+          </g>
+          <rect x="0.75" y="0.75" width="142.5" height="142.5" rx="16" ry="16" fill="none" stroke="#f9fafb" stroke-opacity="0.18" stroke-width="1.5"/>
+          <text x="72" y="27" font-family="system-ui,sans-serif" font-size="16" font-weight="700" text-anchor="middle" fill="#f9fafb" fill-opacity="0.85">SESSION</text>
+          <text x="72" y="82" font-family="system-ui,sans-serif" font-size="40" font-weight="800" text-anchor="middle" fill="#f9fafb">55%</text>
+          <text x="72" y="128" font-family="system-ui,sans-serif" font-size="22" font-weight="700" text-anchor="middle" fill="#f9fafb" fill-opacity="0.85">1h 8m</text>
+        </svg>
+      </figure>
+
+    </div>
+    <p class="caption">Live mockup — real button faces rendered client-side in Stream Deck from compact SVG data URIs.</p>
+  </section>
+
+  <section id="features">
+    <h2>What it does</h2>
+    <p class="sub">
+      Each metric becomes its own Stream Deck key. The background fills (or drains)
+      in proportion to the current value, so you can read the whole dashboard without
+      squinting.
+    </p>
+    <div class="features">
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <h3>Live dynamic icons</h3>
+        <p>Every key renders as a compact SVG whose fill is driven by the current value — watch your session window drain in real time.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+        <h3>Smart rate-limit aware</h3>
+        <p>Shared per-provider snapshot cache coalesces all button requests into one HTTP call, so adding six Claude keys still polls Anthropic once.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+        <h3>Watermark brand glyphs</h3>
+        <p>Each button carries its provider's logo as a watermark so you can tell a Claude tile from a Codex tile at a glance, even when the meter is full.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+        <h3>Reset countdowns</h3>
+        <p>Subvalue line shows exactly when each window resets — <code>2h 15m</code>, <code>5d</code>, <code>47s</code>. Format adapts to the remaining duration.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+        <h3>Threshold alarms</h3>
+        <p>Money metrics colorize automatically — orange when your balance dips below 20% of the cap, red when spending hits the monthly limit.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
+        <h3>Standalone native binary</h3>
+        <p>Compiled via <code>bun build --compile</code> into a single <code>.exe</code> / mach-o — users don't install Bun or Node. Just drop and launch.</p>
+      </div>
+    </div>
+
+    <h2 style="margin-top: 56px">Supported providers</h2>
+    <p class="sub">Claude and Codex are wired up. The rest are planned, mirroring CodexBar's provider list.</p>
+    <div class="providers-row">
+      <span class="pill active">
+        <svg viewBox="0 0 100 100"><path fill="currentColor" d="M25.7 63.2L41.4 54.4 41.7 53.6 41.4 53.2H40.7L38 53 29 52.8 21.3 52.5 13.7 52.1 11.8 51.7 10 49.3 10.2 48.1 11.8 47.1 14.1 47.3 19.2 47.6 26.7 48.1 32.3 48.5 40.4 49.3H41.7L41.9 48.8 41.4 48.5 41.1 48.1 33.2 42.8 24.7 37.2 20.3 34 17.9 32.3 16.7 30.8 16.1 27.4 18.3 25 21.3 25.2 22 25.4 25 27.7 31.3 32.6 39.6 38.7 40.9 39.7 41.3 39.4 41.4 39.2 40.9 38.2 36.3 30.1 31.5 21.8 29.4 18.3 28.8 16.3C28.6 15.4 28.5 14.7 28.5 13.9L31 10.5 32.3 10 35.7 10.5 37 11.7 39.1 16.4 42.5 23.8 47.6 33.9 49.2 36.9 50 39.7 50.3 40.5H50.8V40.1L51.2 34.4 52 27.4 52.8 18.4 53 15.9 54.3 12.8 56.8 11.2 58.7 12.1 60.3 14.4 60.1 15.9 59.1 22.1 57.3 31.7 56.1 38.2 56.8 38.2 57.6 37.4 60.9 33.1 66.4 26.2 68.8 23.4 71.6 20.4 73.5 19 76.9 19 79.4 22.8 78.3 26.6 74.8 31.1 71.8 34.9 67.6 40.6 65 45.1 65.2 45.5 65.8 45.4 75.4 43.4 80.5 42.5 86.6 41.4 89.4 42.7 89.7 44 88.6 46.7 82.1 48.4 74.4 49.9 62.9 52.6 62.8 52.7 62.9 52.9 68.1 53.4 70.3 53.5H75.7L85.8 54.3 88.4 56 89.9 58.1 89.7 59.8 85.7 61.8 80.2 60.5 67.5 57.5 63.1 56.4H62.5V56.8L66.1 60.3 72.8 66.4 81.1 74.1 81.6 76 80.5 77.6 79.4 77.4 72 71.9 69.2 69.4 62.8 64H62.3V64.6L63.8 66.7 71.6 78.5 72 82.1 71.5 83.2 69.5 83.9 67.2 83.5 62.6 77.1 57.9 69.9 54.1 63.4 53.7 63.7 51.4 87.9 50.4 89.1 47.9 90 45.9 88.5 44.8 86 45.9 81.1 47.2 74.7 48.3 69.6 49.2 63.2 49.8 61.1 49.7 61 49.3 61 44.5 67.6 37.2 77.4 31.5 83.6 30.1 84.1 27.7 82.9 27.9 80.7 29.3 78.7 37.2 68.6 42 62.3 45.1 58.7 45.1 58.2H44.9L23.8 71.9 20 72.4 18.4 70.9 18.6 68.4 19.4 67.6 25.7 63.2Z"/></svg>
+        Claude
+      </span>
+      <span class="pill active">
+        <svg viewBox="0 0 100 100"><path fill="currentColor" d="M83.8 42.8C84.7 40.1 85 37.3 84.7 34.4 84.4 31.6 83.5 28.9 82.1 26.4 77.7 18.8 68.9 14.9 60.4 16.8 58 14.1 55 12.2 51.6 11.1 48.2 10 44.6 9.8 41.1 10.5 37.7 11.2 34.5 12.9 31.8 15.2 29.2 17.6 27.2 20.6 26.1 24 23.3 24.6 20.7 25.7 18.4 27.4 16.1 29.1 14.2 31.2 12.8 33.7 8.4 41.3 9.4 50.8 15.3 57.3 14.4 60 14 62.9 14.3 65.7 14.6 68.5 15.5 71.3 17 73.7 21.3 81.3 30.1 85.2 38.7 83.4 40.6 85.5 42.9 87.2 45.5 88.3 48.1 89.5 50.9 90.1 53.7 90.1 62.5 90.1 70.3 84.4 72.9 76.1 75.7 75.5 78.3 74.3 80.6 72.7 82.9 71 84.9 68.9 86.3 66.4 90.6 58.8 89.6 49.3 83.8 42.8Z"/></svg>
+        Codex
+      </span>
+      <span class="pill dim">Ollama</span>
+      <span class="pill dim">Gemini</span>
+      <span class="pill dim">Copilot</span>
+      <span class="pill dim">Cursor</span>
+      <span class="pill dim">+ many more…</span>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <p class="sub">
+      Grab the latest compiled plugin from Releases and double-click. Alternatively, clone
+      and build from source — Bun is the only dev dependency.
+    </p>
+
+    <div class="install-steps">
+      <div class="step">
+        <div>
+          <h4>Clone the repo</h4>
+          <p>No Node or npm needed — Bun is the runtime and the compiler.</p>
+          <pre>git clone https://github.com/anthonybaldwin/usage-buttons.git
+cd usage-buttons</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div>
+          <h4>Install dev deps &amp; build</h4>
+          <p>Cross-compiles to a standalone <code>.exe</code> on Windows or native arm64 + x64 binaries on macOS.</p>
+          <pre>bun install
+bun run build</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div>
+          <h4>Link into Stream Deck</h4>
+          <p>Creates a junction (Windows) or symlink (macOS) so edits to the source propagate without reinstalling.</p>
+          <pre>bun run install:dev --restart</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div>
+          <h4>Add a button</h4>
+          <p>In Stream Deck, drag the <strong>Usage Stat</strong> action onto any key, then pick a provider + metric from the Property Inspector. Configure OAuth or paste a session cookie for claude.ai extras.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div class="container">
+    Open source under MIT ·
+    <a href="https://github.com/anthonybaldwin/usage-buttons">github.com/anthonybaldwin/usage-buttons</a> ·
+    Inspired by <a href="https://github.com/steipete/CodexBar">CodexBar</a>
+  </div>
+</footer>
+
+</body>
+</html>

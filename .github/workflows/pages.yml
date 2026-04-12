@@ -1,0 +1,60 @@
+name: pages
+
+# Deploy the landing page at docs/index.html to GitHub Pages
+# (https://anthonybaldwin.github.io/usage-buttons/).
+#
+# The repo is configured with build_type: workflow (see
+# `gh api repos/.../pages`), which means Pages expects this
+# workflow to produce and deploy the artifact — it will NOT auto-
+# serve docs/ as static content the classic-Pages way.
+#
+# We keep the page as a single static HTML file so there's no
+# Jekyll / bundler / Vite step — just package the docs/ folder as
+# a Pages artifact and let actions/deploy-pages hand it off to
+# GitHub's CDN.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# id-token: write is required by actions/deploy-pages for the
+# OIDC handshake that lets the Pages service verify the artifact
+# came from this workflow. pages: write grants deployment rights.
+# contents: read is the default read-only repo access.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment can be in flight at a time — cancel
+# any older in-progress run when a new push arrives.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: deploy docs/ to GitHub Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

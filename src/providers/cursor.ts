@@ -188,10 +188,9 @@ export class CursorProvider implements Provider {
         numericValue: spentDollars,
         numericUnit: "dollars",
         numericGoodWhen: "low",
-        numericMax: limitDollars,
         // Real meter when a spending limit is set; reference card otherwise.
-        ...(limitDollars
-          ? { ratio: Math.min(1, spentDollars / limitDollars), direction: "up" as const }
+        ...(limitDollars != null
+          ? { numericMax: limitDollars, ratio: Math.min(1, spentDollars / limitDollars), direction: "up" as const }
           : {}),
         caption: limitDollars ? `of $${limitDollars.toFixed(0)}` : "Unlimited",
         updatedAt: now,

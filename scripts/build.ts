@@ -237,6 +237,10 @@ if (wasRunning) {
   await killStreamDeck();
 }
 
+log("→ typechecking");
+await $`bun run typecheck`.quiet();
+log("✓ typecheck passed");
+
 await build(key);
 
 if (reload && wasRunning) {

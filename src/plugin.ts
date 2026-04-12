@@ -788,7 +788,7 @@ function renderMetric(
   if (isReferenceCard) {
     input.ratio = 1;
   } else {
-    input.ratio = effectiveRatio;
+    input.ratio = effectiveRatio!;
   }
 
   if (settings.fillDirection) {

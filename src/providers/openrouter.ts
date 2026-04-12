@@ -86,10 +86,9 @@ export class OpenRouterProvider implements Provider {
         numericValue: totalUsage,
         numericUnit: "dollars",
         numericGoodWhen: "low",
-        numericMax: totalCredits > 0 ? totalCredits : undefined,
         // Real meter when totalCredits is known; reference card otherwise.
         ...(totalCredits > 0
-          ? { ratio: Math.min(1, totalUsage / totalCredits), direction: "up" as const }
+          ? { numericMax: totalCredits, ratio: Math.min(1, totalUsage / totalCredits), direction: "up" as const }
           : {}),
         caption: "Lifetime",
         updatedAt: now,

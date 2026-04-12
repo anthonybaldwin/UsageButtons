@@ -111,9 +111,9 @@ async function collectJsonlFiles(
 ): Promise<string[]> {
   if (maxDepth <= 0) return [];
   const results: string[] = [];
-  let entries: Awaited<ReturnType<typeof readdir>>;
+  let entries: import("node:fs").Dirent<string>[];
   try {
-    entries = await readdir(dir, { withFileTypes: true });
+    entries = await readdir(dir, { withFileTypes: true, encoding: "utf-8" });
   } catch {
     return [];
   }

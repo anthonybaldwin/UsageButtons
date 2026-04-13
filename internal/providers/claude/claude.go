@@ -571,7 +571,7 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 	if resp.FiveHour != nil && resp.FiveHour.Utilization != nil && resp.FiveHour.ResetsAt != nil {
 		if t, err := time.Parse(time.RFC3339, *resp.FiveHour.ResetsAt); err == nil {
 			if p := providers.PaceMetric(providers.PaceInput{
-				MetricID: "session-pace", Label: "S.PACE", Name: "Session pace (5h)",
+				MetricID: "session-pace", Label: "Session", Name: "Session pace (5h)",
 				UsedPercent: *resp.FiveHour.Utilization, WindowDuration: 5 * time.Hour, ResetIn: time.Until(t),
 			}); p != nil {
 				metrics = append(metrics, *p)
@@ -586,7 +586,7 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 	if resp.SevenDay != nil && resp.SevenDay.Utilization != nil && resp.SevenDay.ResetsAt != nil {
 		if t, err := time.Parse(time.RFC3339, *resp.SevenDay.ResetsAt); err == nil {
 			if p := providers.PaceMetric(providers.PaceInput{
-				MetricID: "weekly-pace", Label: "W.PACE", Name: "Weekly pace (7d)",
+				MetricID: "weekly-pace", Label: "Weekly", Name: "Weekly pace (7d)",
 				UsedPercent: *resp.SevenDay.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
 			}); p != nil {
 				metrics = append(metrics, *p)
@@ -607,7 +607,7 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 	if sonnetWindow != nil && sonnetWindow.Utilization != nil && sonnetWindow.ResetsAt != nil {
 		if t, err := time.Parse(time.RFC3339, *sonnetWindow.ResetsAt); err == nil {
 			if p := providers.PaceMetric(providers.PaceInput{
-				MetricID: "sonnet-pace", Label: "S.PACE", Name: "Sonnet pace (7d)",
+				MetricID: "sonnet-pace", Label: "Sonnet", Name: "Sonnet pace (7d)",
 				UsedPercent: *sonnetWindow.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
 			}); p != nil {
 				metrics = append(metrics, *p)
@@ -625,7 +625,7 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 		if resp.SevenDayOpus.Utilization != nil && resp.SevenDayOpus.ResetsAt != nil {
 			if t, err := time.Parse(time.RFC3339, *resp.SevenDayOpus.ResetsAt); err == nil {
 				if p := providers.PaceMetric(providers.PaceInput{
-					MetricID: "opus-pace", Label: "O.PACE", Name: "Opus pace (7d)",
+					MetricID: "opus-pace", Label: "Opus", Name: "Opus pace (7d)",
 					UsedPercent: *resp.SevenDayOpus.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
 				}); p != nil {
 					metrics = append(metrics, *p)

@@ -9,7 +9,7 @@ import (
 // PaceInput is the data a provider passes to compute a pace metric.
 type PaceInput struct {
 	MetricID       string        // e.g. "session-pace", "weekly-pace"
-	Label          string        // e.g. "PACE", "W.PACE"
+	Label          string        // e.g. "Session", "Weekly"
 	Name           string        // e.g. "Session pace"
 	UsedPercent    float64       // 0-100, how much has been consumed
 	WindowDuration time.Duration // total window length

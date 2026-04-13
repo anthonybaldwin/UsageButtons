@@ -116,7 +116,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 
 	if sessionPct != nil && sessionReset != nil {
 		if p := providers.PaceMetric(providers.PaceInput{
-			MetricID: "session-pace", Label: "S.PACE", Name: "Session pace",
+			MetricID: "session-pace", Label: "Session", Name: "Session pace",
 			UsedPercent: *sessionPct, WindowDuration: 5 * time.Hour, ResetIn: time.Until(*sessionReset),
 		}); p != nil {
 			metrics = append(metrics, *p)
@@ -152,7 +152,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 
 	if weeklyPct != nil && weeklyReset != nil {
 		if p := providers.PaceMetric(providers.PaceInput{
-			MetricID: "weekly-pace", Label: "W.PACE", Name: "Weekly pace",
+			MetricID: "weekly-pace", Label: "Weekly", Name: "Weekly pace",
 			UsedPercent: *weeklyPct, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(*weeklyReset),
 		}); p != nil {
 			metrics = append(metrics, *p)

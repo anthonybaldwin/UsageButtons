@@ -594,21 +594,17 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 		}
 	}
 
-	sonnetWindow := resp.SevenDaySonnet
-	if sonnetWindow == nil {
-		sonnetWindow = resp.SevenDayOpus
-	}
-	if ms := remainingMetric("weekly-sonnet-percent", "SONNET", "Weekly Sonnet remaining", sonnetWindow); ms != nil {
+	if ms := remainingMetric("weekly-sonnet-percent", "SONNET", "Weekly Sonnet remaining", resp.SevenDaySonnet); ms != nil {
 		if ms.ResetInSeconds == nil && weekly != nil && weekly.ResetInSeconds != nil {
 			ms.ResetInSeconds = weekly.ResetInSeconds
 		}
 		metrics = append(metrics, *ms)
 	}
-	if sonnetWindow != nil && sonnetWindow.Utilization != nil && sonnetWindow.ResetsAt != nil {
-		if t, err := time.Parse(time.RFC3339, *sonnetWindow.ResetsAt); err == nil {
+	if resp.SevenDaySonnet != nil && resp.SevenDaySonnet.Utilization != nil && resp.SevenDaySonnet.ResetsAt != nil {
+		if t, err := time.Parse(time.RFC3339, *resp.SevenDaySonnet.ResetsAt); err == nil {
 			if p := providers.PaceMetric(providers.PaceInput{
 				MetricID: "sonnet-pace", Label: "Sonnet", Name: "Sonnet pace (7d)",
-				UsedPercent: *sonnetWindow.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
+				UsedPercent: *resp.SevenDaySonnet.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
 			}); p != nil {
 				metrics = append(metrics, *p)
 			}

@@ -385,6 +385,37 @@
       color: #d4d4e8;
     }
 
+    /* Issues section */
+    .issue-cta {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 32px;
+    }
+    .issue-checklist {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 28px;
+      max-width: 620px;
+    }
+    .issue-checklist h3 {
+      margin: 0 0 12px;
+      font-size: 0.95rem;
+      color: var(--fg-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .issue-checklist ul {
+      margin: 0;
+      padding: 0 0 0 20px;
+      color: var(--fg-muted);
+      font-size: 0.92rem;
+    }
+    .issue-checklist li { margin-bottom: 6px; }
+    .issue-checklist li:last-child { margin-bottom: 0; }
+    .issue-checklist li strong { color: var(--fg); }
+
     /* Footer */
     footer {
       padding: 48px 0 40px;
@@ -418,6 +449,7 @@
     <div class="links">
       <a href="#features">Features</a>
       <a href="#install">Install</a>
+      <a href="#issues">Issues</a>
       <a href="https://github.com/anthonybaldwin/UsageButtons">GitHub</a>
     </div>
   </nav>
@@ -587,6 +619,34 @@ cd UsageButtons</pre>
           <p>In Stream Deck, drag a provider (e.g. <strong>Claude</strong>, <strong>Codex</strong>, <strong>Copilot</strong>) onto any key, then pick a metric from the Property Inspector. Configure OAuth or paste a session cookie for providers that need it.</p>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section id="issues">
+    <h2>Something wrong?</h2>
+    <p class="sub">
+      Found a bug, buttons stuck on an error face, or a provider not returning the right numbers?
+      Open an issue on GitHub — the more detail you include, the faster it gets fixed.
+    </p>
+    <div class="issue-cta">
+      <a class="btn btn-primary" href="https://github.com/anthonybaldwin/UsageButtons/issues/new?template=bug_report.yml">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Report an issue
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/anthonybaldwin/UsageButtons/issues">
+        Browse open issues
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </a>
+    </div>
+    <div class="issue-checklist">
+      <h3>What to include</h3>
+      <ul>
+        <li><strong>OS &amp; Stream Deck version</strong> — Windows/macOS, Stream Deck software version</li>
+        <li><strong>Plugin version</strong> — shown in the eyebrow at the top of this page, or in Stream Deck's plugin list</li>
+        <li><strong>Provider &amp; metric</strong> — which provider (Claude, Codex, …) and which metric (session %, weekly %, …)</li>
+        <li><strong>What you expected vs. what happened</strong></li>
+        <li><strong>Screenshot of the button</strong> — worth a thousand words when it's a rendering bug</li>
+      </ul>
     </div>
   </section>
 

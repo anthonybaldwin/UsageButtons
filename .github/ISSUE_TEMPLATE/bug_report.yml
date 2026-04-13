@@ -1,0 +1,86 @@
+name: Bug Report
+description: Something broken, rendering wrong, or not updating? Report it here.
+labels: [bug]
+body:
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      description: Which provider is affected?
+      options:
+        - Claude
+        - Codex
+        - Copilot
+        - Cursor
+        - OpenRouter
+        - Warp
+        - z.ai
+        - Kimi K2
+        - Ollama
+        - Multiple / All
+    validations:
+      required: true
+
+  - type: input
+    id: metric
+    attributes:
+      label: Metric
+      description: Which metric(s) are affected? (e.g. Session %, Weekly %, Credits, Spent)
+      placeholder: "Session %"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe what you expected vs. what actually happened.
+      placeholder: |
+        Expected: Session % shows 74% with a blue fill bar.
+        Actual: Button is stuck on the loading spinner and never updates.
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: A screenshot of the affected button(s) helps a lot — drag and drop an image here.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+    validations:
+      required: true
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: "Found in Stream Deck's plugin list or the website header (e.g. v0.3.1)."
+      placeholder: "v0.3.1"
+    validations:
+      required: true
+
+  - type: input
+    id: sd-version
+    attributes:
+      label: Stream Deck software version
+      description: "Found in Stream Deck > About (e.g. 6.8.1)."
+      placeholder: "6.8.1"
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Steps to reproduce, logs, config details, or other context.
+    validations:
+      required: false

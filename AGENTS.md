@@ -20,7 +20,7 @@ Treat it as prior art to port concepts from, not code to vendor.
 ## Runtime
 
 - **Go** (1.26+). Single static binary per platform.
-- Only external dep: `github.com/gorilla/websocket`.
+- Only external dep: `github.com/coder/websocket`.
 - Single static binary per platform, low memory footprint.
 
 ## Repo layout

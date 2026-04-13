@@ -1,6 +1,7 @@
 package streamdeck
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -9,7 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 )
 
 // Connection wraps the WebSocket to the Stream Deck software.
@@ -42,10 +44,12 @@ func ParseArgs() RegistrationArgs {
 // Connect establishes the WebSocket and sends the registration event.
 func Connect(args RegistrationArgs) (*Connection, error) {
 	url := fmt.Sprintf("ws://127.0.0.1:%s", args.Port)
-	ws, _, err := websocket.DefaultDialer.Dial(url, nil)
+	ctx := context.Background()
+	ws, _, err := websocket.Dial(ctx, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("dial %s: %w", url, err)
 	}
+	ws.SetReadLimit(-1)
 
 	c := &Connection{ws: ws, uuid: args.PluginUUID}
 
@@ -55,7 +59,7 @@ func Connect(args RegistrationArgs) (*Connection, error) {
 		UUID  string `json:"uuid"`
 	}{Event: args.RegisterEvent, UUID: args.PluginUUID}
 	if err := c.sendJSON(reg); err != nil {
-		ws.Close()
+		ws.Close(websocket.StatusNormalClosure, "")
 		return nil, fmt.Errorf("register: %w", err)
 	}
 
@@ -68,19 +72,21 @@ func (c *Connection) UUID() string { return c.uuid }
 // ReadEvent blocks until the next inbound event arrives.
 func (c *Connection) ReadEvent() (Event, error) {
 	var ev Event
-	err := c.ws.ReadJSON(&ev)
+	err := wsjson.Read(context.Background(), c.ws, &ev)
 	return ev, err
 }
 
 // Close closes the underlying WebSocket.
-func (c *Connection) Close() error { return c.ws.Close() }
+func (c *Connection) Close() error {
+	return c.ws.Close(websocket.StatusNormalClosure, "")
+}
 
 // --- Outbound helpers ---
 
 func (c *Connection) sendJSON(v any) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.ws.WriteJSON(v)
+	return wsjson.Write(context.Background(), c.ws, v)
 }
 
 // SetImage sends an SVG string as a base64 data URI to a key.

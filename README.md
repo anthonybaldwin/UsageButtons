@@ -29,7 +29,7 @@ Stream Deck software launches the binary directly.
 
 - **Single binary**, no runtime dependencies
 - **Low memory footprint**
-- **Only external dep**: [gorilla/websocket](https://github.com/gorilla/websocket)
+- **Only external dep**: [coder/websocket](https://github.com/coder/websocket)
 
 ## Repo layout
 

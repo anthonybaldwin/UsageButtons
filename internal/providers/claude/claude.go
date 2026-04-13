@@ -503,7 +503,7 @@ func (Provider) BrandColor() string { return "#cc7c5e" }
 func (Provider) MetricIDs() []string {
 	return []string{
 		"session-percent", "session-pace", "weekly-percent", "weekly-pace",
-		"weekly-sonnet-percent", "weekly-opus-percent",
+		"weekly-sonnet-percent", "sonnet-pace", "weekly-opus-percent", "opus-pace",
 		"extra-usage-percent", "extra-usage-limit", "extra-usage-spent",
 		"extra-usage-enabled", "extra-usage-balance", "extra-usage-auto-reload",
 		"cost-today", "cost-30d",
@@ -604,6 +604,16 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 		}
 		metrics = append(metrics, *ms)
 	}
+	if sonnetWindow != nil && sonnetWindow.Utilization != nil && sonnetWindow.ResetsAt != nil {
+		if t, err := time.Parse(time.RFC3339, *sonnetWindow.ResetsAt); err == nil {
+			if p := providers.PaceMetric(providers.PaceInput{
+				MetricID: "sonnet-pace", Label: "S.PACE", Name: "Sonnet pace (7d)",
+				UsedPercent: *sonnetWindow.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
+			}); p != nil {
+				metrics = append(metrics, *p)
+			}
+		}
+	}
 
 	if resp.SevenDayOpus != nil {
 		if mo := remainingMetric("weekly-opus-percent", "OPUS", "Weekly Opus remaining", resp.SevenDayOpus); mo != nil {
@@ -611,6 +621,16 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 				mo.ResetInSeconds = weekly.ResetInSeconds
 			}
 			metrics = append(metrics, *mo)
+		}
+		if resp.SevenDayOpus.Utilization != nil && resp.SevenDayOpus.ResetsAt != nil {
+			if t, err := time.Parse(time.RFC3339, *resp.SevenDayOpus.ResetsAt); err == nil {
+				if p := providers.PaceMetric(providers.PaceInput{
+					MetricID: "opus-pace", Label: "O.PACE", Name: "Opus pace (7d)",
+					UsedPercent: *resp.SevenDayOpus.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
+				}); p != nil {
+					metrics = append(metrics, *p)
+				}
+			}
 		}
 	}
 

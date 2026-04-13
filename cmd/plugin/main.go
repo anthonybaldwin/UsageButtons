@@ -721,6 +721,8 @@ var knownLabels = map[string]string{
 	"weekly-pace":            "W.PACE",
 	"weekly-sonnet-percent":  "SONNET",
 	"weekly-opus-percent":    "OPUS",
+	"sonnet-pace":            "S.PACE",
+	"opus-pace":              "O.PACE",
 	"extra-usage-percent":    "EXTRA USAGE",
 	"extra-usage-limit":      "LIMIT",
 	"extra-usage-remaining":  "LEFT",

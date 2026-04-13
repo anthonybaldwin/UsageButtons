@@ -88,7 +88,8 @@ type Provider struct{}
 
 func (Provider) ID() string         { return "warp" }
 func (Provider) Name() string       { return "Warp" }
-func (Provider) BrandColor() string { return "#938bb4" }
+func (Provider) BrandColor() string { return "#01A4FF" }
+func (Provider) BrandBg() string    { return "#081520" }
 func (Provider) MetricIDs() []string {
 	return []string{"credits-percent", "bonus-credits"}
 }

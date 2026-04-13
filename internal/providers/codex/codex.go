@@ -325,7 +325,8 @@ type Provider struct{}
 
 func (Provider) ID() string         { return "codex" }
 func (Provider) Name() string       { return "Codex" }
-func (Provider) BrandColor() string { return "#49a3b0" }
+func (Provider) BrandColor() string { return "#10A37F" }
+func (Provider) BrandBg() string    { return "#000000" }
 func (Provider) MetricIDs() []string {
 	return []string{"session-percent", "session-pace", "weekly-percent", "weekly-pace", "credits-balance"}
 }

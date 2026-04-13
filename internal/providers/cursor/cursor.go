@@ -75,7 +75,8 @@ type Provider struct{}
 
 func (Provider) ID() string         { return "cursor" }
 func (Provider) Name() string       { return "Cursor" }
-func (Provider) BrandColor() string { return "#00bfa5" }
+func (Provider) BrandColor() string { return "#F54E00" }
+func (Provider) BrandBg() string    { return "#1a0e06" }
 func (Provider) MetricIDs() []string {
 	return []string{"total-percent", "auto-percent", "api-percent", "ondemand-spent"}
 }

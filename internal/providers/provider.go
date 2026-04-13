@@ -60,6 +60,7 @@ type Provider interface {
 	ID() string
 	Name() string
 	BrandColor() string
+	BrandBg() string
 	MetricIDs() []string
 	Fetch(ctx FetchContext) (Snapshot, error)
 }

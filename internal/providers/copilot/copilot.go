@@ -97,7 +97,8 @@ type Provider struct{}
 
 func (Provider) ID() string         { return "copilot" }
 func (Provider) Name() string       { return "Copilot" }
-func (Provider) BrandColor() string { return "#a855f7" }
+func (Provider) BrandColor() string { return "#8534F3" }
+func (Provider) BrandBg() string    { return "#150d2e" }
 func (Provider) MetricIDs() []string {
 	return []string{"premium-percent", "chat-percent"}
 }

@@ -500,6 +500,7 @@ type Provider struct{}
 func (Provider) ID() string         { return "claude" }
 func (Provider) Name() string       { return "Claude" }
 func (Provider) BrandColor() string { return "#cc7c5e" }
+func (Provider) BrandBg() string    { return "#1c1210" }
 func (Provider) MetricIDs() []string {
 	return []string{
 		"session-percent", "session-pace", "weekly-percent", "weekly-pace",

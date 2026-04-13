@@ -76,7 +76,8 @@ type Provider struct{}
 
 func (Provider) ID() string         { return "zai" }
 func (Provider) Name() string       { return "z.ai" }
-func (Provider) BrandColor() string { return "#e85a6a" }
+func (Provider) BrandColor() string { return "#ffffff" }
+func (Provider) BrandBg() string    { return "#0c0c0c" }
 func (Provider) MetricIDs() []string {
 	return []string{"tokens-percent", "mcp-percent"}
 }

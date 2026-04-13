@@ -34,6 +34,7 @@ type Provider struct{}
 func (Provider) ID() string         { return "openrouter" }
 func (Provider) Name() string       { return "OpenRouter" }
 func (Provider) BrandColor() string { return "#6467f2" }
+func (Provider) BrandBg() string    { return "#101028" }
 func (Provider) MetricIDs() []string {
 	return []string{"credits-balance", "credits-used"}
 }

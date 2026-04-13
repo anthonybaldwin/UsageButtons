@@ -11,6 +11,7 @@ type MockProvider struct{}
 func (MockProvider) ID() string         { return "mock" }
 func (MockProvider) Name() string       { return "Mock" }
 func (MockProvider) BrandColor() string { return "#3b82f6" }
+func (MockProvider) BrandBg() string    { return "#111827" }
 func (MockProvider) MetricIDs() []string {
 	return []string{"session-percent", "weekly-percent", "credits"}
 }

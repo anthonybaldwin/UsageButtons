@@ -110,7 +110,8 @@ type Provider struct{}
 
 func (Provider) ID() string         { return "kimi-k2" }
 func (Provider) Name() string       { return "Kimi K2" }
-func (Provider) BrandColor() string { return "#4c00ff" }
+func (Provider) BrandColor() string { return "#0071e3" }
+func (Provider) BrandBg() string    { return "#0a1225" }
 func (Provider) MetricIDs() []string {
 	return []string{"credits-balance"}
 }

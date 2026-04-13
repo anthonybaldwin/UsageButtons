@@ -168,21 +168,47 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		metricID = defaultMetric
 	}
 
-	// Stale fillColor migration (same as TS version).
-	if ks.FillColor != "" {
+	// Stale fillColor / bgColor migration.
+	{
 		prov := providers.Get(providerID)
-		stale := []string{"#374151", "#4b5563", "#1e293b", "#ffffff18", "#222e3b", "#3b82f6"}
-		if prov != nil {
-			stale = append(stale, strings.ToLower(prov.BrandColor()))
-		}
-		lc := strings.ToLower(ks.FillColor)
-		for _, s := range stale {
-			if lc == s {
-				ks.FillColor = ""
-				raw, _ := json.Marshal(ks)
-				conn.SetSettings(ev.Context, raw)
-				break
+		dirty := false
+
+		// Clear stale fill colors (old brand colors + legacy defaults).
+		if ks.FillColor != "" {
+			staleFill := []string{
+				"#374151", "#4b5563", "#1e293b", "#ffffff18", "#222e3b", "#3b82f6",
+				// Old brand colors (pre-v0.3).
+				"#49a3b0", "#a855f7", "#00bfa5", "#888888", "#938bb4", "#e85a6a", "#4c00ff",
 			}
+			if prov != nil {
+				staleFill = append(staleFill, strings.ToLower(prov.BrandColor()))
+			}
+			lc := strings.ToLower(ks.FillColor)
+			for _, s := range staleFill {
+				if lc == s {
+					ks.FillColor = ""
+					dirty = true
+					break
+				}
+			}
+		}
+
+		// Clear stale bg colors (old default).
+		if ks.BgColor != "" {
+			staleBg := []string{"#111827"}
+			lc := strings.ToLower(ks.BgColor)
+			for _, s := range staleBg {
+				if lc == s {
+					ks.BgColor = ""
+					dirty = true
+					break
+				}
+			}
+		}
+
+		if dirty {
+			raw, _ := json.Marshal(ks)
+			conn.SetSettings(ev.Context, raw)
 		}
 	}
 
@@ -382,10 +408,10 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 		subHint := ""
 		if notConfigured {
 			value = "SETUP"
-			subHint = "needs key"
+			subHint = "Needs Key"
 		} else if rateLimit {
 			value = "WAIT"
-			subHint = "rate limit"
+			subHint = "Rate Limit"
 		}
 
 		conn.SetImage(context, placeholderFace(prov,
@@ -482,7 +508,16 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 		in.Direction = metric.Direction
 	}
 
-	// Fill color: threshold > user override > reference card gray > brand
+	// Background: user override > brand bg
+	in.Bg = prov.BrandBg()
+	if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
+		in.Bg = ks.BgColor
+	}
+	if ks.TextColor != "" && render.IsValidHexColor(ks.TextColor) {
+		in.Fg = ks.TextColor
+	}
+
+	// Fill color: threshold > user override > reference card > monetary > brand
 	thState := computeThresholdState(metric, ks)
 	switch thState {
 	case "critical":
@@ -499,18 +534,12 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 		if ks.FillColor != "" && render.IsValidHexColor(ks.FillColor) {
 			in.Fill = ks.FillColor
 		} else if isReferenceCard {
-			bg := defStr(in.Bg, "#111827")
-			in.Fill = render.LightenHex(bg, 0.09)
+			in.Fill = render.LightenHex(in.Bg, 0.09)
+		} else if metric.NumericUnit == "dollars" || metric.NumericUnit == "cents" {
+			in.Fill = render.LightenHex(in.Bg, 0.15)
 		} else {
 			in.Fill = prov.BrandColor()
 		}
-	}
-
-	if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
-		in.Bg = ks.BgColor
-	}
-	if ks.TextColor != "" && render.IsValidHexColor(ks.TextColor) {
-		in.Fg = ks.TextColor
 	}
 
 	// Text sizes
@@ -567,6 +596,7 @@ func placeholderFace(prov providers.Provider, label, value, subvalue string, ks 
 		Label: label,
 		Value: value,
 		Fill:  prov.BrandColor(),
+		Bg:    prov.BrandBg(),
 	}
 	if subvalue != "" {
 		in.Subvalue = subvalue
@@ -602,10 +632,12 @@ func loadingFaceFor(providerID string, ks *settings.KeySettings) string {
 	prov := providers.Get(providerID)
 	glyph := getProviderGlyph(providerID)
 	fillColor := ""
+	var bg string
 	if prov != nil {
 		fillColor = prov.BrandColor()
+		bg = prov.BrandBg()
 	}
-	var bg, fg string
+	var fg string
 	var border *bool
 	if ks != nil {
 		if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {

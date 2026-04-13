@@ -34,7 +34,8 @@ type Provider struct{}
 
 func (Provider) ID() string         { return "ollama" }
 func (Provider) Name() string       { return "Ollama" }
-func (Provider) BrandColor() string { return "#888888" }
+func (Provider) BrandColor() string { return "#f7f7f7" }
+func (Provider) BrandBg() string    { return "#141414" }
 func (Provider) MetricIDs() []string {
 	return []string{"session-percent", "session-pace", "weekly-percent", "weekly-pace"}
 }

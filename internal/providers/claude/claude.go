@@ -502,7 +502,8 @@ func (Provider) Name() string       { return "Claude" }
 func (Provider) BrandColor() string { return "#cc7c5e" }
 func (Provider) MetricIDs() []string {
 	return []string{
-		"session-percent", "session-pace", "weekly-percent", "weekly-pace", "weekly-sonnet-percent",
+		"session-percent", "session-pace", "weekly-percent", "weekly-pace",
+		"weekly-sonnet-percent", "weekly-opus-percent",
 		"extra-usage-percent", "extra-usage-limit", "extra-usage-spent",
 		"extra-usage-enabled", "extra-usage-balance", "extra-usage-auto-reload",
 		"cost-today", "cost-30d",
@@ -604,6 +605,15 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 		metrics = append(metrics, *ms)
 	}
 
+	if resp.SevenDayOpus != nil {
+		if mo := remainingMetric("weekly-opus-percent", "OPUS", "Weekly Opus remaining", resp.SevenDayOpus); mo != nil {
+			if mo.ResetInSeconds == nil && weekly != nil && weekly.ResetInSeconds != nil {
+				mo.ResetInSeconds = weekly.ResetInSeconds
+			}
+			metrics = append(metrics, *mo)
+		}
+	}
+
 	// Extra usage resolution
 	cs := settings.ClaudeSettings()
 	var extraSrc *extraUsageSource
@@ -642,6 +652,7 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 	}
 
 	metrics = append(metrics, extraUsageMetrics(extraSrc)...)
+	metrics = append(metrics, costMetrics()...)
 
 	provName := "Claude"
 	if p := planFromTier(c.rateLimitTier); p != "" {

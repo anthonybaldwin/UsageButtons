@@ -8,10 +8,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 )
+
+// Cost scan cache — rescan at most once per 5 minutes.
+var (
+	costMu     sync.Mutex
+	costCache  *costResult
+	costCacheT time.Time
+)
+
+const costCacheTTL = 5 * time.Minute
 
 // Per-million-token pricing (USD). Matches Anthropic's published API rates.
 // Cache creation is 1.25x input; cache reads are 0.1x input.
@@ -49,6 +59,12 @@ type costResult struct {
 }
 
 func scanCosts() (*costResult, error) {
+	costMu.Lock()
+	defer costMu.Unlock()
+	if costCache != nil && time.Since(costCacheT) < costCacheTTL {
+		return costCache, nil
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
@@ -91,6 +107,8 @@ func scanCosts() (*costResult, error) {
 		}
 	}
 
+	costCache = &result
+	costCacheT = time.Now()
 	return &result, nil
 }
 

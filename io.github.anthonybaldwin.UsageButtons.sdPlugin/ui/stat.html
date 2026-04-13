@@ -431,7 +431,9 @@
     const METRICS = {
       claude: [
         ["session-percent",           "Session % remaining (5h)",       "pct"],
+        ["session-pace",              "Session pace (5h burn rate)",    "pct"],
         ["weekly-percent",            "Weekly % remaining",             "pct"],
+        ["weekly-pace",               "Weekly pace (7d burn rate)",     "pct"],
         ["weekly-sonnet-percent",     "Sonnet % remaining (weekly)",    "pct"],
         ["extra-usage-enabled",       "Extra usage — ON / OFF",         "toggle"],
         ["extra-usage-percent",       "Extra usage headroom %",         "pct"],
@@ -444,7 +446,9 @@
       ],
       codex: [
         ["session-percent",  "Session % remaining (5h)",              "pct"],
+        ["session-pace",     "Session pace (5h burn rate)",           "pct"],
         ["weekly-percent",   "Weekly % remaining",                    "pct"],
+        ["weekly-pace",      "Weekly pace (7d burn rate)",            "pct"],
         ["credits-balance",  "Credits remaining ($, paid plans only)","ref-dollar"],
         ["cost-today",       "Cost today (local logs)",               "ref-dollar"],
         ["cost-30d",         "Cost last 30 days (local logs)",        "ref-dollar"],
@@ -455,7 +459,9 @@
       ],
       ollama: [
         ["session-percent", "Session usage remaining %",        "pct"],
+        ["session-pace",    "Session pace (burn rate)",         "pct"],
         ["weekly-percent",  "Weekly usage remaining %",         "pct"],
+        ["weekly-pace",     "Weekly pace (burn rate)",          "pct"],
       ],
       cursor: [
         ["total-percent",   "Total plan usage remaining %",     "pct"],

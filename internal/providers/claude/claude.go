@@ -502,7 +502,7 @@ func (Provider) Name() string       { return "Claude" }
 func (Provider) BrandColor() string { return "#cc7c5e" }
 func (Provider) MetricIDs() []string {
 	return []string{
-		"session-percent", "weekly-percent", "weekly-sonnet-percent",
+		"session-percent", "session-pace", "weekly-percent", "weekly-pace", "weekly-sonnet-percent",
 		"extra-usage-percent", "extra-usage-limit", "extra-usage-spent",
 		"extra-usage-enabled", "extra-usage-balance", "extra-usage-auto-reload",
 		"cost-today", "cost-30d",
@@ -567,10 +567,30 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 	if session := remainingMetric("session-percent", "SESSION", "Session window remaining (5h)", resp.FiveHour); session != nil {
 		metrics = append(metrics, *session)
 	}
+	if resp.FiveHour != nil && resp.FiveHour.Utilization != nil && resp.FiveHour.ResetsAt != nil {
+		if t, err := time.Parse(time.RFC3339, *resp.FiveHour.ResetsAt); err == nil {
+			if p := providers.PaceMetric(providers.PaceInput{
+				MetricID: "session-pace", Label: "S.PACE", Name: "Session pace (5h)",
+				UsedPercent: *resp.FiveHour.Utilization, WindowDuration: 5 * time.Hour, ResetIn: time.Until(t),
+			}); p != nil {
+				metrics = append(metrics, *p)
+			}
+		}
+	}
 
 	weekly := remainingMetric("weekly-percent", "WEEKLY", "Weekly window remaining", resp.SevenDay)
 	if weekly != nil {
 		metrics = append(metrics, *weekly)
+	}
+	if resp.SevenDay != nil && resp.SevenDay.Utilization != nil && resp.SevenDay.ResetsAt != nil {
+		if t, err := time.Parse(time.RFC3339, *resp.SevenDay.ResetsAt); err == nil {
+			if p := providers.PaceMetric(providers.PaceInput{
+				MetricID: "weekly-pace", Label: "W.PACE", Name: "Weekly pace (7d)",
+				UsedPercent: *resp.SevenDay.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
+			}); p != nil {
+				metrics = append(metrics, *p)
+			}
+		}
 	}
 
 	sonnetWindow := resp.SevenDaySonnet

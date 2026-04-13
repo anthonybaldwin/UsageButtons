@@ -716,7 +716,9 @@ func formatValue(v any, unit string) string {
 
 var knownLabels = map[string]string{
 	"session-percent":        "SESSION",
+	"session-pace":           "S.PACE",
 	"weekly-percent":         "WEEKLY",
+	"weekly-pace":            "W.PACE",
 	"weekly-sonnet-percent":  "SONNET",
 	"weekly-opus-percent":    "OPUS",
 	"extra-usage-percent":    "EXTRA USAGE",

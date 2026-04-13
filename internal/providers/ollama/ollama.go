@@ -36,7 +36,7 @@ func (Provider) ID() string         { return "ollama" }
 func (Provider) Name() string       { return "Ollama" }
 func (Provider) BrandColor() string { return "#888888" }
 func (Provider) MetricIDs() []string {
-	return []string{"session-percent", "weekly-percent"}
+	return []string{"session-percent", "session-pace", "weekly-percent", "weekly-pace"}
 }
 
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
@@ -114,6 +114,15 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		metrics = append(metrics, m)
 	}
 
+	if sessionPct != nil && sessionReset != nil {
+		if p := providers.PaceMetric(providers.PaceInput{
+			MetricID: "session-pace", Label: "S.PACE", Name: "Session pace",
+			UsedPercent: *sessionPct, WindowDuration: 5 * time.Hour, ResetIn: time.Until(*sessionReset),
+		}); p != nil {
+			metrics = append(metrics, *p)
+		}
+	}
+
 	// Weekly usage
 	weeklyPct, weeklyReset := parseUsageWindow(html, []string{"Weekly usage"})
 	if weeklyPct != nil {
@@ -139,6 +148,15 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			m.ResetInSeconds = &delta
 		}
 		metrics = append(metrics, m)
+	}
+
+	if weeklyPct != nil && weeklyReset != nil {
+		if p := providers.PaceMetric(providers.PaceInput{
+			MetricID: "weekly-pace", Label: "W.PACE", Name: "Weekly pace",
+			UsedPercent: *weeklyPct, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(*weeklyReset),
+		}); p != nil {
+			metrics = append(metrics, *p)
+		}
 	}
 
 	planLabel := "Ollama"

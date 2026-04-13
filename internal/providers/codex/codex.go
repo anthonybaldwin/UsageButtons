@@ -289,6 +289,19 @@ func remainingMetric(id, label, name string, w *usageWindow) *providers.MetricVa
 	return &m
 }
 
+func paceFromWindow(id, label, name string, w *usageWindow) *providers.MetricValue {
+	if w == nil || w.UsedPercent == nil || w.ResetAt == nil || w.LimitWindowSeconds == nil {
+		return nil
+	}
+	resetIn := time.Until(time.Unix(int64(*w.ResetAt), 0))
+	return providers.PaceMetric(providers.PaceInput{
+		MetricID: id, Label: label, Name: name,
+		UsedPercent:    *w.UsedPercent,
+		WindowDuration: time.Duration(*w.LimitWindowSeconds) * time.Second,
+		ResetIn:        resetIn,
+	})
+}
+
 func parseBalance(raw any) (float64, bool) {
 	switch v := raw.(type) {
 	case float64:
@@ -314,7 +327,7 @@ func (Provider) ID() string         { return "codex" }
 func (Provider) Name() string       { return "Codex" }
 func (Provider) BrandColor() string { return "#49a3b0" }
 func (Provider) MetricIDs() []string {
-	return []string{"session-percent", "weekly-percent", "credits-balance"}
+	return []string{"session-percent", "session-pace", "weekly-percent", "weekly-pace", "credits-balance"}
 }
 
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
@@ -358,9 +371,15 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	if session := remainingMetric("session-percent", "SESSION", "Session window remaining (5h)", windows.session); session != nil {
 		metrics = append(metrics, *session)
 	}
+	if p := paceFromWindow("session-pace", "S.PACE", "Session pace", windows.session); p != nil {
+		metrics = append(metrics, *p)
+	}
 
 	if weekly := remainingMetric("weekly-percent", "WEEKLY", "Weekly window remaining", windows.weekly); weekly != nil {
 		metrics = append(metrics, *weekly)
+	}
+	if p := paceFromWindow("weekly-pace", "W.PACE", "Weekly pace", windows.weekly); p != nil {
+		metrics = append(metrics, *p)
 	}
 
 	// Credits metric

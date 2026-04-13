@@ -17,6 +17,7 @@ build/
 # from `bun run build:<target>`, so we don't track any of it.
 io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/
 io.github.anthonybaldwin.UsageButtons.sdPlugin/logs/
+io.github.anthonybaldwin.UsageButtons.sdPlugin/usage-buttons.exe
 
 # Editor / OS
 .DS_Store

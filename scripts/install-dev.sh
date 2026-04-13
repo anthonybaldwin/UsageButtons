@@ -96,14 +96,23 @@ mkdir -p "$PLUGINS_DIR"
 
 # Remove existing link/dir
 if [[ -e "$DEST" ]] || [[ -L "$DEST" ]]; then
-  rm -rf "$DEST"
+  if [[ "$PLATFORM" == "windows" ]]; then
+    # Junctions must be removed with rmdir, not rm -rf (which follows
+    # the junction and deletes the target contents).
+    WIN_RM=$(cygpath -w "$DEST" 2>/dev/null || echo "$DEST")
+    cmd //c rmdir "$WIN_RM" 2>/dev/null || rm -rf "$DEST"
+  else
+    rm -rf "$DEST"
+  fi
 fi
 
 if [[ "$PLATFORM" == "windows" ]]; then
-  # Convert to Windows paths for mklink
+  # Convert to Windows paths for mklink.
+  # Use //J so bash doesn't eat the flag, and let the shell quote the
+  # paths instead of nesting quotes inside cmd's string.
   WIN_DEST=$(cygpath -w "$DEST" 2>/dev/null || echo "$DEST")
   WIN_SRC=$(cygpath -w "$SDPLUGIN" 2>/dev/null || echo "$SDPLUGIN")
-  cmd //c "mklink /J \"$WIN_DEST\" \"$WIN_SRC\"" >/dev/null
+  cmd //c mklink //J "$WIN_DEST" "$WIN_SRC" >/dev/null
 else
   ln -s "$SDPLUGIN" "$DEST"
   # Fix executable bits + quarantine on macOS

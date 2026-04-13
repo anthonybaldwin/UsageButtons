@@ -19,6 +19,12 @@ const (
 	// upstream APIs. 30s is responsive enough for deliberate retries
 	// but limits a frustrated user to ~2 req/min.
 	ManualCooldown = 30 * time.Second
+
+	// StaleTTL: how long missing metrics are preserved from a previous
+	// snapshot. After this window a permanently failed sub-fetch (e.g.
+	// expired cookie) stops carrying forward stale data so the button
+	// can show a setup/error state instead.
+	StaleTTL = 30 * time.Minute
 )
 
 // LogSink is called for cache observability. Set by the plugin at init.
@@ -159,6 +165,16 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 			snapshot = errorSnapshot(p, msg)
 		}
 	} else {
+		// Carry forward metrics that were in the old snapshot but
+		// missing from the new one (e.g. a cookie sub-fetch 403'd).
+		// They're marked stale so the UI can dim them, but the user
+		// still sees data instead of a blank button.
+		// Only preserve within StaleTTL so a permanently expired
+		// cookie doesn't keep showing stale data forever.
+		if e.snapshot != nil && !e.fetchedAt.IsZero() &&
+			time.Since(e.fetchedAt) < StaleTTL {
+			snapshot = preserveMissing(*e.snapshot, snapshot)
+		}
 		e.snapshot = &snapshot
 		e.fetchedAt = time.Now()
 		hadError := e.lastError != nil
@@ -225,6 +241,24 @@ func errorSnapshot(p Provider, errMsg string) Snapshot {
 		Error:        errMsg,
 		Status:       "unknown",
 	}
+}
+
+// preserveMissing copies metrics from prev into next that are present
+// in prev but absent from next, marking them stale. This keeps data
+// visible when a sub-fetch (e.g. cookie path) fails transiently.
+func preserveMissing(prev, next Snapshot) Snapshot {
+	have := make(map[string]struct{}, len(next.Metrics))
+	for _, m := range next.Metrics {
+		have[m.ID] = struct{}{}
+	}
+	for _, m := range prev.Metrics {
+		if _, ok := have[m.ID]; !ok {
+			t := true
+			m.Stale = &t
+			next.Metrics = append(next.Metrics, m)
+		}
+	}
+	return next
 }
 
 func metricIDs(s Snapshot) string {

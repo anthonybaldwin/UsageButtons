@@ -535,8 +535,6 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 			in.Fill = ks.FillColor
 		} else if isReferenceCard {
 			in.Fill = render.LightenHex(in.Bg, 0.09)
-		} else if metric.NumericUnit == "dollars" || metric.NumericUnit == "cents" {
-			in.Fill = render.LightenHex(in.Bg, 0.15)
 		} else {
 			in.Fill = prov.BrandColor()
 		}

@@ -1,4 +1,4 @@
-// Usage Buttons cookie bridge — MV3 service worker.
+// Usage Buttons Helper — MV3 service worker.
 //
 // Talks to the Usage Buttons native-messaging host
 // (io.github.anthonybaldwin.usagebuttons) over a persistent port. The

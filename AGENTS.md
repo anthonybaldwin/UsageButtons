@@ -35,8 +35,9 @@ go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./
 GOOS=darwin GOARCH=arm64 go build -o ...sdPlugin/bin/plugin-mac-arm64 ./cmd/plugin/
 GOOS=darwin GOARCH=amd64 go build -o ...sdPlugin/bin/plugin-mac-x64 ./cmd/plugin/
 
-# Native-messaging host binary (ships alongside the plugin for the
-# cookie bridge). See internal/cookies/ and chrome-extension/.
+# Native-messaging host binary (ships alongside the plugin as the
+# bridge to the Usage Buttons Helper extension). See internal/cookies/
+# and chrome-extension/.
 go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/usagebuttons-native-host-win.exe ./cmd/native-host/
 GOOS=darwin GOARCH=arm64 go build -o ...sdPlugin/bin/usagebuttons-native-host-mac-arm64 ./cmd/native-host/
 GOOS=darwin GOARCH=amd64 go build -o ...sdPlugin/bin/usagebuttons-native-host-mac-x64 ./cmd/native-host/
@@ -104,13 +105,13 @@ Current topics: `go`, `golang`, `stream-deck`, `stream-deck-plugin`,
 - `UserTitleEnabled: false` on all actions — we own the full 144x144
   canvas. Never use `setTitle()` or re-enable native titles.
 
-## Browser cookie bridge
+## Browser fetch bridge (Usage Buttons Helper extension)
 
 Cookie-gated providers (Claude web extras, Cursor, Ollama) route
 requests through the companion Chrome extension in
-`chrome-extension/`, which proxies `fetch()` for a narrow allowlist
-of origins. Cookies never leave the browser — the plugin only sees
-API response bodies.
+`chrome-extension/` (Usage Buttons Helper), which proxies `fetch()`
+for a narrow allowlist of origins. Cookies never leave the browser —
+the plugin only sees API response bodies.
 
 Architecture:
 

@@ -62,24 +62,10 @@ func TestQueryValidate(t *testing.T) {
 	})
 }
 
-func TestGet_Unavailable(t *testing.T) {
-	_, err := Get(context.Background(), Query{Domain: "claude.ai"})
-	if !errors.Is(err, ErrHostUnavailable) {
-		t.Fatalf("want ErrHostUnavailable, got %v", err)
-	}
-}
-
 func TestGet_RejectsDisallowedDomain(t *testing.T) {
 	_, err := Get(context.Background(), Query{Domain: "evil.example.com"})
 	if !errors.Is(err, ErrDomainNotAllowed) {
 		t.Fatalf("want ErrDomainNotAllowed, got %v", err)
-	}
-}
-
-func TestHeader_PropagatesHostUnavailable(t *testing.T) {
-	_, _, err := Header(context.Background(), Query{Domain: "claude.ai"})
-	if !errors.Is(err, ErrHostUnavailable) {
-		t.Fatalf("want ErrHostUnavailable, got %v", err)
 	}
 }
 
@@ -123,8 +109,3 @@ func TestHeader_NoCookies(t *testing.T) {
 	}
 }
 
-func TestHostAvailable_DefaultFalse(t *testing.T) {
-	if HostAvailable(context.Background()) {
-		t.Fatal("HostAvailable should be false before IPC is wired")
-	}
-}

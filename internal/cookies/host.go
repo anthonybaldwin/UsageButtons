@@ -18,7 +18,9 @@ import (
 // Kind are populated; the rest serialize as omitempty.
 //
 // Host → extension kinds: "getCookies", "ping".
-// Extension → host kinds: "ready", "cookies", "pong", "error".
+// Extension → host kinds: "ready", "cookies", "pong", "error", "changed".
+// Plugin ↔ host kinds: "status" (with Ready flag) and "getCookies" /
+// "cookies" relayed through to/from the extension.
 type Message struct {
 	ID        string       `json:"id,omitempty"`
 	Kind      string       `json:"kind"`
@@ -27,6 +29,7 @@ type Message struct {
 	UserAgent string       `json:"userAgent,omitempty"`
 	Version   string       `json:"version,omitempty"`
 	Error     string       `json:"error,omitempty"`
+	Ready     bool         `json:"ready,omitempty"`
 	Cookies   []WireCookie `json:"cookies,omitempty"`
 }
 

@@ -70,28 +70,53 @@ UsageButtons/
 └── README.md
 ```
 
+## Install
+
+The full step-by-step lives on the
+[landing page](https://anthonybaldwin.github.io/UsageButtons/#install).
+Short version:
+
+1. Download the **.streamDeckPlugin** bundle for your OS from the
+   [latest release](https://github.com/anthonybaldwin/UsageButtons/releases/latest)
+   and double-click to install in Stream Deck.
+2. (Optional, for Claude extras / Cursor / Ollama) Grab
+   **UsageButtons-Helper-unpacked.zip** from the same release, unzip
+   it, and **Load unpacked** in `chrome://extensions`. The plugin
+   auto-registers — nothing to configure.
+3. Drag a provider (**Claude**, **Codex**, **Copilot**, etc.) onto a
+   Stream Deck key and pick a metric from the Property Inspector.
+
 ## Build from source
 
-### Windows
+```
+git clone https://github.com/anthonybaldwin/UsageButtons.git
+cd UsageButtons
+go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/
+go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/usagebuttons-native-host-win.exe ./cmd/native-host/
+./scripts/install-dev.sh --restart
+```
 
-1. Install [Go](https://go.dev/dl/)
-2. `go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/`
-3. `./scripts/install-dev.sh --restart` — junctions the .sdPlugin folder
-   into `%APPDATA%\Elgato\StreamDeck\Plugins\` and relaunches
-   Stream Deck
-4. Drag a provider (e.g. **Claude**, **Codex**, **Copilot**) onto a key
-   and pick a metric from the Property Inspector
-
-### macOS
-
-1. Install [Go](https://go.dev/dl/)
-2. `GOOS=darwin GOARCH=arm64 go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac ./cmd/plugin/`
-3. `./scripts/install-dev.sh --restart`
-4. Same Property Inspector flow as Windows
-
-Cross-compilation from Windows: `GOOS=darwin GOARCH=arm64 go build ...`
+`install-dev.sh` junctions the `.sdPlugin` folder into Stream Deck's
+plugin directory so rebuilds take effect without reinstalling.
+Cross-compile with `GOOS=darwin GOARCH=arm64 go build ...` for macOS
+(and the same for the native host — releases build both arches via
+the `release` workflow).
 
 Full dev workflow lives in [AGENTS.md](AGENTS.md).
+
+## Releases
+
+Cut via the manual `release` GitHub Action — no local git work:
+
+```
+gh workflow run release.yml --field bump=patch
+gh workflow run release.yml --field bump=minor
+gh workflow run release.yml --field bump=custom --field custom_version=0.4.0
+```
+
+The workflow bumps both manifests, tags, builds plugin + native host
+for Windows + macOS (both arches), packages the Helper zip, and
+publishes the release with all three artifacts attached.
 
 ## Usage Buttons Helper (required for Claude extras, Cursor, Ollama)
 

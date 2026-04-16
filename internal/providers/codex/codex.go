@@ -328,7 +328,12 @@ func (Provider) Name() string       { return "Codex" }
 func (Provider) BrandColor() string { return "#10A37F" }
 func (Provider) BrandBg() string    { return "#000000" }
 func (Provider) MetricIDs() []string {
-	return []string{"session-percent", "session-pace", "weekly-percent", "weekly-pace", "credits-balance"}
+	return []string{
+		"session-percent", "session-pace",
+		"weekly-percent", "weekly-pace",
+		"credits-balance",
+		"cost-today", "cost-30d",
+	}
 }
 
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
@@ -383,12 +388,20 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		metrics = append(metrics, *p)
 	}
 
-	// Credits metric
+	// Credits metric. Emit whenever the plan actually has a credits
+	// concept — including $0.00 (user ran out of prepaid credits).
+	// Only skip emission when the plan has no credits at all
+	// (HasCredits=false) or is unlimited — in those cases the metric
+	// is a category error, so the button stays on a dash rather than
+	// lie with $0.
 	if resp.Credits != nil {
 		balance, ok := parseBalance(resp.Credits.Balance)
 		hasCredits := resp.Credits.HasCredits != nil && *resp.Credits.HasCredits
 		unlimited := resp.Credits.Unlimited != nil && *resp.Credits.Unlimited
-		if ok && balance > 0 && hasCredits && !unlimited {
+		if ok && hasCredits && !unlimited {
+			if balance < 0 {
+				balance = 0
+			}
 			now := time.Now().UTC().Format(time.RFC3339)
 			metrics = append(metrics, providers.MetricValue{
 				ID:              "credits-balance",
@@ -403,6 +416,12 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			})
 		}
 	}
+
+	// Local cost tracking from ~/.codex/sessions/**/*.jsonl. Adds
+	// cost-today + cost-30d if any session data is within the 30-day
+	// window; no-op otherwise so buttons render as dash instead of
+	// faking $0.00.
+	metrics = append(metrics, codexCostMetrics()...)
 
 	provName := humanPlan(resp.PlanType)
 	if provName == "" {

@@ -24,8 +24,11 @@ type PaceInput struct {
 //   - Positive value = reserve (used less than expected — good)
 //   - Negative value = deficit (used more than expected — bad)
 //
-// Ratio is mapped 0..1 where 0.5 = on track, 1.0 = full reserve,
-// 0.0 = full deficit. Clamped to [0, 1].
+// Pace metrics intentionally do NOT set a Ratio: mapping ±N% delta
+// onto a 0..1 fill bar produces a "half-filled tile" at 0% that reads
+// like a percent meter at 50% and confuses everyone. The signed value
+// + caption ("On pace" / "Reserve" / "Deficit") carries the signal
+// without a misleading fill.
 func PaceMetric(in PaceInput) *MetricValue {
 	windowSec := in.WindowDuration.Seconds()
 	resetSec := in.ResetIn.Seconds()
@@ -51,21 +54,22 @@ func PaceMetric(in PaceInput) *MetricValue {
 	// Flip sign so positive = reserve (good), negative = deficit (bad)
 	reserve := -delta
 
-	// Ratio: 0.5 = on pace, 1.0 = 50%+ reserve, 0.0 = 50%+ deficit
-	ratio := math.Max(0, math.Min(1, 0.5+(reserve/100)))
-
-	// Display value
-	roundedReserve := math.Round(reserve)
+	// Display value — always signed so it doesn't read as "percent
+	// remaining." Near pace (< 1%) we drop to one-decimal precision
+	// so e.g. "+0.3%" / "-0.7%" instead of a bare "0%".
+	absReserve := math.Abs(reserve)
 	var valueStr string
-	if roundedReserve > 0 {
-		valueStr = fmt.Sprintf("+%d%%", int(roundedReserve))
-	} else {
-		valueStr = fmt.Sprintf("%d%%", int(roundedReserve))
+	switch {
+	case absReserve < 0.05:
+		valueStr = "±0.0%"
+	case absReserve < 1:
+		valueStr = fmt.Sprintf("%+.1f%%", reserve)
+	default:
+		valueStr = fmt.Sprintf("%+d%%", int(math.Round(reserve)))
 	}
 
 	// Caption
 	var caption string
-	absReserve := math.Abs(reserve)
 	switch {
 	case absReserve < 2:
 		caption = "On pace"
@@ -85,8 +89,6 @@ func PaceMetric(in PaceInput) *MetricValue {
 		NumericValue:    &nv,
 		NumericUnit:     "percent",
 		NumericGoodWhen: "high",
-		Ratio:           &ratio,
-		Direction:       "up",
 		Caption:         caption,
 		ResetInSeconds:  &resetF,
 		UpdatedAt:       time.Now().UTC().Format(time.RFC3339),

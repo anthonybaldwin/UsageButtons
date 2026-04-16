@@ -158,8 +158,11 @@
       <div id="authConfig-codex" class="auth-config" style="display:none">
         <p class="hint">
           Codex reads your OAuth token automatically from
-          <code>~/.codex/auth.json</code> (written by <code>codex auth login</code>).
-          No manual configuration needed.
+          <code>~/.codex/auth.json</code> (written by
+          <code>codex auth login</code>). No manual configuration.
+          Cost-today / cost-30d metrics are estimated locally from
+          <code>~/.codex/sessions/**/*.jsonl</code> — same pattern
+          Claude uses.
         </p>
       </div>
 
@@ -196,10 +199,6 @@
         </p>
       </div>
     </div>
-
-    <p class="hint auth-shared-hint" style="display:none">
-      Authentication settings apply to <em>all</em> buttons for this provider.
-    </p>
 
     <div class="group-heading">Text</div>
 
@@ -441,9 +440,13 @@
     const T = { meter: true, thresholds: true, timer: true, rawCounts: false };
     const METRIC_FLAGS = {
       // percent meters — full feature set, rawCounts only where providers supply them
-      "pct":       { meter: true, thresholds: false, timer: true,  rawCounts: true  },
+      "pct":       { meter: true,  thresholds: false, timer: true,  rawCounts: true  },
+      // pace metrics — directional (+/- from expected), NOT a fill bar.
+      // Reset countdown still meaningful; fill direction / fill color
+      // would be misleading so suppressed.
+      "pace":      { meter: false, thresholds: false, timer: true,  rawCounts: false },
       // dollar meters — real fill bar, thresholds fire, no rawCounts
-      "dollar-m":  { meter: true, thresholds: true,  timer: false, rawCounts: false },
+      "dollar-m":  { meter: true,  thresholds: true,  timer: false, rawCounts: false },
       // reference cards (dollar) — no bar, but thresholds are meaningful
       "ref-dollar":{ meter: false, thresholds: true,  timer: false, rawCounts: false },
       // reference cards (non-dollar) — no bar, no thresholds
@@ -455,13 +458,13 @@
     const METRICS = {
       claude: [
         ["session-percent",           "Session % remaining (5h)",       "pct"],
-        ["session-pace",              "Session pace (5h burn rate)",    "pct"],
+        ["session-pace",              "Session pace (5h burn rate)",    "pace"],
         ["weekly-percent",            "Weekly % remaining",             "pct"],
-        ["weekly-pace",               "Weekly pace (7d burn rate)",     "pct"],
+        ["weekly-pace",               "Weekly pace (7d burn rate)",     "pace"],
         ["weekly-sonnet-percent",     "Sonnet % remaining (weekly)",    "pct"],
-        ["sonnet-pace",               "Sonnet pace (7d burn rate)",     "pct"],
+        ["sonnet-pace",               "Sonnet pace (7d burn rate)",     "pace"],
         ["weekly-opus-percent",       "Opus % remaining (weekly)",      "pct"],
-        ["opus-pace",                 "Opus pace (7d burn rate)",       "pct"],
+        ["opus-pace",                 "Opus pace (7d burn rate)",       "pace"],
         ["extra-usage-enabled",       "Extra usage — ON / OFF",         "toggle"],
         ["extra-usage-percent",       "Extra usage headroom %",         "pct"],
         ["extra-usage-limit",         "Extra usage monthly limit ($)",  "ref-dollar"],
@@ -473,10 +476,12 @@
       ],
       codex: [
         ["session-percent",  "Session % remaining (5h)",              "pct"],
-        ["session-pace",     "Session pace (5h burn rate)",           "pct"],
+        ["session-pace",     "Session pace (5h burn rate)",           "pace"],
         ["weekly-percent",   "Weekly % remaining",                    "pct"],
-        ["weekly-pace",      "Weekly pace (7d burn rate)",            "pct"],
+        ["weekly-pace",      "Weekly pace (7d burn rate)",            "pace"],
         ["credits-balance",  "Credits remaining ($, paid plans only)","ref-dollar"],
+        ["cost-today",       "Cost today (local logs)",               "ref-dollar"],
+        ["cost-30d",         "Cost last 30 days (local logs)",        "ref-dollar"],
       ],
       copilot: [
         ["premium-percent", "Premium interactions remaining %", "pct"],
@@ -484,9 +489,9 @@
       ],
       ollama: [
         ["session-percent", "Session usage remaining %",        "pct"],
-        ["session-pace",    "Session pace (burn rate)",         "pct"],
+        ["session-pace",    "Session pace (burn rate)",         "pace"],
         ["weekly-percent",  "Weekly usage remaining %",         "pct"],
-        ["weekly-pace",     "Weekly pace (burn rate)",          "pct"],
+        ["weekly-pace",     "Weekly pace (burn rate)",          "pace"],
       ],
       cursor: [
         ["total-percent",   "Total plan usage remaining %",     "pct"],
@@ -683,14 +688,11 @@
       // Show the relevant one (if it exists)
       const panel = document.getElementById("authConfig-" + providerId);
       const authSection = document.getElementById("providerAuth");
-      const sharedHint = document.querySelector(".auth-shared-hint");
       if (panel && providerId !== "mock") {
         authSection.style.display = "";
         panel.style.display = "";
-        if (sharedHint) sharedHint.style.display = "";
       } else {
         authSection.style.display = "none";
-        if (sharedHint) sharedHint.style.display = "none";
       }
     }
 

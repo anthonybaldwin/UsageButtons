@@ -31,3 +31,10 @@ Thumbs.db
 .env.local
 plugin.exe
 .claude/
+
+# Chrome extension private key. The public half is committed in
+# chrome-extension/manifest.json as the `key` field, which pins the
+# deterministic extension ID. Private key is only needed for future
+# Chrome Web Store uploads — keep it locally, never commit.
+*.pem
+chrome-extension-private.pem

@@ -11,10 +11,10 @@ import (
 	"math"
 	"time"
 
+	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers/cookieaux"
-	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
 const usageSummaryURL = "https://cursor.com/api/usage-summary"
@@ -84,12 +84,10 @@ func (Provider) MetricIDs() []string {
 }
 
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
-	cs := settings.CursorSettings()
-	f := cookieaux.Fetcher{Domain: "cursor.com", ManualCookie: cs.CookieHeader}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	if !f.Available(ctx) {
+	if !cookies.HostAvailable(ctx) {
 		return providers.Snapshot{
 			ProviderID:   "cursor",
 			ProviderName: "Cursor",
@@ -99,10 +97,9 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Error:        cookieaux.MissingMessage("cursor.com"),
 		}, nil
 	}
-	src := f.Source(ctx)
 
 	var resp usageSummaryResponse
-	err := f.FetchJSON(ctx, usageSummaryURL, nil, &resp)
+	err := cookies.FetchJSON(ctx, usageSummaryURL, nil, &resp)
 
 	if err != nil {
 		var httpErr *httputil.Error
@@ -113,7 +110,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 				Source:       "cookie",
 				Metrics:      []providers.MetricValue{},
 				Status:       "unknown",
-				Error:        cookieaux.StaleMessage(src, "cursor.com"),
+				Error:        cookieaux.StaleMessage("cursor.com"),
 			}, nil
 		}
 		return providers.Snapshot{}, err

@@ -115,46 +115,35 @@
       <div id="authConfig-claude" class="auth-config" style="display:none">
         <label for="claudeSource">Data source</label>
         <select id="claudeSource">
-          <option value="both" selected>Both — OAuth + Cookie (recommended)</option>
-          <option value="oauth">OAuth only — API, no cookie calls</option>
-          <option value="cookie">Cookie — paste required, primary extras source</option>
+          <option value="both" selected>Both — OAuth + browser (recommended)</option>
+          <option value="oauth">OAuth only — no browser calls</option>
+          <option value="cookie">Browser only — via Usage Buttons Helper</option>
         </select>
         <p class="hint">
-          <strong>OAuth</strong> uses <code>~/.claude/.credentials.json</code> and
-          <code>api.anthropic.com</code>. Handles session %, weekly %, Sonnet %.
-          <strong>Cookie</strong> calls <code>claude.ai</code> directly — needed
-          for the Extra usage block when OAuth returns <code>is_enabled: false</code>.
-          <strong>Both</strong> uses OAuth first and falls through to Cookie.
+          <strong>OAuth</strong> uses <code>~/.claude/.credentials.json</code>
+          and <code>api.anthropic.com</code> for session %, weekly %, Sonnet %.
+          <strong>Browser</strong> calls <code>claude.ai</code> via the
+          Usage Buttons Helper extension — required for the Extra usage
+          block (balance, overage) when your plan has it enabled.
+          <strong>Both</strong> runs OAuth first and adds browser data on top.
         </p>
-        <div id="claudeCookieRow">
-          <label for="claudeCookie">Session key (claude.ai)</label>
-          <input id="claudeCookie" type="password" placeholder="sk-ant-sid01-..." autocomplete="off" spellcheck="false">
-          <p class="hint">
-            Paste your <code>sessionKey</code> from claude.ai DevTools.
-            Masked for privacy — only sent to <code>claude.ai</code>.
-          </p>
-        </div>
       </div>
 
       <!-- Cursor auth -->
       <div id="authConfig-cursor" class="auth-config" style="display:none">
-        <label for="cursorCookie">Cookie header (cursor.com)</label>
-        <input id="cursorCookie" type="password" placeholder="WorkosCursorSessionToken=..." autocomplete="off" spellcheck="false">
         <p class="hint">
-          Open cursor.com in your browser, open DevTools (F12) → Network tab,
-          reload the page, click any request, and copy the <code>Cookie</code>
-          header value. Paste it here. Only sent to <code>cursor.com</code>.
+          Cursor usage comes from your cursor.com session via the
+          <strong>Usage Buttons Helper</strong> extension. Install it from
+          the <em>Plugin settings</em> tab → <em>Browser extension</em>.
         </p>
       </div>
 
       <!-- Ollama auth -->
       <div id="authConfig-ollama" class="auth-config" style="display:none">
-        <label for="ollamaCookie">Cookie header (ollama.com)</label>
-        <input id="ollamaCookie" type="password" placeholder="session=..." autocomplete="off" spellcheck="false">
         <p class="hint">
-          Open ollama.com/settings in your browser, open DevTools (F12) → Network tab,
-          reload the page, click any request, and copy the <code>Cookie</code>
-          header value. Paste it here. Only sent to <code>ollama.com</code>.
+          Ollama cloud usage comes from your ollama.com session via the
+          <strong>Usage Buttons Helper</strong> extension. Install it from
+          the <em>Plugin settings</em> tab → <em>Browser extension</em>.
         </p>
       </div>
 
@@ -406,37 +395,42 @@
       the next time they appear.
     </p>
 
-    <div class="group-heading">Browser cookies extension</div>
+    <div class="group-heading">Browser extension</div>
     <p class="hint">
-      Installs a companion Chrome extension that forwards cookies for
-      <code>claude.ai</code>, <code>cursor.com</code>, and
-      <code>ollama.com</code> to this plugin. Without it, those
-      providers' cookie-gated metrics (Claude balance / extras, Cursor,
-      Ollama) require a manual cookie paste in each provider's Auth
-      section.
+      The <strong>Usage Buttons Helper</strong> Chrome extension reads
+      usage data from your logged-in sessions on <code>claude.ai</code>,
+      <code>cursor.com</code>, and <code>ollama.com</code>. Your cookies
+      never leave the browser — the extension proxies requests using
+      <code>credentials: "include"</code>, and the plugin only sees API
+      response bodies.
     </p>
     <div id="cookieHostStatus" class="hint" style="margin-top: 10px; padding: 6px 8px; border-radius: 4px; background: #1f2937; border: 1px solid #374151;">
       <span id="cookieHostStatusDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; background:#6b7280;"></span>
       <span id="cookieHostStatusText">Checking extension status…</span>
     </div>
 
-    <label for="cookieExtensionId">Extension ID
-      <span style="opacity: 0.6; font-weight: normal;">(from chrome://extensions after Load unpacked)</span>
-    </label>
-    <input id="cookieExtensionId" type="text" placeholder="32 lowercase letters a–p" autocomplete="off">
-    <p class="hint">
-      Chrome assigns a unique ID when you sideload the extension. Paste
-      it here so the plugin can authorize the native-messaging bridge
-      for your specific install.
+    <p class="hint" style="margin-top: 10px;">
+      <strong>Setup:</strong> Open <code>chrome://extensions</code>,
+      enable <strong>Developer mode</strong>, click <strong>Load
+      unpacked</strong>, and pick the <code>chrome-extension/</code>
+      folder inside this repo. The plugin auto-registers the
+      native-messaging bridge on launch — no ID paste, no admin
+      prompts.
     </p>
 
     <button type="button" id="registerCookieHost" class="action">
-      Register native host
+      Re-register native host
     </button>
     <button type="button" id="unregisterCookieHost" class="action">
       Unregister native host
     </button>
     <div id="cookieHostActionResult" class="hint" style="display:none; margin-top: 6px;"></div>
+    <p class="hint">
+      <strong>Re-register</strong> rewrites the manifest if you've
+      rebuilt the plugin or moved the install. <strong>Unregister</strong>
+      cleanly removes every registry key and manifest file the plugin
+      has written.
+    </p>
   </div>
 
   <script>
@@ -570,6 +564,23 @@
       if (saved === "plugin") showTab("plugin");
     } catch { /* ignore */ }
 
+    // ---------- Browser-gated metric helpers ----------
+    // Providers whose ENTIRE metric set requires the Usage Buttons
+    // Helper extension. For partially-gated providers (claude), the
+    // per-metric check below decides.
+    const FULLY_BROWSER_GATED = new Set(["cursor", "ollama"]);
+
+    function needsBrowser(providerId, metricId) {
+      if (FULLY_BROWSER_GATED.has(providerId)) return true;
+      if (providerId === "claude" && metricId && metricId.startsWith("extra-usage-")) return true;
+      return false;
+    }
+
+    // Live state: has the extension handshaken this session? Updated
+    // from the plugin's cookieStatus replies. Starts false so the
+    // metric dropdown reflects "extension missing" state on open.
+    let extensionConnected = false;
+
     // ---------- Metric dropdown ----------
     function populateMetrics(providerId, selectedMetric) {
       const metric = document.getElementById("metric");
@@ -577,12 +588,56 @@
       const options = list.map(([value, label]) => {
         const opt = document.createElement("option");
         opt.value = value;
-        opt.textContent = label;
+        const gated = needsBrowser(providerId, value);
+        if (gated && !extensionConnected) {
+          opt.textContent = label + "  (needs browser extension)";
+          opt.disabled = true;
+        } else if (gated) {
+          opt.textContent = label + "  (browser)";
+        } else {
+          opt.textContent = label;
+        }
         if (value === selectedMetric) opt.selected = true;
         return opt;
       });
       metric.replaceChildren(...options);
       updateFeatureVisibility(providerId, metric.value);
+      updateBrowserGateNotice(providerId, metric.value);
+    }
+
+    // Warning block beneath the metric dropdown when the currently
+    // selected metric requires the extension and it's not connected.
+    function updateBrowserGateNotice(providerId, metricId) {
+      let el = document.getElementById("browserGateNotice");
+      if (!el) {
+        el = document.createElement("div");
+        el.id = "browserGateNotice";
+        el.style.cssText = "margin-top: 8px; padding: 6px 8px; border-radius: 4px; background: #3a2a0a; border: 1px solid #a16207; color: #fde68a; font-size: 12px; display: none;";
+        const metricEl = document.getElementById("metric");
+        metricEl.parentNode.insertBefore(el, metricEl.nextSibling);
+      }
+      const selectedNeedsBrowser = needsBrowser(providerId, metricId);
+      if (selectedNeedsBrowser && !extensionConnected) {
+        el.replaceChildren();
+        el.append("This metric needs the ");
+        const strong = document.createElement("strong");
+        strong.textContent = "Usage Buttons Helper";
+        el.append(strong);
+        el.append(" Chrome extension. ");
+        const link = document.createElement("a");
+        link.href = "#";
+        link.textContent = "Open Plugin settings";
+        link.style.cssText = "color: #fcd34d; text-decoration: underline;";
+        link.addEventListener("click", (e) => {
+          e.preventDefault();
+          showTab("plugin");
+        });
+        el.append(link);
+        el.append(" to install it.");
+        el.style.display = "block";
+      } else {
+        el.style.display = "none";
+      }
     }
 
     // Lighten #111827 (default bg) by 9% → #222e3b
@@ -692,25 +747,13 @@
       document.getElementById("showGlyphs").checked = globals.showGlyphs !== false;
       document.getElementById("skipUpdateCheck").checked = globals.skipUpdateCheck === true;
 
-      // Claude settings
+      // Claude source toggle
       const claude = (globals.providers && globals.providers.claude) || {};
       const src =
         claude.source === "oauth" || claude.source === "cookie"
           ? claude.source
           : "both";
       document.getElementById("claudeSource").value = src;
-      document.getElementById("claudeCookie").value = claude.cookieHeader || "";
-      document.getElementById("claudeCookieRow").style.display =
-        src === "oauth" ? "none" : "";
-
-      // Cursor settings
-      const cursor = (globals.providers && globals.providers.cursor) || {};
-      document.getElementById("cursorCookie").value = cursor.cookieHeader || "";
-
-      // Ollama settings
-      const ollama = (globals.providers && globals.providers.ollama) || {};
-      document.getElementById("ollamaCookie").value = ollama.cookieHeader || "";
-      document.getElementById("cookieExtensionId").value = globals.cookieExtensionId || "";
     }
 
     function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
@@ -794,23 +837,7 @@
 
     function pushGlobalSettings() {
       if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
-      const claudeCookie = document.getElementById("claudeCookie").value.trim();
       const source = document.getElementById("claudeSource").value;
-      const cursorCookie = document.getElementById("cursorCookie").value.trim();
-      const ollamaCookie = document.getElementById("ollamaCookie").value.trim();
-      const extensionId = document.getElementById("cookieExtensionId").value.trim();
-      const providers = {
-        claude: {
-          source,
-          ...(claudeCookie ? { cookieHeader: claudeCookie } : {}),
-        },
-      };
-      if (cursorCookie) {
-        providers.cursor = { cookieHeader: cursorCookie };
-      }
-      if (ollamaCookie) {
-        providers.ollama = { cookieHeader: ollamaCookie };
-      }
       const payload = {
         defaultRefreshMinutes: Number(document.getElementById("defaultRefresh").value),
         defaultValueSize:      document.getElementById("defaultValueSize").value,
@@ -818,16 +845,13 @@
         invertFill:            document.getElementById("invertFill").checked,
         showGlyphs:            document.getElementById("showGlyphs").checked,
         skipUpdateCheck:       document.getElementById("skipUpdateCheck").checked,
-        ...(extensionId ? { cookieExtensionId: extensionId } : {}),
-        providers,
+        providers: { claude: { source } },
       };
       websocket.send(JSON.stringify({
         event: "setGlobalSettings",
         context: uuid,
         payload,
       }));
-      document.getElementById("claudeCookieRow").style.display =
-        source === "oauth" ? "none" : "";
     }
 
     // ---------- Cookie host status + register UI ----------
@@ -840,18 +864,22 @@
       }));
     }
 
-    function setCookieStatus(available, extensionId) {
+    function setCookieStatus(available) {
       const dot = document.getElementById("cookieHostStatusDot");
       const text = document.getElementById("cookieHostStatusText");
       if (available) {
         dot.style.background = "#22c55e";
-        text.textContent = "Extension connected. Cookie-gated metrics are live.";
-      } else if (extensionId) {
-        dot.style.background = "#f59e0b";
-        text.textContent = "Waiting for extension. Open Chrome with the extension loaded.";
+        text.textContent = "Extension connected. Browser-sourced metrics are live.";
       } else {
-        dot.style.background = "#6b7280";
-        text.textContent = "Extension not registered. Load it in Chrome, paste the ID, and click Register.";
+        dot.style.background = "#f59e0b";
+        text.textContent = "Not connected. Open Chrome and load the Usage Buttons Helper extension.";
+      }
+      // Repopulate the metric dropdown if the connection state flipped
+      // so disabled/labeled options reflect current reality.
+      if (extensionConnected !== !!available) {
+        extensionConnected = !!available;
+        const selected = document.getElementById("metric").value;
+        populateMetrics(currentProviderId, selected);
       }
     }
 
@@ -866,7 +894,7 @@
       if (!payload || typeof payload !== "object") return;
       switch (payload.action) {
         case "cookieStatus":
-          setCookieStatus(!!payload.available, payload.extensionId);
+          setCookieStatus(!!payload.available);
           break;
         case "cookieHostRegistered":
           if (payload.success) {
@@ -892,12 +920,11 @@
 
     document.getElementById("registerCookieHost").addEventListener("click", () => {
       if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
-      const extensionId = document.getElementById("cookieExtensionId").value.trim();
       showActionResult("Registering…", true);
       websocket.send(JSON.stringify({
         event: "sendToPlugin",
         context: uuid,
-        payload: { action: "registerCookieHost", extensionId },
+        payload: { action: "registerCookieHost" },
       }));
     });
 
@@ -915,6 +942,7 @@
     document.getElementById("metric").addEventListener("change", () => {
       const metricId = document.getElementById("metric").value;
       updateFeatureVisibility(currentProviderId, metricId);
+      updateBrowserGateNotice(currentProviderId, metricId);
       // Update fill color default when switching between meter/reference card metrics
       document.getElementById("fillColor").value = defaultFillColor(currentProviderId, metricId);
       pushSettings();
@@ -936,9 +964,7 @@
     for (const id of [
       "defaultRefresh", "defaultValueSize", "defaultSubvalueSize",
       "invertFill", "showGlyphs", "skipUpdateCheck",
-      "claudeSource", "claudeCookie",
-      "cursorCookie", "ollamaCookie",
-      "cookieExtensionId",
+      "claudeSource",
     ]) {
       const el = document.getElementById(id);
       el.addEventListener("change", pushGlobalSettings);

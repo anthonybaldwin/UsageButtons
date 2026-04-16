@@ -14,14 +14,13 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
-	"github.com/anthonybaldwin/UsageButtons/internal/providers/cookieaux"
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
@@ -239,52 +238,14 @@ var (
 	orgCache = map[string]string{}
 )
 
-var sessionKeyRe = regexp.MustCompile(`(?i)sessionKey=sk-ant-[^;\s]+`)
-var bareKeyRe = regexp.MustCompile(`^sk-ant-[A-Za-z0-9_-]+$`)
-
-func normalizeCookie(raw string) string {
-	v := strings.TrimSpace(raw)
-	if v == "" {
-		return ""
-	}
-	v = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(v, "-H"), "--header"))
-	if (strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`)) ||
-		(strings.HasPrefix(v, `'`) && strings.HasSuffix(v, `'`)) {
-		v = v[1 : len(v)-1]
-	}
-	lower := strings.ToLower(v)
-	if idx := strings.Index(lower, "cookie:"); idx >= 0 && idx < 10 {
-		v = strings.TrimSpace(v[idx+7:])
-	}
-	if bareKeyRe.MatchString(v) {
-		return "sessionKey=" + v
-	}
-	// Extract just the sessionKey=sk-ant-... pair from whatever the
-	// user pasted. This handles full Set-Cookie strings like:
-	//   sessionKey=sk-ant-...; Domain=.claude.ai; expires=Sun, ...
-	// as well as multi-cookie headers with other keys mixed in.
-	match := sessionKeyRe.FindString(v)
-	if match == "" {
-		return ""
-	}
-	return match
+// extrasWanted reports whether the user has configured Claude to
+// exercise the browser path (Source=cookie or Source=both). Returns
+// false for Source=oauth — that path doesn't touch claude.ai.
+func extrasWanted() bool {
+	return settings.ClaudeSettings().Source != settings.SourceOAuth
 }
 
-// extrasFetcher builds a cookieaux.Fetcher for the web-extras path,
-// honoring the user's source preference (OAuth / cookie / both).
-// Returns ok=false when source=oauth — that path uses no cookies.
-func extrasFetcher() (cookieaux.Fetcher, bool) {
-	cs := settings.ClaudeSettings()
-	if cs.Source == settings.SourceOAuth {
-		return cookieaux.Fetcher{}, false
-	}
-	return cookieaux.Fetcher{
-		Domain:       "claude.ai",
-		ManualCookie: normalizeCookie(cs.CookieHeader),
-	}, true
-}
-
-func fetchOrgID(ctx context.Context, f cookieaux.Fetcher, cacheKey string) (string, error) {
+func fetchOrgID(ctx context.Context, cacheKey string) (string, error) {
 	orgMu.Lock()
 	cached, ok := orgCache[cacheKey]
 	orgMu.Unlock()
@@ -293,7 +254,7 @@ func fetchOrgID(ctx context.Context, f cookieaux.Fetcher, cacheKey string) (stri
 	}
 
 	var orgs []orgRow
-	err := f.FetchJSON(ctx, baseWebURL+"/organizations", nil, &orgs)
+	err := cookies.FetchJSON(ctx, baseWebURL+"/organizations", nil, &orgs)
 	if err != nil {
 		return "", err
 	}
@@ -335,25 +296,20 @@ func fetchOrgID(ctx context.Context, f cookieaux.Fetcher, cacheKey string) (stri
 }
 
 func fetchWebExtras() *extraUsageSource {
-	f, ok := extrasFetcher()
-	if !ok {
+	if !extrasWanted() {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 
-	if !f.Available(ctx) {
-		logf("extras: neither manual cookie nor extension ready; skipping web path")
+	if !cookies.HostAvailable(ctx) {
+		logf("extras: extension not connected; skipping web path")
 		return nil
 	}
-	src := f.Source(ctx)
-	logf("extras: using %s path, fetching org...", src)
+	const cacheKey = "extension"
+	logf("extras: fetching org via extension...")
 
-	// Cache key: source+manual discriminates extension vs manual paste
-	// so a stale manual cache entry doesn't poison the extension path.
-	cacheKey := string(src) + "|" + f.ManualCookie
-
-	orgID, err := fetchOrgID(ctx, f, cacheKey)
+	orgID, err := fetchOrgID(ctx, cacheKey)
 	if err != nil {
 		logf("extras: org fetch failed: %v", err)
 		return nil
@@ -361,7 +317,7 @@ func fetchWebExtras() *extraUsageSource {
 	logf("extras: org=%s, fetching overage...", orgID)
 
 	var overage overageResponse
-	err = f.FetchJSON(ctx,
+	err = cookies.FetchJSON(ctx,
 		fmt.Sprintf("%s/organizations/%s/overage_spend_limit", baseWebURL, orgID),
 		nil, &overage,
 	)
@@ -377,7 +333,7 @@ func fetchWebExtras() *extraUsageSource {
 	}
 
 	var prepaid prepaidCreditsResponse
-	prepaidErr := f.FetchJSON(ctx,
+	prepaidErr := cookies.FetchJSON(ctx,
 		fmt.Sprintf("%s/organizations/%s/prepaid/credits", baseWebURL, orgID),
 		nil, &prepaid,
 	)

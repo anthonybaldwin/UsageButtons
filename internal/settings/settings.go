@@ -24,27 +24,17 @@ const (
 	SourceBoth   ProviderSource = "both"
 )
 
-// ClaudeProviderSettings holds Claude-specific auth config.
+// ClaudeProviderSettings holds Claude-specific auth config. After the
+// browser-extension pivot the only meaningful setting is Source —
+// which auth paths to exercise for Claude. Cookie paste is gone; the
+// "browser" path now runs through the Usage Buttons Helper extension.
 type ClaudeProviderSettings struct {
-	Source       ProviderSource `json:"source,omitempty"`
-	CookieHeader string        `json:"cookieHeader,omitempty"`
-}
-
-// CursorProviderSettings holds Cursor-specific auth config.
-type CursorProviderSettings struct {
-	CookieHeader string `json:"cookieHeader,omitempty"`
-}
-
-// OllamaProviderSettings holds Ollama-specific auth config.
-type OllamaProviderSettings struct {
-	CookieHeader string `json:"cookieHeader,omitempty"`
+	Source ProviderSource `json:"source,omitempty"`
 }
 
 // ProviderSettingsMap holds per-provider config.
 type ProviderSettingsMap struct {
-	Claude *ClaudeProviderSettings  `json:"claude,omitempty"`
-	Cursor *CursorProviderSettings  `json:"cursor,omitempty"`
-	Ollama *OllamaProviderSettings  `json:"ollama,omitempty"`
+	Claude *ClaudeProviderSettings `json:"claude,omitempty"`
 }
 
 // GlobalSettings are shared across every key and persisted by
@@ -56,13 +46,7 @@ type GlobalSettings struct {
 	InvertFill            bool                 `json:"invertFill,omitempty"`
 	ShowGlyphs            *bool                `json:"showGlyphs,omitempty"`
 	SkipUpdateCheck       bool                 `json:"skipUpdateCheck,omitempty"`
-	// CookieExtensionID is the Chrome extension ID the user has
-	// installed for the companion cookie bridge. Persisted so the
-	// "Register native host" PI action can keep the allowed_origins
-	// field of the native-messaging manifest in sync without the user
-	// re-entering the ID on every rebuild.
-	CookieExtensionID string               `json:"cookieExtensionId,omitempty"`
-	Providers         *ProviderSettingsMap `json:"providers,omitempty"`
+	Providers             *ProviderSettingsMap `json:"providers,omitempty"`
 }
 
 // KeySettings are per-button settings stored by Stream Deck.
@@ -175,14 +159,6 @@ func SkipUpdateCheckEnabled() bool {
 	return current.SkipUpdateCheck
 }
 
-// CookieExtensionID returns the persisted Chrome extension ID for the
-// companion cookie bridge, or "" if the user hasn't configured it.
-func CookieExtensionID() string {
-	mu.RLock()
-	defer mu.RUnlock()
-	return current.CookieExtensionID
-}
-
 // ClaudeSettings returns Claude provider settings with defaults.
 func ClaudeSettings() ClaudeProviderSettings {
 	mu.RLock()
@@ -191,26 +167,6 @@ func ClaudeSettings() ClaudeProviderSettings {
 		return *current.Providers.Claude
 	}
 	return ClaudeProviderSettings{Source: SourceBoth}
-}
-
-// CursorSettings returns Cursor provider settings.
-func CursorSettings() CursorProviderSettings {
-	mu.RLock()
-	defer mu.RUnlock()
-	if current.Providers != nil && current.Providers.Cursor != nil {
-		return *current.Providers.Cursor
-	}
-	return CursorProviderSettings{}
-}
-
-// OllamaSettings returns Ollama provider settings.
-func OllamaSettings() OllamaProviderSettings {
-	mu.RLock()
-	defer mu.RUnlock()
-	if current.Providers != nil && current.Providers.Ollama != nil {
-		return *current.Providers.Ollama
-	}
-	return OllamaProviderSettings{}
 }
 
 // ResolveRefreshMs returns the effective refresh interval in ms for a key.

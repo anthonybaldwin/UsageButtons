@@ -71,6 +71,19 @@ func main() {
 	// Request global settings before first tick.
 	conn.GetGlobalSettings()
 
+	// Idempotently register the native-messaging host manifest on
+	// every launch. The extension ID is deterministic (pinned public
+	// key in chrome-extension/manifest.json), so the user never has
+	// to paste it. If Chrome / Edge / Brave / Firefox isn't installed
+	// the corresponding per-browser write is a harmless no-op.
+	go func() {
+		if err := registerCookieHost(); err != nil {
+			conn.Logf("cookie host auto-register: %v", err)
+		} else {
+			conn.Logf("cookie host auto-register ok (%s)", cookies.DefaultExtensionID)
+		}
+	}()
+
 	// Start scheduler and display refresh tickers.
 	go schedulerLoop(conn)
 	go displayRefreshLoop(conn)
@@ -339,60 +352,45 @@ func handleSendToPlugin(conn *streamdeck.Connection, ev streamdeck.Event) {
 }
 
 // cookieHostPayload is the PI → plugin shape for registerCookieHost.
-type cookieHostPayload struct {
-	Action      string `json:"action"`
-	ExtensionID string `json:"extensionId,omitempty"`
-}
-
 func replyCookieStatus(conn *streamdeck.Connection, ctxStr, action string) {
 	pctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	available := cookies.HostAvailable(pctx)
 	conn.SendToPropertyInspector(ctxStr, action, map[string]any{
-		"action":      "cookieStatus",
-		"available":   available,
-		"ipcAddress":  cookies.IPCAddress(),
-		"hostName":    cookies.HostName,
-		"extensionId": settings.CookieExtensionID(),
+		"action":     "cookieStatus",
+		"available":  available,
+		"ipcAddress": cookies.IPCAddress(),
+		"hostName":   cookies.HostName,
 	})
 }
 
 func replyRegisterCookieHost(conn *streamdeck.Connection, ctxStr, action string, raw json.RawMessage) {
-	var p cookieHostPayload
-	_ = json.Unmarshal(raw, &p)
-
 	result := map[string]any{"action": "cookieHostRegistered"}
-	extID := strings.TrimSpace(p.ExtensionID)
-	if extID == "" {
-		result["success"] = false
-		result["error"] = "Extension ID is required (paste it from chrome://extensions)."
-		conn.SendToPropertyInspector(ctxStr, action, result)
-		return
-	}
-	hostPath, err := nativeHostBinaryPath()
-	if err != nil {
-		result["success"] = false
-		result["error"] = "Could not locate native-host binary: " + err.Error()
-		conn.SendToPropertyInspector(ctxStr, action, result)
-		return
-	}
-	if _, err := os.Stat(hostPath); err != nil {
-		result["success"] = false
-		result["error"] = "Native-host binary missing at " + hostPath + ". Rebuild the plugin."
-		conn.SendToPropertyInspector(ctxStr, action, result)
-		return
-	}
-	origins := []string{cookies.ExtensionOrigin(extID)}
-	if err := cookies.RegisterHost(cookies.HostName, hostPath, origins); err != nil {
+	if err := registerCookieHost(); err != nil {
 		result["success"] = false
 		result["error"] = err.Error()
 		conn.SendToPropertyInspector(ctxStr, action, result)
 		return
 	}
 	result["success"] = true
-	result["hostPath"] = hostPath
 	result["hostName"] = cookies.HostName
 	conn.SendToPropertyInspector(ctxStr, action, result)
+}
+
+// registerCookieHost writes the native-messaging manifest (+ registry
+// keys on Windows) for every supported browser using the deterministic
+// DefaultExtensionID. Idempotent — safe to call on every plugin
+// launch.
+func registerCookieHost() error {
+	hostPath, err := nativeHostBinaryPath()
+	if err != nil {
+		return fmt.Errorf("locate native-host binary: %w", err)
+	}
+	if _, err := os.Stat(hostPath); err != nil {
+		return fmt.Errorf("native-host binary missing at %s — rebuild the plugin", hostPath)
+	}
+	origins := []string{cookies.ExtensionOrigin(cookies.DefaultExtensionID)}
+	return cookies.RegisterHost(cookies.HostName, hostPath, origins)
 }
 
 func replyUnregisterCookieHost(conn *streamdeck.Connection, ctxStr, action string) {
@@ -889,7 +887,7 @@ func findMetric(metrics []providers.MetricValue, id string) *providers.MetricVal
 
 var (
 	rateLimitRe     = regexp.MustCompile(`(?i)429|rate.?limit`)
-	notConfiguredRe = regexp.MustCompile(`(?i)not.?configured|not found|Set \w+_\w+|Paste a Cookie|No .+ token found`)
+	notConfiguredRe = regexp.MustCompile(`(?i)not.?configured|not found|Set \w+_\w+|Paste a Cookie|Install the Usage Buttons|No .+ token found`)
 )
 
 func isRateLimit(msg string) bool     { return rateLimitRe.MatchString(msg) }

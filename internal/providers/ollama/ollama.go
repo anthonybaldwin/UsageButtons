@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers/cookieaux"
-	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
 const settingsURL = "https://ollama.com/settings"
@@ -43,12 +43,10 @@ func (Provider) MetricIDs() []string {
 }
 
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
-	os := settings.OllamaSettings()
-	f := cookieaux.Fetcher{Domain: "ollama.com", ManualCookie: os.CookieHeader}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	if !f.Available(ctx) {
+	if !cookies.HostAvailable(ctx) {
 		return providers.Snapshot{
 			ProviderID:   "ollama",
 			ProviderName: "Ollama",
@@ -58,9 +56,8 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Error:        cookieaux.MissingMessage("ollama.com"),
 		}, nil
 	}
-	src := f.Source(ctx)
 
-	html, err := f.FetchHTML(ctx, settingsURL, map[string]string{
+	html, err := cookies.FetchHTML(ctx, settingsURL, map[string]string{
 		"Referer": "https://ollama.com/settings",
 		"Origin":  "https://ollama.com",
 	})
@@ -74,7 +71,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 				Source:       "cookie",
 				Metrics:      []providers.MetricValue{},
 				Status:       "unknown",
-				Error:        cookieaux.StaleMessage(src, "ollama.com"),
+				Error:        cookieaux.StaleMessage("ollama.com"),
 			}, nil
 		}
 		return providers.Snapshot{}, err
@@ -87,7 +84,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Source:       "cookie",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        cookieaux.StaleMessage(src, "ollama.com"),
+			Error:        cookieaux.StaleMessage("ollama.com"),
 		}, nil
 	}
 

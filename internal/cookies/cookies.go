@@ -18,6 +18,16 @@ import (
 // Firefox).
 const HostName = "io.github.anthonybaldwin.usagebuttons"
 
+// DefaultExtensionID is the deterministic Chrome extension ID derived
+// from the pinned public key in chrome-extension/manifest.json. Chrome
+// computes this ID from SHA-256(SubjectPublicKeyInfo), so the ID is
+// stable across machines, reinstalls, and sideloads — which means the
+// plugin can auto-register the native-messaging manifest without
+// asking the user to paste an ID. The private key that corresponds to
+// this public half is gitignored as chrome-extension-private.pem and
+// is only needed for future Chrome Web Store uploads.
+const DefaultExtensionID = "ggablblpfclemapimphpjdhlbhdombnm"
+
 // Sentinel errors. Callers should prefer errors.Is over string compare.
 var (
 	// ErrHostUnavailable is returned when the native host is not

@@ -51,7 +51,7 @@ UsageButtons/
 │   ├── providers/                        # provider interface, cache, mock
 │   │   ├── claude/                       # Claude (OAuth + browser web API)
 │   │   ├── codex/                        # Codex (OAuth)
-│   │   ├── cookieaux/                    # extension-or-manual-paste dispatcher
+│   │   ├── cookieaux/                    # cookie-gated provider messaging helpers
 │   │   ├── copilot/                      # GitHub Copilot
 │   │   ├── cursor/                       # Cursor (browser)
 │   │   ├── ollama/                       # Ollama (browser)
@@ -93,28 +93,35 @@ Cross-compilation from Windows: `GOOS=darwin GOARCH=arm64 go build ...`
 
 Full dev workflow lives in [AGENTS.md](AGENTS.md).
 
-## Browser extension (optional — for Claude extras, Cursor, Ollama)
+## Usage Buttons Helper (required for Claude extras, Cursor, Ollama)
 
 Claude's web extras (balance / overage), Cursor, and Ollama sit
 behind Cloudflare and need a logged-in browser session. Usage
-Buttons ships a small Chrome extension in
-[`chrome-extension/`](chrome-extension/) that proxies `fetch()` for
-those three sites — so the plugin reads usage stats using your real
-browser session, and your cookies never leave Chrome.
+Buttons ships a small Chrome extension — **Usage Buttons Helper** —
+in [`chrome-extension/`](chrome-extension/) that proxies `fetch()`
+for those three sites. Your usage reads happen through your real
+browser session; cookies never leave Chrome.
 
-- **No credentials in the plugin.** `credentials: "include"` and the
-  browser handles auth natively. The plugin only sees API JSON.
+- **No credentials in the plugin.** `credentials: "include"` +
+  Chrome's native cookie jar. The plugin only sees API response
+  bodies.
 - **Narrow by design.** Hardcoded to fetch only `claude.ai`,
-  `cursor.com`, and `ollama.com` — in both the manifest's
-  `host_permissions` and the service worker's runtime allowlist.
-- **Optional.** Providers that don't need cookies (Claude OAuth,
-  Codex, Copilot, OpenRouter, Warp, z.ai, Kimi K2) work unchanged.
-  Users who prefer manual cookie paste can still use that path.
-- **Waits patiently.** Cookie-gated buttons stay in a quiet "waiting
-  on browser" state until the extension handshakes — so launching
-  Stream Deck before Chrome doesn't trigger a 403 loop.
+  `cursor.com`, and `ollama.com` — enforced in the manifest's
+  `host_permissions` AND again in the service worker at request
+  time. No `cookies` permission, no broad host scope.
+- **One-click install.** The extension's ID is pinned by its public
+  key, so the plugin auto-registers the native-messaging bridge on
+  launch — download the release zip, Load Unpacked in
+  `chrome://extensions`, done.
+- **Providers that don't need it keep working unchanged** — Claude
+  OAuth, Codex, Copilot, OpenRouter, Warp, z.ai, Kimi K2 never touch
+  the extension path.
+- **Waits patiently on cold start.** Cookie-gated buttons stay in a
+  quiet "needs browser extension" state until the extension
+  handshakes — so launching Stream Deck before Chrome doesn't
+  trigger a 403 loop.
 
-Install steps live in the [extension README](chrome-extension/README.md).
+Install steps live in the [Helper README](chrome-extension/README.md).
 Works in any Chromium-based browser (Chrome, Edge, Brave, Chromium);
 a Firefox port is on the roadmap.
 

@@ -38,6 +38,14 @@ on:
 permissions:
   contents: write
 
+# Serialize release dispatches — a second trigger waits for the first
+# to finish (cancel-in-progress: false). Never cancel mid-release;
+# the workflow pushes commits + tags, half-applying that would be a
+# mess to unwind.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     name: bump + build + publish

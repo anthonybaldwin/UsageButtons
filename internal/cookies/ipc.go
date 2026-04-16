@@ -144,15 +144,15 @@ func clientFetch(ctx context.Context, r Request) (Response, error) {
 	}, nil
 }
 
-func clientProbe(ctx context.Context) bool {
+func clientStatus(ctx context.Context) StatusInfo {
 	resp, err := roundtrip(ctx, Message{ID: nextRequestID(), Kind: "status"}, 750*time.Millisecond)
-	if err != nil {
-		return false
+	if err != nil || resp.Kind != "status" {
+		return StatusInfo{}
 	}
-	return resp.Kind == "status" && resp.Ready
+	return StatusInfo{Ready: resp.Ready, UserAgent: resp.UserAgent, Version: resp.Version}
 }
 
 func init() {
 	dispatchFetch = clientFetch
-	probeHost = clientProbe
+	probeStatus = clientStatus
 }

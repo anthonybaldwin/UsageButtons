@@ -142,7 +142,8 @@ Adding a cookie-gated provider requires three coordinated changes:
 2. Extension `ALLOWED` in `chrome-extension/service-worker.js`
 3. Extension `host_permissions` in `chrome-extension/manifest.json`
 
-…plus a new extension version shipped to the Web Store.
+…plus cut a new plugin release so the Helper zip on GitHub Releases
+matches.
 
 ## CodexBar reference
 

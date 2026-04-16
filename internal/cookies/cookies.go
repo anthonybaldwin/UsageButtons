@@ -118,7 +118,22 @@ func FetchHTML(ctx context.Context, url string, headers map[string]string) (stri
 // is reachable AND the extension has handshaken this session. Gate
 // cookie-gated provider requests on this.
 func HostAvailable(ctx context.Context) bool {
-	return probeHost(ctx)
+	return Status(ctx).Ready
+}
+
+// StatusInfo is a richer snapshot of the bridge state. The PI uses it
+// to display the extension's reported version and drive an update
+// nudge when a newer plugin release is available.
+type StatusInfo struct {
+	Ready     bool
+	UserAgent string
+	Version   string
+}
+
+// Status probes the native host and reports the full handshake state.
+// Not-connected / no-host / IPC-down all return a zero StatusInfo.
+func Status(ctx context.Context) StatusInfo {
+	return probeStatus(ctx)
 }
 
 func validateRequest(r Request) error {
@@ -160,9 +175,9 @@ var dispatchFetch = func(ctx context.Context, r Request) (Response, error) {
 	return Response{}, ErrHostUnavailable
 }
 
-var probeHost = func(ctx context.Context) bool {
+var probeStatus = func(ctx context.Context) StatusInfo {
 	_ = ctx
-	return false
+	return StatusInfo{}
 }
 
 // b64 helpers are exported so tests in sibling packages can build

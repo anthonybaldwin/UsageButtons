@@ -405,8 +405,11 @@
       response bodies.
     </p>
     <div id="cookieHostStatus" class="hint" style="margin-top: 10px; padding: 6px 8px; border-radius: 4px; background: #1f2937; border: 1px solid #374151;">
-      <span id="cookieHostStatusDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; background:#6b7280;"></span>
-      <span id="cookieHostStatusText">Checking extension status…</span>
+      <div>
+        <span id="cookieHostStatusDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; background:#6b7280;"></span>
+        <span id="cookieHostStatusText">Checking extension status…</span>
+      </div>
+      <div id="cookieHostVersionLine" style="margin-top: 4px; font-size: 11px; opacity: 0.85; display: none;"></div>
     </div>
 
     <p class="hint" style="margin-top: 10px;">
@@ -864,9 +867,12 @@
       }));
     }
 
-    function setCookieStatus(available) {
+    function setCookieStatus(payload) {
+      const available = !!payload.available;
       const dot = document.getElementById("cookieHostStatusDot");
       const text = document.getElementById("cookieHostStatusText");
+      const versionLine = document.getElementById("cookieHostVersionLine");
+
       if (available) {
         dot.style.background = "#22c55e";
         text.textContent = "Extension connected. Browser-sourced metrics are live.";
@@ -874,10 +880,41 @@
         dot.style.background = "#f59e0b";
         text.textContent = "Not connected. Open Chrome and load the Usage Buttons Helper extension.";
       }
+
+      // Version line: only shown when we actually have a reported
+      // extension version (implies connected).
+      versionLine.replaceChildren();
+      if (payload.extensionVersion) {
+        versionLine.append("Helper v" + payload.extensionVersion);
+        if (payload.updateAvailable && payload.latestVersion) {
+          const hint = document.createElement("span");
+          hint.style.cssText = "margin-left: 8px; color: #fde68a;";
+          hint.textContent = "update available → v" + payload.latestVersion;
+          versionLine.append(hint);
+          const link = document.createElement("a");
+          link.href = "https://github.com/anthonybaldwin/usage-buttons/releases/latest";
+          link.style.cssText = "margin-left: 6px; color: #fcd34d;";
+          link.textContent = "(download)";
+          link.addEventListener("click", (e) => {
+            e.preventDefault();
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+              websocket.send(JSON.stringify({
+                event: "openUrl",
+                payload: { url: link.href },
+              }));
+            }
+          });
+          versionLine.append(link);
+        }
+        versionLine.style.display = "block";
+      } else {
+        versionLine.style.display = "none";
+      }
+
       // Repopulate the metric dropdown if the connection state flipped
       // so disabled/labeled options reflect current reality.
-      if (extensionConnected !== !!available) {
-        extensionConnected = !!available;
+      if (extensionConnected !== available) {
+        extensionConnected = available;
         const selected = document.getElementById("metric").value;
         populateMetrics(currentProviderId, selected);
       }
@@ -894,7 +931,7 @@
       if (!payload || typeof payload !== "object") return;
       switch (payload.action) {
         case "cookieStatus":
-          setCookieStatus(!!payload.available);
+          setCookieStatus(payload);
           break;
         case "cookieHostRegistered":
           if (payload.success) {

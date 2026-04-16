@@ -355,12 +355,19 @@ func handleSendToPlugin(conn *streamdeck.Connection, ev streamdeck.Event) {
 func replyCookieStatus(conn *streamdeck.Connection, ctxStr, action string) {
 	pctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
-	available := cookies.HostAvailable(pctx)
+
+	status := cookies.Status(pctx)
+	latest := update.LatestVersion()
+	updateAvailable := status.Version != "" && latest != "" && status.Version != latest
+
 	conn.SendToPropertyInspector(ctxStr, action, map[string]any{
-		"action":     "cookieStatus",
-		"available":  available,
-		"ipcAddress": cookies.IPCAddress(),
-		"hostName":   cookies.HostName,
+		"action":           "cookieStatus",
+		"available":        status.Ready,
+		"extensionVersion": status.Version,
+		"latestVersion":    latest,
+		"updateAvailable":  updateAvailable,
+		"ipcAddress":       cookies.IPCAddress(),
+		"hostName":         cookies.HostName,
 	})
 }
 

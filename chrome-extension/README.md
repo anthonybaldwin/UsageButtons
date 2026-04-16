@@ -52,17 +52,20 @@ prompt, no follow-up clicks.
 `chrome://extensions` → **Load unpacked** → pick this
 `chrome-extension/` directory.
 
-### Chrome Web Store
+### Updating
 
-Not yet published. Because the extension's ID is pinned by the `key`
-field in `manifest.json`, publishing later won't break existing
-installs — the ID stays the same.
+The plugin checks GitHub Releases for new versions and shows the
+current Helper version in the Property Inspector's **Plugin
+settings** tab. When a new release ships, the PI's
+**Browser extension** panel flags it — just re-download
+`UsageButtons-Helper-unpacked.zip`, replace the folder you loaded
+unpacked, and hit the refresh arrow in `chrome://extensions`.
 
 ## Why not a `.crx`?
 
 Chrome blocks drag-and-drop `.crx` installs from anywhere except the
-Chrome Web Store (since 2019). `.zip` + **Load unpacked** is the only
-consumer path until this is published to the Web Store.
+Chrome Web Store (since 2019). `.zip` + **Load unpacked** is the
+supported install path.
 
 ## Supported browsers
 

@@ -119,9 +119,10 @@ jobs:
       # Chrome extension: sync the version with the release and ship a
       # single unpacked zip. Chrome blocks consumer .crx sideloads since
       # 2019, so Load Unpacked is the viable self-install path from a
-      # GitHub Release. If/when we publish to the Chrome Web Store, the
-      # pinned public key in manifest.json keeps the extension ID stable
-      # either way.
+      # GitHub Release. The plugin's update checker compares the Helper
+      # version reported over the handshake to the latest release tag,
+      # so bumping the release tag also nudges users to reload the
+      # extension.
       - name: Package Chrome extension
         run: |
           jq --arg v "${{ steps.version.outputs.semver }}" \

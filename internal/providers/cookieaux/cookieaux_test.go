@@ -6,61 +6,61 @@ import (
 	"testing"
 )
 
-func TestResolve_ManualPasteWins(t *testing.T) {
-	r, ok := Resolve(context.Background(), "claude.ai", "sessionKey=abc; cf_clearance=xyz")
-	if !ok {
-		t.Fatal("want ok")
-	}
-	if r.Source != "manual" {
-		t.Fatalf("source: %q", r.Source)
-	}
-	if r.Header != "sessionKey=abc; cf_clearance=xyz" {
-		t.Fatalf("header: %q", r.Header)
-	}
-	if r.UserAgent != "" {
-		t.Fatalf("manual should have no UA, got %q", r.UserAgent)
+func TestFetcher_AvailableWithManualCookie(t *testing.T) {
+	f := Fetcher{Domain: "claude.ai", ManualCookie: "sessionKey=abc"}
+	if !f.Available(context.Background()) {
+		t.Fatal("want available with manual cookie")
 	}
 }
 
-func TestResolve_NoManualNoExtension(t *testing.T) {
-	// HostAvailable returns false without a live host; resolve should
-	// report not-ok so callers skip the request.
-	_, ok := Resolve(context.Background(), "claude.ai", "")
-	if ok {
-		t.Fatal("want not ok when no manual paste and no extension")
+func TestFetcher_NoManualNoExtensionUnavailable(t *testing.T) {
+	f := Fetcher{Domain: "claude.ai"}
+	if f.Available(context.Background()) {
+		t.Fatal("want unavailable with neither")
+	}
+	if src := f.Source(context.Background()); src != SourceNone {
+		t.Fatalf("source: %q", src)
 	}
 }
 
-func TestHeaders_MergesExtras(t *testing.T) {
-	r := Resolution{Header: "a=1", UserAgent: "UA", Source: "extension"}
-	h := r.Headers(map[string]string{"Accept": "application/json"})
-	if h["Cookie"] != "a=1" || h["User-Agent"] != "UA" || h["Accept"] != "application/json" {
-		t.Fatalf("headers: %+v", h)
+func TestFetcher_SourceManualWhenExtensionAbsent(t *testing.T) {
+	f := Fetcher{Domain: "claude.ai", ManualCookie: "a=1"}
+	if src := f.Source(context.Background()); src != SourceManual {
+		t.Fatalf("source: %q", src)
 	}
 }
 
-func TestHeaders_ExtrasWinOnCollision(t *testing.T) {
-	r := Resolution{Header: "a=1", UserAgent: "UA"}
-	h := r.Headers(map[string]string{"User-Agent": "override"})
-	if h["User-Agent"] != "override" {
-		t.Fatalf("extras should win, got %q", h["User-Agent"])
+func TestMergeManualHeaders_CookieSet(t *testing.T) {
+	got := mergeManualHeaders(map[string]string{"Accept": "application/json"}, "a=1")
+	if got["Cookie"] != "a=1" || got["Accept"] != "application/json" {
+		t.Fatalf("merged: %+v", got)
 	}
 }
 
-func TestHeaders_OmitsEmptyUA(t *testing.T) {
-	r := Resolution{Header: "a=1", Source: "manual"}
-	h := r.Headers(nil)
-	if _, ok := h["User-Agent"]; ok {
-		t.Fatalf("expected no UA, got %v", h)
+func TestMergeManualHeaders_CookieOverridesExtra(t *testing.T) {
+	got := mergeManualHeaders(map[string]string{"Cookie": "old"}, "new")
+	if got["Cookie"] != "new" {
+		t.Fatalf("cookie should win from manual arg, got %q", got["Cookie"])
 	}
 }
 
 func TestMissingMessage_IncludesProvider(t *testing.T) {
 	msg := MissingMessage("claude.ai")
 	if !strings.Contains(msg, "claude.ai") {
-		t.Fatalf("expected provider label in message, got %q", msg)
+		t.Fatalf("want provider label in %q", msg)
 	}
 	if !strings.Contains(strings.ToLower(msg), "extension") {
-		t.Fatalf("expected extension hint, got %q", msg)
+		t.Fatalf("want extension hint in %q", msg)
+	}
+}
+
+func TestStaleMessage_DistinguishesSource(t *testing.T) {
+	ext := StaleMessage(SourceExtension, "cursor.com")
+	man := StaleMessage(SourceManual, "cursor.com")
+	if !strings.Contains(strings.ToLower(ext), "browser") {
+		t.Fatalf("extension hint: %q", ext)
+	}
+	if !strings.Contains(strings.ToLower(man), "paste") {
+		t.Fatalf("manual hint: %q", man)
 	}
 }

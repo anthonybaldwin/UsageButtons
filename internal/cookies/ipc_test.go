@@ -2,17 +2,19 @@ package cookies
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 )
 
 // setupTestIPC spins up a unix-socket listener at a temp path and
 // points ipcAddr at it for the test's lifetime. handler runs per
-// accepted connection; it should read a single frame, write a reply,
-// then close.
+// accepted connection.
 func setupTestIPC(t *testing.T, handler func(net.Conn)) {
 	t.Helper()
 	tmp := t.TempDir()
@@ -47,9 +49,6 @@ func pointIPCAtMissing(t *testing.T) {
 	ipcAddr = func() string { return filepath.Join(tmp, "missing.sock") }
 }
 
-// Replace the default-unavailable test with a listener-less IPC target
-// so the test is deterministic regardless of whether the dev machine
-// happens to have a real native host running.
 func TestHostAvailable_NoListener(t *testing.T) {
 	pointIPCAtMissing(t)
 	if HostAvailable(context.Background()) {
@@ -57,15 +56,15 @@ func TestHostAvailable_NoListener(t *testing.T) {
 	}
 }
 
-func TestGet_NoListenerReturnsUnavailable(t *testing.T) {
+func TestFetch_NoListenerReturnsUnavailable(t *testing.T) {
 	pointIPCAtMissing(t)
-	_, err := Get(context.Background(), Query{Domain: "claude.ai"})
+	_, err := Fetch(context.Background(), Request{URL: "https://claude.ai/api/organizations"})
 	if !errors.Is(err, ErrHostUnavailable) {
 		t.Fatalf("want ErrHostUnavailable, got %v", err)
 	}
 }
 
-func TestClientGet_Success(t *testing.T) {
+func TestFetchJSON_Success(t *testing.T) {
 	setupTestIPC(t, func(conn net.Conn) {
 		defer conn.Close()
 		_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
@@ -74,65 +73,84 @@ func TestClientGet_Success(t *testing.T) {
 			return
 		}
 		req, _ := DecodeMessage(frame)
+		body := []byte(`{"hello":"world"}`)
 		resp := Message{
-			ID:        req.ID,
-			Kind:      "cookies",
-			UserAgent: "Mozilla/5.0 test",
-			Cookies: []WireCookie{
-				{Name: "sessionKey", Value: "v1", Domain: "claude.ai", Path: "/"},
-				{Name: "cf_clearance", Value: "v2", Domain: ".claude.ai", Secure: true},
-			},
+			ID:          req.ID,
+			Kind:        "fetchResult",
+			Status:      200,
+			StatusText:  "OK",
+			ContentType: "application/json",
+			Body:        base64.StdEncoding.EncodeToString(body),
+			UserAgent:   "Mozilla/5.0 test",
 		}
 		payload, _ := EncodeMessage(resp)
 		_ = WriteFrame(conn, payload)
 	})
 
-	b, err := Get(context.Background(), Query{Domain: "claude.ai"})
+	var out struct {
+		Hello string `json:"hello"`
+	}
+	err := FetchJSON(context.Background(), "https://claude.ai/api/x", nil, &out)
 	if err != nil {
-		t.Fatalf("Get: %v", err)
+		t.Fatalf("FetchJSON: %v", err)
 	}
-	if len(b.Cookies) != 2 {
-		t.Fatalf("cookies: got %d, want 2", len(b.Cookies))
-	}
-	if b.UserAgent != "Mozilla/5.0 test" {
-		t.Fatalf("ua: got %q", b.UserAgent)
-	}
-	if b.Cookies[1].Name != "cf_clearance" || !b.Cookies[1].Secure {
-		t.Fatalf("cf_clearance: %+v", b.Cookies[1])
+	if out.Hello != "world" {
+		t.Fatalf("decoded: %+v", out)
 	}
 }
 
-func TestClientGet_HeaderHelperJoinsCookies(t *testing.T) {
+func TestFetch_PropagatesNon2xxAsHTTPError(t *testing.T) {
 	setupTestIPC(t, func(conn net.Conn) {
 		defer conn.Close()
 		frame, _ := ReadFrame(conn)
 		req, _ := DecodeMessage(frame)
 		resp := Message{
-			ID:        req.ID,
-			Kind:      "cookies",
-			UserAgent: "UA-X",
-			Cookies: []WireCookie{
-				{Name: "a", Value: "1"},
-				{Name: "b", Value: "2"},
-			},
+			ID:         req.ID,
+			Kind:       "fetchResult",
+			Status:     401,
+			StatusText: "Unauthorized",
+			Body:       base64.StdEncoding.EncodeToString([]byte("nope")),
 		}
 		payload, _ := EncodeMessage(resp)
 		_ = WriteFrame(conn, payload)
 	})
 
-	h, ua, err := Header(context.Background(), Query{Domain: "claude.ai"})
-	if err != nil {
-		t.Fatalf("Header: %v", err)
+	err := FetchJSON(context.Background(), "https://claude.ai/api/x", nil, new(map[string]any))
+	var httpErr *httputil.Error
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("want *httputil.Error, got %T / %v", err, err)
 	}
-	if h != "a=1; b=2" {
-		t.Fatalf("header: got %q", h)
-	}
-	if ua != "UA-X" {
-		t.Fatalf("ua: got %q", ua)
+	if httpErr.Status != 401 {
+		t.Fatalf("status: %d", httpErr.Status)
 	}
 }
 
-func TestClientGet_ExtensionNotConnectedMapsToUnavailable(t *testing.T) {
+func TestFetchHTML_Success(t *testing.T) {
+	setupTestIPC(t, func(conn net.Conn) {
+		defer conn.Close()
+		frame, _ := ReadFrame(conn)
+		req, _ := DecodeMessage(frame)
+		body := []byte("<html><body>hi</body></html>")
+		resp := Message{
+			ID:     req.ID,
+			Kind:   "fetchResult",
+			Status: 200,
+			Body:   base64.StdEncoding.EncodeToString(body),
+		}
+		payload, _ := EncodeMessage(resp)
+		_ = WriteFrame(conn, payload)
+	})
+
+	html, err := FetchHTML(context.Background(), "https://ollama.com/settings", nil)
+	if err != nil {
+		t.Fatalf("FetchHTML: %v", err)
+	}
+	if html != "<html><body>hi</body></html>" {
+		t.Fatalf("html: %q", html)
+	}
+}
+
+func TestFetch_ExtensionNotConnectedMapsToUnavailable(t *testing.T) {
 	setupTestIPC(t, func(conn net.Conn) {
 		defer conn.Close()
 		frame, _ := ReadFrame(conn)
@@ -142,13 +160,13 @@ func TestClientGet_ExtensionNotConnectedMapsToUnavailable(t *testing.T) {
 		_ = WriteFrame(conn, payload)
 	})
 
-	_, err := Get(context.Background(), Query{Domain: "claude.ai"})
+	_, err := Fetch(context.Background(), Request{URL: "https://claude.ai/"})
 	if !errors.Is(err, ErrHostUnavailable) {
 		t.Fatalf("want ErrHostUnavailable, got %v", err)
 	}
 }
 
-func TestClientGet_GenericExtensionErrorSurfaces(t *testing.T) {
+func TestFetch_GenericExtensionErrorSurfaces(t *testing.T) {
 	setupTestIPC(t, func(conn net.Conn) {
 		defer conn.Close()
 		frame, _ := ReadFrame(conn)
@@ -158,7 +176,7 @@ func TestClientGet_GenericExtensionErrorSurfaces(t *testing.T) {
 		_ = WriteFrame(conn, payload)
 	})
 
-	_, err := Get(context.Background(), Query{Domain: "claude.ai"})
+	_, err := Fetch(context.Background(), Request{URL: "https://claude.ai/"})
 	if err == nil {
 		t.Fatal("want error")
 	}
@@ -197,8 +215,6 @@ func TestClientProbe_NotReady(t *testing.T) {
 	}
 }
 
-// Guard the listener path itself — ListenIPC must remove a stale
-// socket file rather than returning EADDRINUSE.
 func TestListenIPC_RemovesStaleSocket(t *testing.T) {
 	tmp := t.TempDir()
 	sock := filepath.Join(tmp, "stale.sock")
@@ -212,7 +228,6 @@ func TestListenIPC_RemovesStaleSocket(t *testing.T) {
 		t.Skipf("unix socket unsupported: %v", err)
 	}
 	_ = ln1.Close()
-	// Leave the file in place to simulate a crashed prior run.
 
 	ln2, err := ListenIPC()
 	if err != nil {

@@ -2,58 +2,63 @@
 
 Companion Chrome extension for the
 [Usage Buttons Stream Deck plugin](https://github.com/anthonybaldwin/usage-buttons).
-Reads cookies for a **narrow allowlist of AI usage-monitoring sites**
-(Claude, Cursor, Ollama) from your logged-in browser sessions and
-forwards them to the plugin over Chrome's native-messaging protocol.
+Proxies a narrow allowlist of AI usage-monitoring APIs
+(`claude.ai`, `cursor.com`, `ollama.com`) to the plugin over Chrome's
+native-messaging protocol.
 
-## What it does
-
-- Watches only: `claude.ai`, `cursor.com`, `ollama.com`. No other
-  sites are touched, and the allowlist is hardcoded in the service
-  worker — not something the plugin can override at runtime.
-- Replies to cookie queries from the plugin's native host with the
-  current cookie values plus `navigator.userAgent`. Cloudflare's
-  `cf_clearance` is UA-bound, so the plugin matches it when it sends
-  requests.
-- Never stores cookies anywhere. Every query re-reads Chrome's live
-  cookie jar.
-- Uses Chrome's official `chrome.cookies` API — no DPAPI, no COM
-  hacks, no DB decryption. Works on every Chrome build.
+**Cookies never leave the browser.** The extension uses
+`fetch(url, { credentials: "include" })` — Chrome itself applies the
+user's cookies, the plugin only sees the API response bodies.
 
 ## Why it exists
 
-Modern Chrome (v127+) seals cookies with App-Bound Encryption; third-
-party tools cannot legitimately decrypt them. A companion extension
-using `chrome.cookies.getAll` is the only path that's stable, safe,
-and Web-Store-friendly.
+Cookie-gated usage APIs (Claude's web extras, Cursor, Ollama) sit
+behind Cloudflare. Going through Chrome means:
+
+- Real Chrome TLS fingerprint + User-Agent. Any future Cloudflare
+  fingerprint tightening doesn't break the plugin.
+- `cf_clearance` and `sessionKey` stay in the browser's cookie jar —
+  never serialized, never handed to a local binary.
+- No "cookies" permission needed. The extension only has
+  `nativeMessaging` + narrow `host_permissions` for the three
+  allowlisted domains.
+
+## What it does and doesn't
+
+| Does | Doesn't |
+|---|---|
+| Fetches `claude.ai`, `cursor.com`, `ollama.com` on behalf of the plugin | Touch any other site |
+| Uses your existing browser session (credentials: "include") | Read cookies directly |
+| Mirrors the plugin's allowlist — refuses off-list URLs in the service worker | Allow the plugin to widen it at runtime |
+| Runs a persistent native-messaging port so the plugin can probe liveness | Run unless you opened Chrome |
 
 ## Install (developer sideload)
 
-1. Run the plugin's **Register native host** action from the property
-   inspector — it installs the native-messaging manifest so Chrome
-   knows how to spawn the bridge.
-2. Open `chrome://extensions` and enable **Developer mode**
-   (top-right).
-3. Click **Load unpacked** and select this `chrome-extension/`
-   directory.
-4. Copy the extension ID Chrome assigns (shown on the extension's
-   card) and paste it into the plugin's property inspector. That
-   updates `allowed_origins` in the native-messaging manifest so
-   Chrome will permit the connection.
+1. In the plugin's property inspector → **Plugin settings** tab →
+   **Browser cookies extension** section, paste the extension ID (see
+   step 3 below) and click **Register native host**. This writes the
+   native-messaging manifest Chrome needs to launch the bridge.
+2. Open `chrome://extensions` → toggle **Developer mode** (top-right).
+3. Click **Load unpacked** → select this `chrome-extension/`
+   directory. Copy the ID Chrome assigns — it's the 32-character
+   string under the extension's card.
+4. Paste that ID into the plugin's **Extension ID** field and click
+   **Register** again if you hadn't yet.
 
-Chrome auto-reconnects the native host on every browser launch. The
-plugin detects the handshake and unlocks cookie-gated metrics; until
-then, cookie-gated buttons stay in a quiet "waiting on browser" state
-and never fire requests.
+The plugin's status indicator flips to "Extension connected" within a
+second of Chrome launching. Cookie-gated metrics then go live.
 
 ## Install (Chrome Web Store)
 
 TBD — a published version will have a fixed extension ID, so the
-`allowed_origins` step above becomes automatic on first install.
+registration step becomes automatic on first install.
 
 ## Supported browsers
 
-Any Chromium-based browser that honors standard native messaging and
-ships the `chrome.cookies` API: Chrome (stable/beta/Canary),
-Microsoft Edge, Brave, and Chromium. The plugin installs the
-native-messaging manifest for all of them.
+Any Chromium-based browser with standard native messaging and MV3
+fetch: Chrome (stable/beta/Canary), Microsoft Edge, Brave, Chromium.
+The plugin installs the native-messaging manifest for all of them.
+
+A Firefox port is on the roadmap (same JS, slightly different manifest
++ `browser.*` API shim). Safari is out of scope — its extension model
+is Swift/Xcode-based with a distinct native-messaging story.

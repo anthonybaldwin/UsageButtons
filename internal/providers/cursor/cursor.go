@@ -5,6 +5,7 @@
 package cursor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -84,8 +85,11 @@ func (Provider) MetricIDs() []string {
 
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	cs := settings.CursorSettings()
-	r, ok := cookieaux.ResolveWithDeadline("cursor.com", cs.CookieHeader)
-	if !ok {
+	f := cookieaux.Fetcher{Domain: "cursor.com", ManualCookie: cs.CookieHeader}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	if !f.Available(ctx) {
 		return providers.Snapshot{
 			ProviderID:   "cursor",
 			ProviderName: "Cursor",
@@ -95,26 +99,21 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Error:        cookieaux.MissingMessage("cursor.com"),
 		}, nil
 	}
+	src := f.Source(ctx)
 
 	var resp usageSummaryResponse
-	err := httputil.GetJSON(usageSummaryURL, r.Headers(map[string]string{
-		"Accept": "application/json",
-	}), 15*time.Second, &resp)
+	err := f.FetchJSON(ctx, usageSummaryURL, nil, &resp)
 
 	if err != nil {
 		var httpErr *httputil.Error
 		if errors.As(err, &httpErr) && (httpErr.Status == 401 || httpErr.Status == 403) {
-			errMsg := "Cursor cookie expired. Paste a fresh one from cursor.com."
-			if r.Source == "extension" {
-				errMsg = "Cursor cookie from browser is stale. Sign in to cursor.com in Chrome, then refresh."
-			}
 			return providers.Snapshot{
 				ProviderID:   "cursor",
 				ProviderName: "Cursor",
 				Source:       "cookie",
 				Metrics:      []providers.MetricValue{},
 				Status:       "unknown",
-				Error:        errMsg,
+				Error:        cookieaux.StaleMessage(src, "cursor.com"),
 			}, nil
 		}
 		return providers.Snapshot{}, err

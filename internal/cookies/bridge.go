@@ -8,11 +8,11 @@ import (
 )
 
 // pluginExtensionBudget bounds how long the host waits on the
-// extension for a reply to a forwarded getCookies. Exposed as a var so
+// extension for a reply to a forwarded fetch. Exposed as a var so
 // tests can shrink it.
-var pluginExtensionBudget = 5 * time.Second
+var pluginExtensionBudget = 20 * time.Second
 
-// Bridge wires the Chrome extension (over stdin/stdout native
+// Bridge wires the browser extension (over stdin/stdout native
 // messaging) to the plugin (over the local IPC socket). It tracks
 // handshake state, serializes extension writes, and correlates plugin
 // requests to extension replies by the request ID.
@@ -47,10 +47,8 @@ func (b *Bridge) Handle(ctx context.Context, m Message, send func(Message) error
 		b.userAgent = m.UserAgent
 		b.version = m.Version
 		b.mu.Unlock()
-	case "cookies", "error", "pong":
+	case "fetchResult", "error", "pong":
 		b.deliverInflight(m)
-	case "changed":
-		// No-op; forward-looking signal for future cache-invalidation.
 	}
 	return nil
 }
@@ -82,9 +80,7 @@ func (b *Bridge) deliverInflight(m Message) {
 }
 
 // HandlePluginConn reads one request frame from conn, services it,
-// writes one response frame, and closes. Requests are tiny and
-// stateless, so one-conn-per-request keeps the code simple and
-// lock-free on the plugin side.
+// writes one response frame, and closes.
 func (b *Bridge) HandlePluginConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(pluginExtensionBudget + 2*time.Second))
@@ -110,14 +106,14 @@ func (b *Bridge) HandlePluginConn(ctx context.Context, conn net.Conn) {
 		}
 		b.mu.Unlock()
 		_ = writeMsg(conn, resp)
-	case "getCookies":
-		b.relayGetCookies(ctx, conn, req)
+	case "fetch":
+		b.relayFetch(ctx, conn, req)
 	default:
 		_ = writeMsg(conn, Message{ID: req.ID, Kind: "error", Error: "unknown request kind: " + req.Kind})
 	}
 }
 
-func (b *Bridge) relayGetCookies(ctx context.Context, conn net.Conn, req Message) {
+func (b *Bridge) relayFetch(ctx context.Context, conn net.Conn, req Message) {
 	b.mu.Lock()
 	if !b.ready || b.toExt == nil {
 		b.mu.Unlock()

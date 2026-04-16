@@ -10,56 +10,34 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"time"
 )
 
 // Message is the tagged-union envelope exchanged between the native
-// host and the extension's service worker. Only fields relevant to
-// Kind are populated; the rest serialize as omitempty.
+// host and the extension's service worker (and the plugin ↔ host IPC).
+// Only fields relevant to Kind are populated; the rest serialize as
+// omitempty.
 //
-// Host → extension kinds: "getCookies", "ping".
-// Extension → host kinds: "ready", "cookies", "pong", "error", "changed".
-// Plugin ↔ host kinds: "status" (with Ready flag) and "getCookies" /
-// "cookies" relayed through to/from the extension.
+// Host → extension kinds: "fetch", "ping".
+// Extension → host kinds: "ready", "fetchResult", "pong", "error".
+// Plugin ↔ host kinds: "status" (Ready flag), "fetch" / "fetchResult"
+// relayed through to/from the extension.
 type Message struct {
-	ID        string       `json:"id,omitempty"`
-	Kind      string       `json:"kind"`
-	Domain    string       `json:"domain,omitempty"`
-	Names     []string     `json:"names,omitempty"`
-	UserAgent string       `json:"userAgent,omitempty"`
-	Version   string       `json:"version,omitempty"`
-	Error     string       `json:"error,omitempty"`
-	Ready     bool         `json:"ready,omitempty"`
-	Cookies   []WireCookie `json:"cookies,omitempty"`
-}
-
-// WireCookie mirrors chrome.cookies.Cookie's on-wire JSON shape.
-// ExpirationDate is seconds-since-epoch as emitted by Chrome.
-type WireCookie struct {
-	Name           string  `json:"name"`
-	Value          string  `json:"value"`
-	Domain         string  `json:"domain"`
-	Path           string  `json:"path,omitempty"`
-	Secure         bool    `json:"secure,omitempty"`
-	ExpirationDate float64 `json:"expirationDate,omitempty"`
-	Session        bool    `json:"session,omitempty"`
-}
-
-// ToCookie converts the wire shape to the package's public Cookie.
-func (w WireCookie) ToCookie() Cookie {
-	c := Cookie{
-		Domain: w.Domain,
-		Name:   w.Name,
-		Value:  w.Value,
-		Path:   w.Path,
-		Secure: w.Secure,
-	}
-	if !w.Session && w.ExpirationDate > 0 {
-		sec := int64(w.ExpirationDate)
-		nsec := int64((w.ExpirationDate - float64(sec)) * 1e9)
-		c.Expires = time.Unix(sec, nsec).UTC()
-	}
-	return c
+	ID         string            `json:"id,omitempty"`
+	Kind       string            `json:"kind"`
+	URL        string            `json:"url,omitempty"`
+	Method     string            `json:"method,omitempty"`
+	Headers    map[string]string `json:"headers,omitempty"`
+	// Body carries the base64-encoded request or response body,
+	// direction implied by Kind. Base64 keeps binary bytes + UTF-8
+	// text alike JSON-safe.
+	Body        string `json:"body,omitempty"`
+	Status      int    `json:"status,omitempty"`
+	StatusText  string `json:"statusText,omitempty"`
+	ContentType string `json:"contentType,omitempty"`
+	UserAgent   string `json:"userAgent,omitempty"`
+	Version     string `json:"version,omitempty"`
+	Error       string `json:"error,omitempty"`
+	Ready       bool   `json:"ready,omitempty"`
 }
 
 // DecodeMessage parses a native-messaging frame payload.
@@ -77,16 +55,12 @@ func EncodeMessage(m Message) ([]byte, error) {
 }
 
 // Handler reacts to inbound native-messaging messages. send is safe
-// for concurrent use; call it zero or more times per inbound message
-// to push replies. Handler runs inside the ServeNativeHost loop, so
-// it should not block on long operations — spawn a goroutine instead
-// and use send from there.
+// for concurrent use; call it zero or more times per inbound message.
 type Handler func(ctx context.Context, in Message, send func(Message) error) error
 
-// ServeNativeHost runs Chrome's stdin/stdout native-messaging loop
-// against r/w, invoking handle for each inbound message. It returns
-// nil on clean EOF (Chrome closed the port) and an error on framing
-// or I/O failure.
+// ServeNativeHost runs Chrome's stdin/stdout native-messaging loop,
+// invoking handle for each inbound message. Returns nil on clean EOF
+// (port closed by browser) and an error on framing or I/O failure.
 func ServeNativeHost(ctx context.Context, r io.Reader, w io.Writer, handle Handler) error {
 	var mu sync.Mutex
 	send := func(m Message) error {
@@ -112,8 +86,6 @@ func ServeNativeHost(ctx context.Context, r io.Reader, w io.Writer, handle Handl
 		}
 		msg, err := DecodeMessage(frame)
 		if err != nil {
-			// Best-effort: report the decode error back, keep the loop
-			// alive. A malformed frame shouldn't kill the host.
 			_ = send(Message{Kind: "error", Error: err.Error()})
 			continue
 		}
@@ -123,9 +95,8 @@ func ServeNativeHost(ctx context.Context, r io.Reader, w io.Writer, handle Handl
 	}
 }
 
-// EchoHandler returns inbound messages verbatim with Kind="echo". Used
-// by the native-host smoke-test stub; replaced by the real bridge in
-// a later step once IPC is wired.
+// EchoHandler returns inbound messages verbatim with Kind="echo". Kept
+// for unit tests of the message loop in isolation.
 func EchoHandler() Handler {
 	return func(ctx context.Context, in Message, send func(Message) error) error {
 		out := in
@@ -135,8 +106,7 @@ func EchoHandler() Handler {
 }
 
 // LogPath returns a sensible sidecar log path for the native host. We
-// can't log to stdout — Chrome owns it. Parent directory is created
-// on first call.
+// can't log to stdout — the browser owns it.
 func LogPath() string {
 	var dir string
 	switch runtime.GOOS {

@@ -2,14 +2,13 @@ package cookies
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net"
 	"testing"
 	"time"
 )
 
-// extStub simulates the Chrome extension. Captures outbound messages
-// (host→ext) on a channel; tests reply by calling bridge.Handle.
 type extStub struct {
 	out chan Message
 	err error
@@ -71,15 +70,15 @@ func TestBridge_StatusAfterReady(t *testing.T) {
 	}
 }
 
-func TestBridge_GetCookies_ExtensionNotConnected(t *testing.T) {
+func TestBridge_Fetch_ExtensionNotConnected(t *testing.T) {
 	b := NewBridge()
-	resp := roundtripPluginConn(t, b, Message{ID: "p-1", Kind: "getCookies", Domain: "claude.ai"})
+	resp := roundtripPluginConn(t, b, Message{ID: "p-1", Kind: "fetch", URL: "https://claude.ai/"})
 	if resp.Kind != "error" || resp.Error != "extension not connected" {
 		t.Fatalf("got %+v", resp)
 	}
 }
 
-func TestBridge_GetCookies_RoundTrip(t *testing.T) {
+func TestBridge_Fetch_RoundTrip(t *testing.T) {
 	b := NewBridge()
 	ext := newExtStub()
 	_ = b.Handle(context.Background(), Message{Kind: "ready", UserAgent: "UA-X"}, ext.send)
@@ -88,31 +87,27 @@ func TestBridge_GetCookies_RoundTrip(t *testing.T) {
 	defer plugSide.Close()
 	go b.HandlePluginConn(context.Background(), hostSide)
 
-	// Send the plugin request.
-	payload, _ := EncodeMessage(Message{ID: "p-42", Kind: "getCookies", Domain: "claude.ai"})
+	payload, _ := EncodeMessage(Message{ID: "p-42", Kind: "fetch", URL: "https://claude.ai/api/x"})
 	_ = plugSide.SetDeadline(time.Now().Add(3 * time.Second))
 	if err := WriteFrame(plugSide, payload); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
-	// Bridge should forward to extension with the same ID.
 	select {
 	case forwarded := <-ext.out:
-		if forwarded.ID != "p-42" || forwarded.Kind != "getCookies" || forwarded.Domain != "claude.ai" {
+		if forwarded.ID != "p-42" || forwarded.Kind != "fetch" || forwarded.URL != "https://claude.ai/api/x" {
 			t.Fatalf("forwarded: %+v", forwarded)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("bridge did not forward to extension")
 	}
 
-	// Simulate the extension's reply arriving on the stdin loop.
 	reply := Message{
-		ID:        "p-42",
-		Kind:      "cookies",
-		UserAgent: "UA-X",
-		Cookies: []WireCookie{
-			{Name: "sessionKey", Value: "s", Domain: "claude.ai"},
-		},
+		ID:         "p-42",
+		Kind:       "fetchResult",
+		Status:     200,
+		StatusText: "OK",
+		Body:       base64.StdEncoding.EncodeToString([]byte(`{"ok":true}`)),
 	}
 	_ = b.Handle(context.Background(), reply, ext.send)
 
@@ -121,12 +116,12 @@ func TestBridge_GetCookies_RoundTrip(t *testing.T) {
 		t.Fatalf("read: %v", err)
 	}
 	got, _ := DecodeMessage(frame)
-	if got.ID != "p-42" || got.Kind != "cookies" || len(got.Cookies) != 1 {
+	if got.ID != "p-42" || got.Kind != "fetchResult" || got.Status != 200 {
 		t.Fatalf("reply: %+v", got)
 	}
 }
 
-func TestBridge_GetCookies_DisconnectReleasesWaiters(t *testing.T) {
+func TestBridge_Fetch_DisconnectReleasesWaiters(t *testing.T) {
 	b := NewBridge()
 	ext := newExtStub()
 	_ = b.Handle(context.Background(), Message{Kind: "ready", UserAgent: "UA"}, ext.send)
@@ -135,15 +130,14 @@ func TestBridge_GetCookies_DisconnectReleasesWaiters(t *testing.T) {
 	defer plugSide.Close()
 	go b.HandlePluginConn(context.Background(), hostSide)
 
-	payload, _ := EncodeMessage(Message{ID: "p-1", Kind: "getCookies", Domain: "claude.ai"})
+	payload, _ := EncodeMessage(Message{ID: "p-1", Kind: "fetch", URL: "https://claude.ai/"})
 	_ = plugSide.SetDeadline(time.Now().Add(2 * time.Second))
 	if err := WriteFrame(plugSide, payload); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
-	<-ext.out // drain the forward
+	<-ext.out
 
-	// Extension dies before it can reply.
 	b.OnExtensionDisconnect()
 
 	frame, err := ReadFrame(plugSide)
@@ -156,7 +150,7 @@ func TestBridge_GetCookies_DisconnectReleasesWaiters(t *testing.T) {
 	}
 }
 
-func TestBridge_GetCookies_Timeout(t *testing.T) {
+func TestBridge_Fetch_Timeout(t *testing.T) {
 	prev := pluginExtensionBudget
 	t.Cleanup(func() { pluginExtensionBudget = prev })
 	pluginExtensionBudget = 100 * time.Millisecond
@@ -169,12 +163,12 @@ func TestBridge_GetCookies_Timeout(t *testing.T) {
 	defer plugSide.Close()
 	go b.HandlePluginConn(context.Background(), hostSide)
 
-	payload, _ := EncodeMessage(Message{ID: "p-1", Kind: "getCookies", Domain: "claude.ai"})
+	payload, _ := EncodeMessage(Message{ID: "p-1", Kind: "fetch", URL: "https://claude.ai/"})
 	_ = plugSide.SetDeadline(time.Now().Add(2 * time.Second))
 	if err := WriteFrame(plugSide, payload); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	<-ext.out // drain
+	<-ext.out
 
 	frame, err := ReadFrame(plugSide)
 	if err != nil {
@@ -186,26 +180,12 @@ func TestBridge_GetCookies_Timeout(t *testing.T) {
 	}
 }
 
-func TestBridge_Handle_ReadySetsUserAgent(t *testing.T) {
-	b := NewBridge()
-	ext := newExtStub()
-	err := b.Handle(context.Background(), Message{Kind: "ready", UserAgent: "UA-Y"}, ext.send)
-	if err != nil {
-		t.Fatalf("handle: %v", err)
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if !b.ready || b.userAgent != "UA-Y" {
-		t.Fatalf("ready/UA: %v / %q", b.ready, b.userAgent)
-	}
-}
-
 func TestBridge_HandleForwardSendError(t *testing.T) {
 	b := NewBridge()
 	ext := &extStub{err: errors.New("broken pipe"), out: make(chan Message, 1)}
 	_ = b.Handle(context.Background(), Message{Kind: "ready", UserAgent: "UA"}, ext.send)
 
-	resp := roundtripPluginConn(t, b, Message{ID: "p-1", Kind: "getCookies", Domain: "claude.ai"})
+	resp := roundtripPluginConn(t, b, Message{ID: "p-1", Kind: "fetch", URL: "https://claude.ai/"})
 	if resp.Kind != "error" {
 		t.Fatalf("want error, got %+v", resp)
 	}

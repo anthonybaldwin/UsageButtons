@@ -14,8 +14,7 @@ import (
 
 // ipcAddr returns the local IPC socket path shared by the native host
 // (listener) and the plugin (dialer). It's a var so tests can swap in
-// a temp path. Both platforms use AF_UNIX — Windows has supported it
-// since 10 1803 (April 2018) via net.Listen/Dial("unix", ...).
+// a temp path.
 var ipcAddr = defaultIPCAddr
 
 func defaultIPCAddr() string {
@@ -29,9 +28,6 @@ func defaultIPCAddr() string {
 		_ = os.MkdirAll(dir, 0o755)
 		return filepath.Join(dir, "ipc.sock")
 	case "darwin":
-		// Short path — macOS caps sun_path at ~104 bytes. Using /tmp/
-		// with the UID suffix keeps the path well under the limit and
-		// avoids collisions between users on a shared machine.
 		return fmt.Sprintf("/tmp/usagebuttons-%d.sock", os.Getuid())
 	default:
 		return ""
@@ -39,12 +35,11 @@ func defaultIPCAddr() string {
 }
 
 // IPCAddress returns the platform-specific IPC socket path. Mostly
-// useful for diagnostic logging in the native host and plugin.
+// useful for diagnostic logging.
 func IPCAddress() string { return ipcAddr() }
 
 // ListenIPC opens the listener the native host uses to serve the
-// plugin. Any stale socket file left over from a crashed prior run is
-// removed first.
+// plugin. Removes any stale socket file from a crashed prior run.
 func ListenIPC() (net.Listener, error) {
 	addr := ipcAddr()
 	if addr == "" {
@@ -76,9 +71,6 @@ func dialIPC(ctx context.Context) (net.Conn, error) {
 }
 
 // roundtrip sends one request frame and reads one response frame.
-// Cookie queries are rare enough that a connection-per-request
-// (no pooling) is the right trade — simpler code, cheap on a local
-// socket.
 func roundtrip(ctx context.Context, req Message, timeout time.Duration) (Message, error) {
 	conn, err := dialIPC(ctx)
 	if err != nil {
@@ -104,34 +96,52 @@ func roundtrip(ctx context.Context, req Message, timeout time.Duration) (Message
 	return DecodeMessage(raw)
 }
 
-func clientGet(ctx context.Context, q Query) (Bundle, error) {
-	req := Message{
-		ID:     nextRequestID(),
-		Kind:   "getCookies",
-		Domain: q.Domain,
-		Names:  q.Names,
+func clientFetch(ctx context.Context, r Request) (Response, error) {
+	method := r.Method
+	if method == "" {
+		method = "GET"
 	}
-	resp, err := roundtrip(ctx, req, 5*time.Second)
+	reqMsg := Message{
+		ID:      nextRequestID(),
+		Kind:    "fetch",
+		URL:     r.URL,
+		Method:  method,
+		Headers: r.Headers,
+	}
+	if len(r.Body) > 0 {
+		reqMsg.Body = b64.EncodeToString(r.Body)
+	}
+
+	resp, err := roundtrip(ctx, reqMsg, defaultFetchTimeout)
 	if err != nil {
-		return Bundle{}, err
+		return Response{}, err
 	}
+
 	if resp.Kind == "error" {
-		// Host reports "extension not connected" when the SW hasn't
-		// handshaken yet. Map that to ErrHostUnavailable so providers
-		// stay in the quiet "waiting on browser" state.
 		if resp.Error == "extension not connected" {
-			return Bundle{}, ErrHostUnavailable
+			return Response{}, ErrHostUnavailable
 		}
-		return Bundle{}, fmt.Errorf("cookies: extension error: %s", resp.Error)
+		return Response{}, fmt.Errorf("cookies: extension fetch error: %s", resp.Error)
 	}
-	if resp.Kind != "cookies" {
-		return Bundle{}, fmt.Errorf("cookies: unexpected reply kind %q", resp.Kind)
+	if resp.Kind != "fetchResult" {
+		return Response{}, fmt.Errorf("cookies: unexpected reply kind %q", resp.Kind)
 	}
-	cs := make([]Cookie, 0, len(resp.Cookies))
-	for _, w := range resp.Cookies {
-		cs = append(cs, w.ToCookie())
+
+	var body []byte
+	if resp.Body != "" {
+		decoded, err := b64.DecodeString(resp.Body)
+		if err != nil {
+			return Response{}, fmt.Errorf("cookies: decode response body: %w", err)
+		}
+		body = decoded
 	}
-	return Bundle{Cookies: cs, UserAgent: resp.UserAgent}, nil
+	return Response{
+		Status:      resp.Status,
+		StatusText:  resp.StatusText,
+		Body:        body,
+		ContentType: resp.ContentType,
+		UserAgent:   resp.UserAgent,
+	}, nil
 }
 
 func clientProbe(ctx context.Context) bool {
@@ -143,6 +153,6 @@ func clientProbe(ctx context.Context) bool {
 }
 
 func init() {
-	dispatchGet = clientGet
+	dispatchFetch = clientFetch
 	probeHost = clientProbe
 }

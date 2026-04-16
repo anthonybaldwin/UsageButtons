@@ -7,6 +7,7 @@
 package claude
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -269,23 +270,21 @@ func normalizeCookie(raw string) string {
 	return match
 }
 
-// resolveExtrasCookie picks the cookie header for the web-extras path.
-// It tries, in order:
-//   1. Manual paste from settings (normalized to sessionKey=...).
-//   2. The companion Chrome extension, if handshaken this session.
-//
-// Returns ok=false when source=oauth, or when neither path has
-// cookies. Callers MUST NOT fire a request when ok is false.
-func resolveExtrasCookie() (cookieaux.Resolution, bool) {
+// extrasFetcher builds a cookieaux.Fetcher for the web-extras path,
+// honoring the user's source preference (OAuth / cookie / both).
+// Returns ok=false when source=oauth — that path uses no cookies.
+func extrasFetcher() (cookieaux.Fetcher, bool) {
 	cs := settings.ClaudeSettings()
 	if cs.Source == settings.SourceOAuth {
-		return cookieaux.Resolution{}, false
+		return cookieaux.Fetcher{}, false
 	}
-	manual := normalizeCookie(cs.CookieHeader)
-	return cookieaux.ResolveWithDeadline("claude.ai", manual)
+	return cookieaux.Fetcher{
+		Domain:       "claude.ai",
+		ManualCookie: normalizeCookie(cs.CookieHeader),
+	}, true
 }
 
-func fetchOrgID(cacheKey string, headers map[string]string) (string, error) {
+func fetchOrgID(ctx context.Context, f cookieaux.Fetcher, cacheKey string) (string, error) {
 	orgMu.Lock()
 	cached, ok := orgCache[cacheKey]
 	orgMu.Unlock()
@@ -294,7 +293,7 @@ func fetchOrgID(cacheKey string, headers map[string]string) (string, error) {
 	}
 
 	var orgs []orgRow
-	err := httputil.GetJSON(baseWebURL+"/organizations", headers, 15*time.Second, &orgs)
+	err := f.FetchJSON(ctx, baseWebURL+"/organizations", nil, &orgs)
 	if err != nil {
 		return "", err
 	}
@@ -336,19 +335,25 @@ func fetchOrgID(cacheKey string, headers map[string]string) (string, error) {
 }
 
 func fetchWebExtras() *extraUsageSource {
-	r, ok := resolveExtrasCookie()
+	f, ok := extrasFetcher()
 	if !ok {
-		logf("extras: no cookie (no manual paste, extension not ready); skipping web path")
 		return nil
 	}
-	logf("extras: using %s cookie (%d chars, UA=%q), fetching org...", r.Source, len(r.Header), r.UserAgent)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
 
-	// Cache org lookups by the cookie header so a refreshed cf_clearance
-	// doesn't invalidate a still-valid org UUID.
-	cacheKey := r.Header
-	headers := r.Headers(nil)
+	if !f.Available(ctx) {
+		logf("extras: neither manual cookie nor extension ready; skipping web path")
+		return nil
+	}
+	src := f.Source(ctx)
+	logf("extras: using %s path, fetching org...", src)
 
-	orgID, err := fetchOrgID(cacheKey, headers)
+	// Cache key: source+manual discriminates extension vs manual paste
+	// so a stale manual cache entry doesn't poison the extension path.
+	cacheKey := string(src) + "|" + f.ManualCookie
+
+	orgID, err := fetchOrgID(ctx, f, cacheKey)
 	if err != nil {
 		logf("extras: org fetch failed: %v", err)
 		return nil
@@ -356,10 +361,9 @@ func fetchWebExtras() *extraUsageSource {
 	logf("extras: org=%s, fetching overage...", orgID)
 
 	var overage overageResponse
-	err = httputil.GetJSON(
+	err = f.FetchJSON(ctx,
 		fmt.Sprintf("%s/organizations/%s/overage_spend_limit", baseWebURL, orgID),
-		headers,
-		15*time.Second, &overage,
+		nil, &overage,
 	)
 	if err != nil {
 		logf("extras: overage fetch failed: %v", err)
@@ -373,10 +377,9 @@ func fetchWebExtras() *extraUsageSource {
 	}
 
 	var prepaid prepaidCreditsResponse
-	prepaidErr := httputil.GetJSON(
+	prepaidErr := f.FetchJSON(ctx,
 		fmt.Sprintf("%s/organizations/%s/prepaid/credits", baseWebURL, orgID),
-		headers,
-		10*time.Second, &prepaid,
+		nil, &prepaid,
 	)
 
 	result := &extraUsageSource{

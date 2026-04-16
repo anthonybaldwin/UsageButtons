@@ -9,8 +9,9 @@ import (
 )
 
 // darwinBrowserDirs lists the per-browser Application Support
-// subdirectories where Chromium-based browsers look for
-// native-messaging host manifests.
+// subdirectories where supported browsers look for native-messaging
+// host manifests. Firefox is included so a future Firefox port of
+// the extension needs no plugin-side install changes.
 var darwinBrowserDirs = []struct {
 	name string
 	dir  string
@@ -21,6 +22,7 @@ var darwinBrowserDirs = []struct {
 	{"Microsoft Edge", "Microsoft Edge"},
 	{"Brave", "BraveSoftware/Brave-Browser"},
 	{"Chromium", "Chromium"},
+	{"Firefox", "Mozilla"},
 }
 
 func appSupportDir() (string, error) {

@@ -11,9 +11,10 @@ import (
 )
 
 // windowsBrowserKeys lists the HKCU registry roots under which each
-// Chromium-based browser reads native-messaging host manifests. We
-// install into all of them so the user's extension works no matter
-// which browser they use.
+// supported browser reads native-messaging host manifests. We install
+// into all of them so the extension works no matter which browser the
+// user runs. Firefox is included here so a future Firefox port of the
+// extension requires no plugin changes on the install side.
 var windowsBrowserKeys = []struct {
 	name    string
 	regRoot string
@@ -24,6 +25,7 @@ var windowsBrowserKeys = []struct {
 	{"Microsoft Edge", `Software\Microsoft\Edge\NativeMessagingHosts`},
 	{"Brave", `Software\BraveSoftware\Brave-Browser\NativeMessagingHosts`},
 	{"Chromium", `Software\Chromium\NativeMessagingHosts`},
+	{"Firefox", `Software\Mozilla\NativeMessagingHosts`},
 }
 
 func manifestFilePath(hostName string) (string, error) {

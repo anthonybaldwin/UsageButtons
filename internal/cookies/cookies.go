@@ -2,126 +2,163 @@ package cookies
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 )
 
-// HostName is the Chrome native-messaging host identifier. It must
-// match the "name" field in the host manifest and the string extensions
-// pass to chrome.runtime.connectNative.
+// HostName is the native-messaging host identifier. It must match the
+// "name" field in the host manifest and the string extensions pass to
+// chrome.runtime.connectNative (or browser.runtime.connectNative in
+// Firefox).
 const HostName = "io.github.anthonybaldwin.usagebuttons"
 
 // Sentinel errors. Callers should prefer errors.Is over string compare.
 var (
 	// ErrHostUnavailable is returned when the native host is not
-	// reachable — extension not installed, Chrome not running, or the
+	// reachable — extension not installed, browser not running, or the
 	// extension has not yet handshaken this session. Providers should
-	// treat this as a quiet "waiting on browser" state, not an error
-	// to surface to the user.
+	// treat this as a quiet "waiting on browser" state.
 	ErrHostUnavailable = errors.New("cookies: native host unavailable")
 
-	// ErrDomainNotAllowed is returned when a Query names a domain that
-	// is not in the compile-time allowlist. This is an integrity check;
-	// the extension enforces the same allowlist independently.
-	ErrDomainNotAllowed = errors.New("cookies: domain not in allowlist")
-
-	// ErrNoCookies is returned when a query matched zero cookies.
-	ErrNoCookies = errors.New("cookies: no cookies found")
+	// ErrOriginNotAllowed is returned when a Request targets a URL
+	// whose host isn't covered by the compile-time allowlist. The
+	// extension enforces the same allowlist independently.
+	ErrOriginNotAllowed = errors.New("cookies: url origin not in allowlist")
 )
 
-// Query selects which cookies to return. Domain is required and must
-// match (or be a subdomain of) an entry in Allowed.
-type Query struct {
-	Domain string   // e.g. "claude.ai"
-	Names  []string // optional — filter by cookie name; empty means all
+// Request is what the plugin asks the extension to fetch on its
+// behalf. The browser handles cookies and User-Agent automatically
+// via credentials:"include"; do NOT set a Cookie header explicitly
+// (browsers refuse it anyway).
+type Request struct {
+	URL     string
+	Method  string // default "GET"
+	Headers map[string]string
+	Body    []byte // optional, for POST/PUT
 }
 
-// Validate rejects empty or non-allowlisted domains before we burn a
-// round trip to the extension.
-func (q Query) Validate() error {
-	if strings.TrimSpace(q.Domain) == "" {
-		return fmt.Errorf("cookies: query domain is required")
+// Response carries the extension's fetch result.
+type Response struct {
+	Status      int
+	StatusText  string
+	Body        []byte
+	ContentType string
+	// UserAgent is the browser's UA at fetch time — informational.
+	UserAgent string
+}
+
+// Fetch dispatches a Request through the extension and returns the raw
+// response. Non-2xx statuses return a *httputil.Error so providers can
+// use the same errors.As(err, *httputil.Error) checks they use for the
+// direct-HTTP fallback.
+func Fetch(ctx context.Context, r Request) (Response, error) {
+	if err := validateRequest(r); err != nil {
+		return Response{}, err
 	}
-	if !IsAllowed(q.Domain) {
-		return fmt.Errorf("%w: %q", ErrDomainNotAllowed, q.Domain)
+	return dispatchFetch(ctx, r)
+}
+
+// FetchJSON fetches URL via the extension and decodes the JSON body
+// into dst. Headers is optional; Accept defaults to application/json.
+func FetchJSON(ctx context.Context, url string, headers map[string]string, dst any) error {
+	hh := cloneHeaders(headers)
+	if _, ok := hh["Accept"]; !ok {
+		hh["Accept"] = "application/json"
+	}
+	resp, err := Fetch(ctx, Request{URL: url, Method: "GET", Headers: hh})
+	if err != nil {
+		return err
+	}
+	if err := statusError(url, resp); err != nil {
+		return err
+	}
+	if len(resp.Body) == 0 {
+		return fmt.Errorf("cookies: empty body from %s", url)
+	}
+	if err := json.Unmarshal(resp.Body, dst); err != nil {
+		return fmt.Errorf("cookies: invalid JSON from %s: %w", url, err)
 	}
 	return nil
 }
 
-// Cookie is the subset of chrome.cookies.Cookie fields we use.
-type Cookie struct {
-	Domain  string
-	Name    string
-	Value   string
-	Path    string
-	Expires time.Time // zero value means session cookie
-	Secure  bool
-}
-
-// Bundle groups cookies with the User-Agent string the extension
-// reports for the originating browser. Callers should send requests
-// to the provider using this UA, because cf_clearance is bound to the
-// UA that obtained it.
-type Bundle struct {
-	Cookies   []Cookie
-	UserAgent string
-}
-
-// Get asks the extension (via the native host) for cookies matching q.
-// Returns ErrHostUnavailable if the host isn't reachable yet — callers
-// should treat that as a quiet "waiting on browser" state.
-func Get(ctx context.Context, q Query) (Bundle, error) {
-	if err := q.Validate(); err != nil {
-		return Bundle{}, err
+// FetchHTML fetches URL via the extension and returns the response
+// body as a string. Headers is optional.
+func FetchHTML(ctx context.Context, url string, headers map[string]string) (string, error) {
+	hh := cloneHeaders(headers)
+	if _, ok := hh["Accept"]; !ok {
+		hh["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 	}
-	return dispatchGet(ctx, q)
-}
-
-// Header is a convenience returning "name1=v1; name2=v2" suitable for
-// a Cookie: request header, plus the UA reported by the extension.
-func Header(ctx context.Context, q Query) (header, userAgent string, err error) {
-	b, err := Get(ctx, q)
+	resp, err := Fetch(ctx, Request{URL: url, Method: "GET", Headers: hh})
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-	if len(b.Cookies) == 0 {
-		return "", b.UserAgent, ErrNoCookies
+	if err := statusError(url, resp); err != nil {
+		return "", err
 	}
-	var sb strings.Builder
-	for i, c := range b.Cookies {
-		if i > 0 {
-			sb.WriteString("; ")
-		}
-		sb.WriteString(c.Name)
-		sb.WriteByte('=')
-		sb.WriteString(c.Value)
-	}
-	return sb.String(), b.UserAgent, nil
+	return string(resp.Body), nil
 }
 
-// HostAvailable returns true only when the native host IPC endpoint is
-// reachable AND the extension has handshaken this session. Cold-start
-// (Stream Deck launched before Chrome) returns false. Providers must
-// gate requests on this.
+// HostAvailable returns true only when the native host IPC endpoint
+// is reachable AND the extension has handshaken this session. Gate
+// cookie-gated provider requests on this.
 func HostAvailable(ctx context.Context) bool {
 	return probeHost(ctx)
 }
 
-// dispatchGet is overridden in client_*.go once the IPC transport is
-// wired up. Keeping it as a package var lets the skeleton compile and
-// tests run before cmd/native-host exists.
-var dispatchGet = func(ctx context.Context, q Query) (Bundle, error) {
-	_ = ctx
-	_ = q
-	return Bundle{}, ErrHostUnavailable
+func validateRequest(r Request) error {
+	if strings.TrimSpace(r.URL) == "" {
+		return fmt.Errorf("cookies: request URL is required")
+	}
+	if !URLAllowed(r.URL) {
+		return fmt.Errorf("%w: %q", ErrOriginNotAllowed, r.URL)
+	}
+	return nil
 }
 
-// probeHost mirrors dispatchGet — overridden by the platform-specific
-// client once IPC lands. Default behavior keeps cookie-gated providers
-// in the "waiting on browser" state until the transport is real.
+func statusError(url string, resp Response) error {
+	if resp.Status >= 200 && resp.Status < 300 {
+		return nil
+	}
+	return &httputil.Error{
+		Status:     resp.Status,
+		StatusText: resp.StatusText,
+		Body:       string(resp.Body),
+		URL:        url,
+	}
+}
+
+func cloneHeaders(h map[string]string) map[string]string {
+	out := make(map[string]string, len(h))
+	for k, v := range h {
+		out[k] = v
+	}
+	return out
+}
+
+// dispatchFetch is overridden in ipc.go init(); keeping it as a var
+// lets unit tests substitute a fake and lets the skeleton compile
+// before the transport is wired.
+var dispatchFetch = func(ctx context.Context, r Request) (Response, error) {
+	_ = ctx
+	_ = r
+	return Response{}, ErrHostUnavailable
+}
+
 var probeHost = func(ctx context.Context) bool {
 	_ = ctx
 	return false
 }
+
+// b64 helpers are exported so tests in sibling packages can build
+// wire bytes that match the protocol without poking internals.
+var b64 = base64.StdEncoding
+
+// wire deadline for the extension fetch round trip. Matches the
+// existing httputil 15–30s timeouts the providers use directly.
+const defaultFetchTimeout = 20 * time.Second

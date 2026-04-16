@@ -14,6 +14,7 @@ import (
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/providers/cookieaux"
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
@@ -42,22 +43,22 @@ func (Provider) MetricIDs() []string {
 
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	os := settings.OllamaSettings()
-	if os.CookieHeader == "" {
+	r, ok := cookieaux.ResolveWithDeadline("ollama.com", os.CookieHeader)
+	if !ok {
 		return providers.Snapshot{
 			ProviderID:   "ollama",
 			ProviderName: "Ollama",
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Paste a Cookie header from ollama.com in Plugin Settings.",
+			Error:        cookieaux.MissingMessage("ollama.com"),
 		}, nil
 	}
 
-	html, err := httputil.GetHTML(settingsURL, map[string]string{
-		"Cookie":  os.CookieHeader,
+	html, err := httputil.GetHTML(settingsURL, r.Headers(map[string]string{
 		"Referer": "https://ollama.com/settings",
 		"Origin":  "https://ollama.com",
-	}, 15*time.Second)
+	}), 15*time.Second)
 
 	if err != nil {
 		var httpErr *httputil.Error
@@ -68,7 +69,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 				Source:       "cookie",
 				Metrics:      []providers.MetricValue{},
 				Status:       "unknown",
-				Error:        "Ollama cookie expired. Paste a fresh one from ollama.com.",
+				Error:        staleCookieMessage(r.Source, "ollama.com"),
 			}, nil
 		}
 		return providers.Snapshot{}, err
@@ -81,7 +82,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Source:       "cookie",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Ollama cookie expired. Paste a fresh one from ollama.com.",
+			Error:        staleCookieMessage(r.Source, "ollama.com"),
 		}, nil
 	}
 
@@ -259,6 +260,13 @@ func isSignedOut(html string) bool {
 		return true
 	}
 	return false
+}
+
+func staleCookieMessage(source, providerLabel string) string {
+	if source == "extension" {
+		return "Ollama cookie from browser is stale. Sign in to " + providerLabel + " in Chrome, then refresh."
+	}
+	return "Ollama cookie expired. Paste a fresh one from " + providerLabel + "."
 }
 
 func init() {

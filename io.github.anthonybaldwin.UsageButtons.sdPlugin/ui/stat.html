@@ -113,19 +113,14 @@
 
       <!-- Claude auth -->
       <div id="authConfig-claude" class="auth-config" style="display:none">
-        <label for="claudeSource">Data source</label>
-        <select id="claudeSource">
-          <option value="both" selected>Both — OAuth + browser (recommended)</option>
-          <option value="oauth">OAuth only — no browser calls</option>
-          <option value="cookie">Browser only — via Usage Buttons Helper</option>
-        </select>
         <p class="hint">
-          <strong>OAuth</strong> uses <code>~/.claude/.credentials.json</code>
-          and <code>api.anthropic.com</code> for session %, weekly %, Sonnet %.
-          <strong>Browser</strong> calls <code>claude.ai</code> via the
-          Usage Buttons Helper extension — required for the Extra usage
-          block (balance, overage) when your plan has it enabled.
-          <strong>Both</strong> runs OAuth first and adds browser data on top.
+          <strong>Session / Weekly / Sonnet / Opus</strong> metrics come
+          from <code>~/.claude/.credentials.json</code> via
+          <code>api.anthropic.com</code>. <strong>Extras</strong>
+          (balance, overage) come from <code>claude.ai</code> via the
+          <strong>Usage Buttons Helper</strong> extension. Each metric
+          uses the source that can actually supply it — no toggle
+          needed.
         </p>
       </div>
 
@@ -749,14 +744,6 @@
       document.getElementById("invertFill").checked = globals.invertFill === true;
       document.getElementById("showGlyphs").checked = globals.showGlyphs !== false;
       document.getElementById("skipUpdateCheck").checked = globals.skipUpdateCheck === true;
-
-      // Claude source toggle
-      const claude = (globals.providers && globals.providers.claude) || {};
-      const src =
-        claude.source === "oauth" || claude.source === "cookie"
-          ? claude.source
-          : "both";
-      document.getElementById("claudeSource").value = src;
     }
 
     function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
@@ -840,7 +827,6 @@
 
     function pushGlobalSettings() {
       if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
-      const source = document.getElementById("claudeSource").value;
       const payload = {
         defaultRefreshMinutes: Number(document.getElementById("defaultRefresh").value),
         defaultValueSize:      document.getElementById("defaultValueSize").value,
@@ -848,7 +834,6 @@
         invertFill:            document.getElementById("invertFill").checked,
         showGlyphs:            document.getElementById("showGlyphs").checked,
         skipUpdateCheck:       document.getElementById("skipUpdateCheck").checked,
-        providers: { claude: { source } },
       };
       websocket.send(JSON.stringify({
         event: "setGlobalSettings",
@@ -873,12 +858,28 @@
       const text = document.getElementById("cookieHostStatusText");
       const versionLine = document.getElementById("cookieHostVersionLine");
 
+      text.replaceChildren();
       if (available) {
         dot.style.background = "#22c55e";
-        text.textContent = "Extension connected. Browser-sourced metrics are live.";
+        text.append("Extension connected. Browser-sourced metrics are live.");
       } else {
         dot.style.background = "#f59e0b";
-        text.textContent = "Not connected. Open Chrome and load the Usage Buttons Helper extension.";
+        text.append("Not connected — ");
+        const link = document.createElement("a");
+        link.href = "https://anthonybaldwin.github.io/UsageButtons/#install";
+        link.textContent = "install the Usage Buttons Helper";
+        link.style.cssText = "color: #fcd34d; text-decoration: underline;";
+        link.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (websocket && websocket.readyState === WebSocket.OPEN) {
+            websocket.send(JSON.stringify({
+              event: "openUrl",
+              payload: { url: link.href },
+            }));
+          }
+        });
+        text.append(link);
+        text.append(" (30-sec setup).");
       }
 
       // Version line: only shown when we actually have a reported
@@ -1001,7 +1002,6 @@
     for (const id of [
       "defaultRefresh", "defaultValueSize", "defaultSubvalueSize",
       "invertFill", "showGlyphs", "skipUpdateCheck",
-      "claudeSource",
     ]) {
       const el = document.getElementById(id);
       el.addEventListener("change", pushGlobalSettings);

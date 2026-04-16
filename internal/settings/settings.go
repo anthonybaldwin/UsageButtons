@@ -16,37 +16,15 @@ const (
 	TextLarge  TextSize = "large"
 )
 
-type ProviderSource string
-
-const (
-	SourceOAuth  ProviderSource = "oauth"
-	SourceCookie ProviderSource = "cookie"
-	SourceBoth   ProviderSource = "both"
-)
-
-// ClaudeProviderSettings holds Claude-specific auth config. After the
-// browser-extension pivot the only meaningful setting is Source —
-// which auth paths to exercise for Claude. Cookie paste is gone; the
-// "browser" path now runs through the Usage Buttons Helper extension.
-type ClaudeProviderSettings struct {
-	Source ProviderSource `json:"source,omitempty"`
-}
-
-// ProviderSettingsMap holds per-provider config.
-type ProviderSettingsMap struct {
-	Claude *ClaudeProviderSettings `json:"claude,omitempty"`
-}
-
 // GlobalSettings are shared across every key and persisted by
 // Stream Deck (survive plugin rebuilds, ride with user profiles).
 type GlobalSettings struct {
-	DefaultRefreshMinutes *int                 `json:"defaultRefreshMinutes,omitempty"`
-	DefaultValueSize      TextSize             `json:"defaultValueSize,omitempty"`
-	DefaultSubvalueSize   TextSize             `json:"defaultSubvalueSize,omitempty"`
-	InvertFill            bool                 `json:"invertFill,omitempty"`
-	ShowGlyphs            *bool                `json:"showGlyphs,omitempty"`
-	SkipUpdateCheck       bool                 `json:"skipUpdateCheck,omitempty"`
-	Providers             *ProviderSettingsMap `json:"providers,omitempty"`
+	DefaultRefreshMinutes *int     `json:"defaultRefreshMinutes,omitempty"`
+	DefaultValueSize      TextSize `json:"defaultValueSize,omitempty"`
+	DefaultSubvalueSize   TextSize `json:"defaultSubvalueSize,omitempty"`
+	InvertFill            bool     `json:"invertFill,omitempty"`
+	ShowGlyphs            *bool    `json:"showGlyphs,omitempty"`
+	SkipUpdateCheck       bool     `json:"skipUpdateCheck,omitempty"`
 }
 
 // KeySettings are per-button settings stored by Stream Deck.
@@ -99,11 +77,6 @@ func Set(gs GlobalSettings) {
 	// Normalise text sizes
 	gs.DefaultValueSize = normaliseTextSize(gs.DefaultValueSize, TextLarge)
 	gs.DefaultSubvalueSize = normaliseTextSize(gs.DefaultSubvalueSize, TextLarge)
-
-	// Normalise claude source
-	if gs.Providers != nil && gs.Providers.Claude != nil {
-		gs.Providers.Claude.Source = normaliseSource(gs.Providers.Claude.Source)
-	}
 
 	current = gs
 }
@@ -159,16 +132,6 @@ func SkipUpdateCheckEnabled() bool {
 	return current.SkipUpdateCheck
 }
 
-// ClaudeSettings returns Claude provider settings with defaults.
-func ClaudeSettings() ClaudeProviderSettings {
-	mu.RLock()
-	defer mu.RUnlock()
-	if current.Providers != nil && current.Providers.Claude != nil {
-		return *current.Providers.Claude
-	}
-	return ClaudeProviderSettings{Source: SourceBoth}
-}
-
 // ResolveRefreshMs returns the effective refresh interval in ms for a key.
 func ResolveRefreshMs(ks KeySettings) int64 {
 	if ks.RefreshMinutes != nil && isValidRefresh(*ks.RefreshMinutes) {
@@ -201,11 +164,3 @@ func normaliseTextSize(raw TextSize, fallback TextSize) TextSize {
 	}
 }
 
-func normaliseSource(raw ProviderSource) ProviderSource {
-	switch raw {
-	case SourceOAuth, SourceCookie:
-		return raw
-	default:
-		return SourceBoth
-	}
-}

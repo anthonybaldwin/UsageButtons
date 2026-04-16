@@ -584,39 +584,98 @@
   </section>
 
   <section id="install">
-    <h2>Build from source</h2>
+    <h2>Install</h2>
     <p class="sub">
-      Written in Go — single static binary with a low memory footprint.
-      No runtime dependencies.
+      Two downloads — the Stream Deck plugin and (for Claude extras,
+      Cursor, and Ollama) the Usage Buttons Helper browser extension.
     </p>
 
     <div class="install-steps">
       <div class="step">
         <div>
-          <h4>Clone the repo</h4>
-          <p>Requires <a href="https://go.dev/dl/">Go</a>.</p>
+          <h4>1. Download the plugin</h4>
+          <p>
+            Grab the <strong>.streamDeckPlugin</strong> bundle for
+            your OS from the
+            <a href="https://github.com/anthonybaldwin/UsageButtons/releases/latest">latest release</a>
+            and double-click to install in Stream Deck. No admin
+            prompts, no dependencies — it's a single static Go binary.
+          </p>
+          <p style="margin-top: 8px;">
+            <a class="btn btn-primary" href="https://github.com/anthonybaldwin/UsageButtons/releases/latest/download/UsageButtons-Windows.streamDeckPlugin" style="margin-right: 8px;">
+              Windows
+            </a>
+            <a class="btn btn-primary" href="https://github.com/anthonybaldwin/UsageButtons/releases/latest/download/UsageButtons-macOS.streamDeckPlugin">
+              macOS
+            </a>
+          </p>
+        </div>
+      </div>
+      <div class="step">
+        <div>
+          <h4>2. Install Usage Buttons Helper <span style="opacity: 0.6; font-weight: normal;">(optional — needed for Claude extras, Cursor, Ollama)</span></h4>
+          <p>
+            The Helper is a tiny Chrome extension that reads usage
+            data from your logged-in sessions on
+            <code>claude.ai</code>, <code>cursor.com</code>, and
+            <code>ollama.com</code> — cookies <em>never leave the
+            browser</em>. The plugin only sees API response bodies.
+            Required for Claude balance / overage metrics, Cursor,
+            and Ollama; all other providers work without it.
+          </p>
+          <ol style="margin-top: 8px; padding-left: 20px;">
+            <li>Download
+              <a href="https://github.com/anthonybaldwin/UsageButtons/releases/latest/download/UsageButtons-Helper-unpacked.zip"><strong>UsageButtons-Helper-unpacked.zip</strong></a>
+              and unzip it anywhere.</li>
+            <li>Open <code>chrome://extensions</code> and enable
+              <strong>Developer mode</strong> (top-right).</li>
+            <li>Click <strong>Load unpacked</strong> and pick the
+              unzipped folder.</li>
+          </ol>
+          <p style="margin-top: 8px;">
+            That's it. The plugin auto-registers the bridge on launch
+            — no extension ID to paste, no permissions to approve.
+            Works in Chrome, Edge, Brave, and Chromium.
+            <a href="https://github.com/anthonybaldwin/UsageButtons/tree/main/chrome-extension">Full Helper README →</a>
+          </p>
+        </div>
+      </div>
+      <div class="step">
+        <div>
+          <h4>3. Add a button</h4>
+          <p>
+            In Stream Deck, drag a provider (e.g.
+            <strong>Claude</strong>, <strong>Codex</strong>,
+            <strong>Cursor</strong>) onto any key, then pick a metric
+            from the Property Inspector. Browser-sourced metrics
+            (like Claude <em>Balance</em> or Cursor
+            <em>Auto usage</em>) are clearly labeled and auto-disable
+            when the Helper isn't connected, so nothing fires against
+            Cloudflare until your browser is ready.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top: 48px">Build from source</h3>
+    <p class="sub">Written in Go. Single static binary; no runtime deps beyond <a href="https://github.com/coder/websocket">coder/websocket</a>.</p>
+    <div class="install-steps">
+      <div class="step">
+        <div>
+          <h4>Clone, build, link</h4>
           <pre>git clone https://github.com/anthonybaldwin/UsageButtons.git
-cd UsageButtons</pre>
-        </div>
-      </div>
-      <div class="step">
-        <div>
-          <h4>Build</h4>
-          <p>Compiles to a single native binary. Cross-compilation works out of the box.</p>
-          <pre>go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/</pre>
-        </div>
-      </div>
-      <div class="step">
-        <div>
-          <h4>Link into Stream Deck</h4>
-          <p>Creates a junction (Windows) or symlink (macOS) so rebuilds take effect without reinstalling.</p>
-          <pre>./scripts/install-dev.sh --restart</pre>
-        </div>
-      </div>
-      <div class="step">
-        <div>
-          <h4>Add a button</h4>
-          <p>In Stream Deck, drag a provider (e.g. <strong>Claude</strong>, <strong>Codex</strong>, <strong>Copilot</strong>) onto any key, then pick a metric from the Property Inspector. Configure OAuth where supported; for <strong>Claude extras / Cursor / Ollama</strong>, install the <a href="https://github.com/anthonybaldwin/usage-buttons/tree/main/chrome-extension">companion Chrome extension</a> (cookies never leave the browser) or paste a session cookie manually.</p>
+cd UsageButtons
+go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/
+go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/usagebuttons-native-host-win.exe ./cmd/native-host/
+./scripts/install-dev.sh --restart</pre>
+          <p>
+            Cross-compilation works out of the box (GOOS/GOARCH).
+            The <code>install-dev.sh</code> script junctions the
+            plugin folder into Stream Deck's plugin directory so
+            rebuilds take effect without reinstalling. Then load
+            <code>chrome-extension/</code> unpacked in Chrome for the
+            Helper side.
+          </p>
         </div>
       </div>
     </div>

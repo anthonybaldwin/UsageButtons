@@ -21,7 +21,6 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
-	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
 const (
@@ -238,13 +237,6 @@ var (
 	orgCache = map[string]string{}
 )
 
-// extrasWanted reports whether the user has configured Claude to
-// exercise the browser path (Source=cookie or Source=both). Returns
-// false for Source=oauth — that path doesn't touch claude.ai.
-func extrasWanted() bool {
-	return settings.ClaudeSettings().Source != settings.SourceOAuth
-}
-
 func fetchOrgID(ctx context.Context, cacheKey string) (string, error) {
 	orgMu.Lock()
 	cached, ok := orgCache[cacheKey]
@@ -296,9 +288,6 @@ func fetchOrgID(ctx context.Context, cacheKey string) (string, error) {
 }
 
 func fetchWebExtras() *extraUsageSource {
-	if !extrasWanted() {
-		return nil
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 
@@ -602,8 +591,11 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 		}
 	}
 
-	// Extra usage resolution
-	cs := settings.ClaudeSettings()
+	// Extra usage resolution: OAuth first (when the plan's extras are
+	// enabled) and fall through to the browser path (extension) if
+	// not. No user toggle — the metric itself determines whether
+	// extras are even requested; the fetch is a no-op when the
+	// extension isn't connected.
 	var extraSrc *extraUsageSource
 
 	oauthUsable := resp.ExtraUsage != nil &&
@@ -619,24 +611,12 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 			extraSrc = &s
 		}
 		extrasMu.Unlock()
-	} else if cs.Source == settings.SourceOAuth {
-		if oauthUsable {
-			extraSrc = oauthToSource(resp.ExtraUsage)
-			cacheExtras(extraSrc)
-		}
-	} else if cs.Source == settings.SourceCookie {
-		if web := fetchWebExtras(); web != nil {
-			extraSrc = web
-			cacheExtras(web)
-		}
-	} else { // "both"
-		if oauthUsable {
-			extraSrc = oauthToSource(resp.ExtraUsage)
-			cacheExtras(extraSrc)
-		} else if web := fetchWebExtras(); web != nil {
-			extraSrc = web
-			cacheExtras(web)
-		}
+	} else if oauthUsable {
+		extraSrc = oauthToSource(resp.ExtraUsage)
+		cacheExtras(extraSrc)
+	} else if web := fetchWebExtras(); web != nil {
+		extraSrc = web
+		cacheExtras(web)
 	}
 
 	metrics = append(metrics, extraUsageMetrics(extraSrc)...)

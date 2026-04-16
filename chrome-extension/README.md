@@ -1,7 +1,7 @@
 # Usage Buttons Helper (Chrome extension)
 
 Companion Chrome extension for the
-[Usage Buttons Stream Deck plugin](https://github.com/anthonybaldwin/usage-buttons).
+[Usage Buttons Stream Deck plugin](https://github.com/anthonybaldwin/UsageButtons).
 Proxies a narrow allowlist of AI usage-monitoring APIs
 (`claude.ai`, `cursor.com`, `ollama.com`) so the plugin can read your
 usage stats using your real logged-in browser session.
@@ -36,7 +36,7 @@ behind Cloudflare. Routing through Chrome means:
 ### From a GitHub Release (simplest)
 
 1. Grab `UsageButtons-Helper-unpacked.zip` from the
-   [latest release](https://github.com/anthonybaldwin/usage-buttons/releases)
+   [latest release](https://github.com/anthonybaldwin/UsageButtons/releases)
    and unzip it anywhere.
 2. Open `chrome://extensions`, toggle **Developer mode** on
    (top-right).

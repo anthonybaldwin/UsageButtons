@@ -116,6 +116,25 @@ jobs:
             $PLUGIN_DIR \
             -x "$PLUGIN_DIR/logs/*"
 
+      # Chrome extension: sync the version with the release, then ship
+      # two zip artifacts —
+      #   UsageButtons-Helper-unpacked.zip   for users to Load Unpacked
+      #     in chrome://extensions (Chrome blocks standalone .crx
+      #     sideloads since 2018, so unpacked is the viable path).
+      #   UsageButtons-Helper-webstore.zip   the source bundle formatted
+      #     for Chrome Web Store upload. The private key in the
+      #     CHROME_EXTENSION_PRIVATE_KEY secret is NOT used here — the
+      #     `key` field in manifest.json pins the deterministic ID, and
+      #     Web Store re-signs with its own chain at upload time.
+      - name: Package Chrome extension
+        run: |
+          jq --arg v "${{ steps.version.outputs.semver }}" \
+            '.version = $v' \
+            chrome-extension/manifest.json \
+            > ext-manifest.tmp && mv ext-manifest.tmp chrome-extension/manifest.json
+          (cd chrome-extension && zip -ry ../UsageButtons-Helper-unpacked.zip .)
+          cp UsageButtons-Helper-unpacked.zip UsageButtons-Helper-webstore.zip
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -124,3 +143,5 @@ jobs:
           files: |
             UsageButtons-Windows.streamDeckPlugin
             UsageButtons-macOS.streamDeckPlugin
+            UsageButtons-Helper-unpacked.zip
+            UsageButtons-Helper-webstore.zip

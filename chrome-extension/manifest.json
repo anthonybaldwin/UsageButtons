@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Usage Buttons cookie bridge",
+  "short_name": "UsageButtons",
+  "version": "0.1.0",
+  "description": "Forwards cookies for a narrow allowlist of AI usage-monitoring sites (Claude, Cursor, Ollama) to the Usage Buttons Stream Deck plugin over Chrome's native-messaging protocol.",
+  "author": "Anthony Baldwin",
+  "minimum_chrome_version": "127",
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "permissions": [
+    "cookies",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "*://*.claude.ai/*",
+    "*://*.cursor.com/*",
+    "*://*.ollama.com/*"
+  ]
+}

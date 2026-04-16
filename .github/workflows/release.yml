@@ -1,26 +1,47 @@
 name: release
 
-# Build and publish a GitHub Release when a version tag is pushed.
+# Manually-dispatched release. Single source of truth — no local
+# releasing, no ./scripts/release.sh, no local tag pushing. Kick it off
+# from the GitHub Actions UI OR via:
 #
-# Workflow:
-#   1. ./scripts/release.sh patch  (tags + pushes)
-#   2. This workflow fires, cross-compiles for win + mac
-#   3. Injects the tag version into manifest.json
-#   4. Packages platform-specific .streamDeckPlugin bundles
-#   5. Creates a GitHub Release with both bundles attached
-
+#   gh workflow run release.yml --field bump=patch
+#   gh workflow run release.yml --field bump=minor
+#   gh workflow run release.yml --field bump=custom --field custom_version=0.4.0
+#
+# What it does, start to finish:
+#   1. Compute the new version from the current manifest.json + bump.
+#   2. Refuse to run if the target tag already exists.
+#   3. Bump both manifests (plugin + Helper extension) on main.
+#   4. Commit + tag + push (main + the new tag).
+#   5. Cross-compile plugin + native-host for win/mac (both arches).
+#   6. Package Windows + macOS .streamDeckPlugin bundles.
+#   7. Package the Helper extension as an unpacked zip.
+#   8. Create the GitHub Release with all three artifacts attached.
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump'
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - custom
+      custom_version:
+        description: 'Custom semver (used only when bump=custom, e.g. 0.4.0)'
+        required: false
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   release:
-    name: build + publish release
+    name: bump + build + publish
     runs-on: ubuntu-latest
-
     env:
       PLUGIN_DIR: io.github.anthonybaldwin.UsageButtons.sdPlugin
       BIN_DIR: io.github.anthonybaldwin.UsageButtons.sdPlugin/bin
@@ -28,6 +49,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -37,23 +60,60 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      # Extract semver from tag (v0.1.0 → 0.1.0) and convert to
-      # Stream Deck's four-part format (0.1.0 → 0.1.0.0).
-      - name: Derive version from tag
+      - name: Compute new version
         id: version
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          IFS='.' read -ra PARTS <<< "$TAG"
-          SD_VERSION="${PARTS[0]:-0}.${PARTS[1]:-0}.${PARTS[2]:-0}.${PARTS[3]:-0}"
-          echo "semver=$TAG" >> "$GITHUB_OUTPUT"
-          echo "sd_version=$SD_VERSION" >> "$GITHUB_OUTPUT"
+          MANIFEST="$PLUGIN_DIR/manifest.json"
+          CURRENT=$(jq -r '.Version' "$MANIFEST")
+          IFS='.' read -ra PARTS <<< "$CURRENT"
+          MAJOR=${PARTS[0]:-0}
+          MINOR=${PARTS[1]:-0}
+          PATCH=${PARTS[2]:-0}
 
-      - name: Inject version into manifest.json
+          case "${{ inputs.bump }}" in
+            patch)  NEW="$MAJOR.$MINOR.$((PATCH+1))" ;;
+            minor)  NEW="$MAJOR.$((MINOR+1)).0" ;;
+            major)  NEW="$((MAJOR+1)).0.0" ;;
+            custom)
+              NEW="${{ inputs.custom_version }}"
+              if [ -z "$NEW" ]; then
+                echo "✗ bump=custom requires the custom_version input" >&2
+                exit 1
+              fi
+              ;;
+          esac
+
+          SD_VERSION="$NEW.0"
+          TAG="v$NEW"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "✗ tag $TAG already exists" >&2
+            exit 1
+          fi
+
+          echo "semver=$NEW" >> "$GITHUB_OUTPUT"
+          echo "sd_version=$SD_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+
+      - name: Bump manifests + commit + tag
         run: |
           jq --arg v "${{ steps.version.outputs.sd_version }}" \
             '.Version = $v' \
-            $PLUGIN_DIR/manifest.json \
-            > manifest.tmp && mv manifest.tmp $PLUGIN_DIR/manifest.json
+            $PLUGIN_DIR/manifest.json > plugin-manifest.tmp && \
+            mv plugin-manifest.tmp $PLUGIN_DIR/manifest.json
+          jq --arg v "${{ steps.version.outputs.semver }}" \
+            '.version = $v' \
+            chrome-extension/manifest.json > ext-manifest.tmp && \
+            mv ext-manifest.tmp chrome-extension/manifest.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add $PLUGIN_DIR/manifest.json chrome-extension/manifest.json
+          git commit -m "chore(release): ${{ steps.version.outputs.semver }}"
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin main
+          git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Build Windows binaries
         env:
@@ -83,15 +143,13 @@ jobs:
           esac
           WRAPPER
           chmod +x $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
+          chmod +x $BIN_DIR/usagebuttons-native-host-mac-arm64 $BIN_DIR/usagebuttons-native-host-mac-x64
 
-      # Package platform-specific bundles
       - name: Package Windows .streamDeckPlugin
         run: |
           rm -f $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
           rm -f $BIN_DIR/usagebuttons-native-host-mac-arm64 $BIN_DIR/usagebuttons-native-host-mac-x64
-          zip -ry UsageButtons-Windows.streamDeckPlugin \
-            $PLUGIN_DIR \
-            -x "$PLUGIN_DIR/logs/*"
+          zip -ry UsageButtons-Windows.streamDeckPlugin $PLUGIN_DIR -x "$PLUGIN_DIR/logs/*"
 
       - name: Package macOS .streamDeckPlugin
         run: |
@@ -112,29 +170,21 @@ jobs:
           WRAPPER
           chmod +x $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
           chmod +x $BIN_DIR/usagebuttons-native-host-mac-arm64 $BIN_DIR/usagebuttons-native-host-mac-x64
-          zip -ry UsageButtons-macOS.streamDeckPlugin \
-            $PLUGIN_DIR \
-            -x "$PLUGIN_DIR/logs/*"
+          zip -ry UsageButtons-macOS.streamDeckPlugin $PLUGIN_DIR -x "$PLUGIN_DIR/logs/*"
 
-      # Chrome extension: sync the version with the release and ship a
-      # single unpacked zip. Chrome blocks consumer .crx sideloads since
-      # 2019, so Load Unpacked is the viable self-install path from a
-      # GitHub Release. The plugin's update checker compares the Helper
-      # version reported over the handshake to the latest release tag,
-      # so bumping the release tag also nudges users to reload the
-      # extension.
+      # Chrome extension: version was already bumped in the Bump step,
+      # so this just zips the folder. Chrome blocks consumer .crx
+      # sideloads since 2019, so Load Unpacked is the viable self-
+      # install path from a GitHub Release.
       - name: Package Chrome extension
         run: |
-          jq --arg v "${{ steps.version.outputs.semver }}" \
-            '.version = $v' \
-            chrome-extension/manifest.json \
-            > ext-manifest.tmp && mv ext-manifest.tmp chrome-extension/manifest.json
           (cd chrome-extension && zip -ry ../UsageButtons-Helper-unpacked.zip .)
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: Usage Buttons ${{ steps.version.outputs.semver }}
+          tag_name: ${{ steps.version.outputs.tag }}
           generate_release_notes: true
           files: |
             UsageButtons-Windows.streamDeckPlugin

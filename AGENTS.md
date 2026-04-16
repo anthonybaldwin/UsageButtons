@@ -58,23 +58,30 @@ Cross-compilation from any host: `GOOS=darwin GOARCH=arm64 go build ...`
 
 ## Releasing
 
-```
-./scripts/release.sh patch   # or minor / major / explicit version
-```
-
-The release script bumps the version in `manifest.json`, commits,
-tags, and pushes. The GitHub Actions workflow builds and publishes
-the release from the tag.
-
-**Important:** after cutting a release, always rebuild locally so the
-running binary matches the new version:
+Releases are cut via the `release` workflow — manually dispatched
+from GitHub Actions or the CLI:
 
 ```
+gh workflow run release.yml --field bump=patch   # 0.3.2 → 0.3.3
+gh workflow run release.yml --field bump=minor   # 0.3.2 → 0.4.0
+gh workflow run release.yml --field bump=major   # 0.3.2 → 1.0.0
+gh workflow run release.yml --field bump=custom --field custom_version=0.4.0
+```
+
+No local releasing — the workflow bumps both manifests (plugin +
+Helper extension), commits to `main`, tags, builds binaries for
+Windows + macOS (both arches), packages the Helper zip, and
+publishes the GitHub Release with all three artifacts attached.
+
+**After cutting a release**, pull + rebuild locally so your dev
+binary matches the new version (otherwise the update checker on
+your own machine shows an "UPDATE" face on every button):
+
+```
+git pull
 go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/
+go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/usagebuttons-native-host-win.exe ./cmd/native-host/
 ```
-
-If you skip this, the plugin's update checker will block every button
-with an "UPDATE" face on your own dev machine.
 
 ## GitHub repo metadata
 

@@ -134,15 +134,13 @@ Architecture:
   types, `Bridge`, IPC transport, install helpers for all major
   Chromium-based browsers (Chrome, Edge, Brave, Chromium) plus
   Firefox paths (pre-wired for a future Firefox extension).
-- `internal/providers/cookieaux/` — decision layer: use the extension
-  when `HostAvailable`, else manual cookie via `httputil`, else
-  "waiting on browser" snapshot. Never fires a request from a
-  non-authenticated state.
+- `internal/providers/cookieaux/` — user-facing message helpers
+  (`MissingMessage`, `StaleMessage`) shared by the three cookie-gated
+  providers so they surface consistent snapshot-error strings.
 
-Hard rule: cookie-gated providers must check `cookieaux.Fetcher.Available`
-(equivalently `cookies.HostAvailable` when no manual paste is
-configured) before dispatching any request. Cold-start (Stream Deck
-launched before Chrome) stays quiet — no 403 loops.
+Hard rule: cookie-gated providers must check `cookies.HostAvailable`
+before dispatching any request. Cold-start (Stream Deck launched
+before Chrome) stays quiet — no 403 loops.
 
 Adding a cookie-gated provider requires three coordinated changes:
 

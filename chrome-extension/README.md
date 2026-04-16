@@ -42,10 +42,8 @@ behind Cloudflare. Routing through Chrome means:
    (top-right).
 3. Click **Load unpacked** and pick the unzipped folder.
 
-That's it. The Stream Deck plugin auto-registers the native-messaging
-bridge on launch — the extension ID is deterministic thanks to the
-pinned public key in `manifest.json`, so no ID paste, no admin
-prompt, no follow-up clicks.
+That's it. The Stream Deck plugin picks the Helper up automatically
+on launch — nothing to paste, no admin prompt, no follow-up clicks.
 
 ### From source
 

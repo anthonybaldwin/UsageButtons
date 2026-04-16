@@ -20,6 +20,7 @@ import (
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/providers/cookieaux"
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
@@ -268,26 +269,32 @@ func normalizeCookie(raw string) string {
 	return match
 }
 
-func resolveCookie() string {
+// resolveExtrasCookie picks the cookie header for the web-extras path.
+// It tries, in order:
+//   1. Manual paste from settings (normalized to sessionKey=...).
+//   2. The companion Chrome extension, if handshaken this session.
+//
+// Returns ok=false when source=oauth, or when neither path has
+// cookies. Callers MUST NOT fire a request when ok is false.
+func resolveExtrasCookie() (cookieaux.Resolution, bool) {
 	cs := settings.ClaudeSettings()
 	if cs.Source == settings.SourceOAuth {
-		return ""
+		return cookieaux.Resolution{}, false
 	}
-	return normalizeCookie(cs.CookieHeader)
+	manual := normalizeCookie(cs.CookieHeader)
+	return cookieaux.ResolveWithDeadline("claude.ai", manual)
 }
 
-func fetchOrgID(cookie string) (string, error) {
+func fetchOrgID(cacheKey string, headers map[string]string) (string, error) {
 	orgMu.Lock()
-	cached, ok := orgCache[cookie]
+	cached, ok := orgCache[cacheKey]
 	orgMu.Unlock()
 	if ok {
 		return cached, nil
 	}
 
 	var orgs []orgRow
-	err := httputil.GetJSON(baseWebURL+"/organizations", map[string]string{
-		"Cookie": cookie,
-	}, 15*time.Second, &orgs)
+	err := httputil.GetJSON(baseWebURL+"/organizations", headers, 15*time.Second, &orgs)
 	if err != nil {
 		return "", err
 	}
@@ -323,20 +330,25 @@ func fetchOrgID(cookie string) (string, error) {
 	}
 
 	orgMu.Lock()
-	orgCache[cookie] = selected
+	orgCache[cacheKey] = selected
 	orgMu.Unlock()
 	return selected, nil
 }
 
 func fetchWebExtras() *extraUsageSource {
-	cookie := resolveCookie()
-	if cookie == "" {
-		logf("extras: no cookie configured, skipping web path")
+	r, ok := resolveExtrasCookie()
+	if !ok {
+		logf("extras: no cookie (no manual paste, extension not ready); skipping web path")
 		return nil
 	}
-	logf("extras: cookie resolved (%d chars), fetching org...", len(cookie))
+	logf("extras: using %s cookie (%d chars, UA=%q), fetching org...", r.Source, len(r.Header), r.UserAgent)
 
-	orgID, err := fetchOrgID(cookie)
+	// Cache org lookups by the cookie header so a refreshed cf_clearance
+	// doesn't invalidate a still-valid org UUID.
+	cacheKey := r.Header
+	headers := r.Headers(nil)
+
+	orgID, err := fetchOrgID(cacheKey, headers)
 	if err != nil {
 		logf("extras: org fetch failed: %v", err)
 		return nil
@@ -346,7 +358,7 @@ func fetchWebExtras() *extraUsageSource {
 	var overage overageResponse
 	err = httputil.GetJSON(
 		fmt.Sprintf("%s/organizations/%s/overage_spend_limit", baseWebURL, orgID),
-		map[string]string{"Cookie": cookie},
+		headers,
 		15*time.Second, &overage,
 	)
 	if err != nil {
@@ -354,7 +366,7 @@ func fetchWebExtras() *extraUsageSource {
 		var httpErr *httputil.Error
 		if errors.As(err, &httpErr) && httpErr.Status == 401 {
 			orgMu.Lock()
-			delete(orgCache, cookie)
+			delete(orgCache, cacheKey)
 			orgMu.Unlock()
 		}
 		return nil
@@ -363,7 +375,7 @@ func fetchWebExtras() *extraUsageSource {
 	var prepaid prepaidCreditsResponse
 	prepaidErr := httputil.GetJSON(
 		fmt.Sprintf("%s/organizations/%s/prepaid/credits", baseWebURL, orgID),
-		map[string]string{"Cookie": cookie},
+		headers,
 		10*time.Second, &prepaid,
 	)
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/providers/cookieaux"
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
@@ -83,33 +84,37 @@ func (Provider) MetricIDs() []string {
 
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	cs := settings.CursorSettings()
-	if cs.CookieHeader == "" {
+	r, ok := cookieaux.ResolveWithDeadline("cursor.com", cs.CookieHeader)
+	if !ok {
 		return providers.Snapshot{
 			ProviderID:   "cursor",
 			ProviderName: "Cursor",
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Paste a Cookie header from cursor.com in Plugin Settings.",
+			Error:        cookieaux.MissingMessage("cursor.com"),
 		}, nil
 	}
 
 	var resp usageSummaryResponse
-	err := httputil.GetJSON(usageSummaryURL, map[string]string{
-		"Cookie": cs.CookieHeader,
+	err := httputil.GetJSON(usageSummaryURL, r.Headers(map[string]string{
 		"Accept": "application/json",
-	}, 15*time.Second, &resp)
+	}), 15*time.Second, &resp)
 
 	if err != nil {
 		var httpErr *httputil.Error
 		if errors.As(err, &httpErr) && (httpErr.Status == 401 || httpErr.Status == 403) {
+			errMsg := "Cursor cookie expired. Paste a fresh one from cursor.com."
+			if r.Source == "extension" {
+				errMsg = "Cursor cookie from browser is stale. Sign in to cursor.com in Chrome, then refresh."
+			}
 			return providers.Snapshot{
 				ProviderID:   "cursor",
 				ProviderName: "Cursor",
 				Source:       "cookie",
 				Metrics:      []providers.MetricValue{},
 				Status:       "unknown",
-				Error:        "Cursor cookie expired. Paste a fresh one from cursor.com.",
+				Error:        errMsg,
 			}, nil
 		}
 		return providers.Snapshot{}, err

@@ -181,7 +181,7 @@ jobs:
           (cd chrome-extension && zip -ry ../UsageButtons-Helper-unpacked.zip .)
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: Usage Buttons ${{ steps.version.outputs.semver }}
           tag_name: ${{ steps.version.outputs.tag }}

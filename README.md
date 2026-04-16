@@ -40,16 +40,21 @@ UsageButtons/
 │   ├── ui/                               # Property Inspector HTML
 │   ├── assets/                           # icons shipped with the plugin
 │   └── bin/                              # compiled binaries (gitignored)
-├── cmd/plugin/                           # Go entry point
+├── cmd/
+│   ├── plugin/                           # Go entry point
+│   └── native-host/                      # Chrome native-messaging bridge
+├── chrome-extension/                     # MV3 companion extension (fetch-proxy)
 ├── internal/
 │   ├── streamdeck/                       # SD WebSocket protocol
 │   ├── render/                           # SVG button renderer + bbox
+│   ├── cookies/                          # browser fetch-proxy client + bridge
 │   ├── providers/                        # provider interface, cache, mock
-│   │   ├── claude/                       # Claude (OAuth + cookie web API)
+│   │   ├── claude/                       # Claude (OAuth + browser web API)
 │   │   ├── codex/                        # Codex (OAuth)
+│   │   ├── cookieaux/                    # extension-or-manual-paste dispatcher
 │   │   ├── copilot/                      # GitHub Copilot
-│   │   ├── cursor/                       # Cursor (cookie)
-│   │   ├── ollama/                       # Ollama (cookie)
+│   │   ├── cursor/                       # Cursor (browser)
+│   │   ├── ollama/                       # Ollama (browser)
 │   │   ├── openrouter/                   # OpenRouter (API key)
 │   │   ├── warp/                         # Warp (GraphQL)
 │   │   ├── zai/                          # z.ai (API token)
@@ -87,6 +92,31 @@ UsageButtons/
 Cross-compilation from Windows: `GOOS=darwin GOARCH=arm64 go build ...`
 
 Full dev workflow lives in [AGENTS.md](AGENTS.md).
+
+## Browser extension (optional — for Claude extras, Cursor, Ollama)
+
+Claude's web extras (balance / overage), Cursor, and Ollama sit
+behind Cloudflare and need a logged-in browser session. Usage
+Buttons ships a small Chrome extension in
+[`chrome-extension/`](chrome-extension/) that proxies `fetch()` for
+those three sites — so the plugin reads usage stats using your real
+browser session, and your cookies never leave Chrome.
+
+- **No credentials in the plugin.** `credentials: "include"` and the
+  browser handles auth natively. The plugin only sees API JSON.
+- **Narrow by design.** Hardcoded to fetch only `claude.ai`,
+  `cursor.com`, and `ollama.com` — in both the manifest's
+  `host_permissions` and the service worker's runtime allowlist.
+- **Optional.** Providers that don't need cookies (Claude OAuth,
+  Codex, Copilot, OpenRouter, Warp, z.ai, Kimi K2) work unchanged.
+  Users who prefer manual cookie paste can still use that path.
+- **Waits patiently.** Cookie-gated buttons stay in a quiet "waiting
+  on browser" state until the extension handshakes — so launching
+  Stream Deck before Chrome doesn't trigger a 403 loop.
+
+Install steps live in the [extension README](chrome-extension/README.md).
+Works in any Chromium-based browser (Chrome, Edge, Brave, Chromium);
+a Firefox port is on the roadmap.
 
 ## License
 

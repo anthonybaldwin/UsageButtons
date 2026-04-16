@@ -55,16 +55,20 @@ jobs:
             $PLUGIN_DIR/manifest.json \
             > manifest.tmp && mv manifest.tmp $PLUGIN_DIR/manifest.json
 
-      - name: Build Windows binary
+      - name: Build Windows binaries
         env:
           GOOS: windows
           GOARCH: amd64
-        run: go build -o $BIN_DIR/plugin-win.exe ./cmd/plugin/
+        run: |
+          go build -o $BIN_DIR/plugin-win.exe ./cmd/plugin/
+          go build -o $BIN_DIR/usagebuttons-native-host-win.exe ./cmd/native-host/
 
       - name: Build macOS binaries
         run: |
           GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/plugin-mac-arm64 ./cmd/plugin/
           GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/plugin-mac-x64 ./cmd/plugin/
+          GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/usagebuttons-native-host-mac-arm64 ./cmd/native-host/
+          GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/usagebuttons-native-host-mac-x64 ./cmd/native-host/
 
       - name: Write macOS arch-dispatch wrapper
         run: |
@@ -84,15 +88,18 @@ jobs:
       - name: Package Windows .streamDeckPlugin
         run: |
           rm -f $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
+          rm -f $BIN_DIR/usagebuttons-native-host-mac-arm64 $BIN_DIR/usagebuttons-native-host-mac-x64
           zip -ry UsageButtons-Windows.streamDeckPlugin \
             $PLUGIN_DIR \
             -x "$PLUGIN_DIR/logs/*"
 
       - name: Package macOS .streamDeckPlugin
         run: |
-          rm -f $BIN_DIR/plugin-win.exe
+          rm -f $BIN_DIR/plugin-win.exe $BIN_DIR/usagebuttons-native-host-win.exe
           GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/plugin-mac-arm64 ./cmd/plugin/
           GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/plugin-mac-x64 ./cmd/plugin/
+          GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/usagebuttons-native-host-mac-arm64 ./cmd/native-host/
+          GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/usagebuttons-native-host-mac-x64 ./cmd/native-host/
           cat > $BIN_DIR/plugin-mac << 'WRAPPER'
           #!/bin/sh
           set -e
@@ -104,6 +111,7 @@ jobs:
           esac
           WRAPPER
           chmod +x $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
+          chmod +x $BIN_DIR/usagebuttons-native-host-mac-arm64 $BIN_DIR/usagebuttons-native-host-mac-x64
           zip -ry UsageButtons-macOS.streamDeckPlugin \
             $PLUGIN_DIR \
             -x "$PLUGIN_DIR/logs/*"

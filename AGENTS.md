@@ -30,10 +30,19 @@ See `README.md`.
 ## Build & run
 
 ```
-go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/   # Windows
-GOOS=darwin GOARCH=arm64 go build -o ...sdPlugin/bin/plugin-mac-arm64 ./cmd/plugin/            # macOS arm64
-GOOS=darwin GOARCH=amd64 go build -o ...sdPlugin/bin/plugin-mac-x64 ./cmd/plugin/              # macOS x64
+# Plugin binary
+go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/
+GOOS=darwin GOARCH=arm64 go build -o ...sdPlugin/bin/plugin-mac-arm64 ./cmd/plugin/
+GOOS=darwin GOARCH=amd64 go build -o ...sdPlugin/bin/plugin-mac-x64 ./cmd/plugin/
+
+# Native-messaging host binary (ships alongside the plugin for the
+# cookie bridge). See internal/cookies/ and chrome-extension/.
+go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/usagebuttons-native-host-win.exe ./cmd/native-host/
+GOOS=darwin GOARCH=arm64 go build -o ...sdPlugin/bin/usagebuttons-native-host-mac-arm64 ./cmd/native-host/
+GOOS=darwin GOARCH=amd64 go build -o ...sdPlugin/bin/usagebuttons-native-host-mac-x64 ./cmd/native-host/
+
 go vet ./...                                                                                    # lint
+go test ./...                                                                                   # tests
 ./scripts/install-dev.sh --restart                                                              # link + restart SD
 ./scripts/sync-codexbar.sh                                                                      # refresh CodexBar ref
 ```
@@ -94,6 +103,46 @@ Current topics: `go`, `golang`, `stream-deck`, `stream-deck-plugin`,
 - Button images are sent as SVG data URIs via `setImage`.
 - `UserTitleEnabled: false` on all actions — we own the full 144x144
   canvas. Never use `setTitle()` or re-enable native titles.
+
+## Browser cookie bridge
+
+Cookie-gated providers (Claude web extras, Cursor, Ollama) route
+requests through the companion Chrome extension in
+`chrome-extension/`, which proxies `fetch()` for a narrow allowlist
+of origins. Cookies never leave the browser — the plugin only sees
+API response bodies.
+
+Architecture:
+
+- `chrome-extension/` — MV3 service worker that holds a persistent
+  `connectNative` port to the native host, proxies `fetch()` for
+  `claude.ai` / `cursor.com` / `ollama.com`, and passes base64 bodies
+  on the wire.
+- `cmd/native-host/` — Go binary Chrome spawns on `connectNative`.
+  Reads/writes Chrome's stdin/stdout framing, listens on a local
+  AF_UNIX socket for the plugin, and correlates plugin requests to
+  extension replies by request ID.
+- `internal/cookies/` — shared Go package: frame codec, protocol
+  types, `Bridge`, IPC transport, install helpers for all major
+  Chromium-based browsers (Chrome, Edge, Brave, Chromium) plus
+  Firefox paths (pre-wired for a future Firefox extension).
+- `internal/providers/cookieaux/` — decision layer: use the extension
+  when `HostAvailable`, else manual cookie via `httputil`, else
+  "waiting on browser" snapshot. Never fires a request from a
+  non-authenticated state.
+
+Hard rule: cookie-gated providers must check `cookieaux.Fetcher.Available`
+(equivalently `cookies.HostAvailable` when no manual paste is
+configured) before dispatching any request. Cold-start (Stream Deck
+launched before Chrome) stays quiet — no 403 loops.
+
+Adding a cookie-gated provider requires three coordinated changes:
+
+1. Go `cookies.Allowed` in `internal/cookies/allowed.go`
+2. Extension `ALLOWED` in `chrome-extension/service-worker.js`
+3. Extension `host_permissions` in `chrome-extension/manifest.json`
+
+…plus a new extension version shipped to the Web Store.
 
 ## CodexBar reference
 

@@ -56,7 +56,13 @@ type GlobalSettings struct {
 	InvertFill            bool                 `json:"invertFill,omitempty"`
 	ShowGlyphs            *bool                `json:"showGlyphs,omitempty"`
 	SkipUpdateCheck       bool                 `json:"skipUpdateCheck,omitempty"`
-	Providers             *ProviderSettingsMap `json:"providers,omitempty"`
+	// CookieExtensionID is the Chrome extension ID the user has
+	// installed for the companion cookie bridge. Persisted so the
+	// "Register native host" PI action can keep the allowed_origins
+	// field of the native-messaging manifest in sync without the user
+	// re-entering the ID on every rebuild.
+	CookieExtensionID string               `json:"cookieExtensionId,omitempty"`
+	Providers         *ProviderSettingsMap `json:"providers,omitempty"`
 }
 
 // KeySettings are per-button settings stored by Stream Deck.
@@ -167,6 +173,14 @@ func SkipUpdateCheckEnabled() bool {
 	mu.RLock()
 	defer mu.RUnlock()
 	return current.SkipUpdateCheck
+}
+
+// CookieExtensionID returns the persisted Chrome extension ID for the
+// companion cookie bridge, or "" if the user hasn't configured it.
+func CookieExtensionID() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	return current.CookieExtensionID
 }
 
 // ClaudeSettings returns Claude provider settings with defaults.

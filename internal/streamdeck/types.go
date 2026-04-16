@@ -116,3 +116,14 @@ type GlobalSettingsEvent struct {
 	Context string          `json:"context"`
 	Payload json.RawMessage `json:"payload"`
 }
+
+// SendToPropertyInspectorEvent delivers a custom payload from the
+// plugin back to the Property Inspector. Action is the action UUID of
+// the key whose PI is open (taken from the inbound sendToPlugin
+// event).
+type SendToPropertyInspectorEvent struct {
+	Event   string          `json:"event"`
+	Action  string          `json:"action"`
+	Context string          `json:"context"`
+	Payload json.RawMessage `json:"payload"`
+}

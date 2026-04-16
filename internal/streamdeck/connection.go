@@ -135,6 +135,26 @@ func (c *Connection) SetGlobalSettings(settings json.RawMessage) {
 	})
 }
 
+// SendToPropertyInspector delivers a custom JSON payload to the PI
+// for the given action + context. Used to reply to custom
+// sendToPlugin requests (e.g., cookie-host status, registration
+// results).
+func (c *Connection) SendToPropertyInspector(context, action string, payload any) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("[streamdeck] sendToPropertyInspector marshal: %v", err)
+		return
+	}
+	if err := c.sendJSON(SendToPropertyInspectorEvent{
+		Event:   "sendToPropertyInspector",
+		Action:  action,
+		Context: context,
+		Payload: raw,
+	}); err != nil {
+		log.Printf("[streamdeck] sendToPropertyInspector error: %v", err)
+	}
+}
+
 // Log writes a message to Stream Deck's per-plugin log file.
 func (c *Connection) Log(msg string) {
 	c.sendJSON(LogMessageEvent{

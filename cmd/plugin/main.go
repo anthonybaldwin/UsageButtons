@@ -2,15 +2,21 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
+	"os"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
 	"github.com/anthonybaldwin/UsageButtons/internal/icons"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers/claude"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
@@ -312,7 +318,8 @@ func handleSendToPlugin(conn *streamdeck.Connection, ev streamdeck.Event) {
 	var payload streamdeck.SendToPluginPayload
 	json.Unmarshal(ev.Payload, &payload)
 
-	if payload.Action == "resetTextSizeOverrides" {
+	switch payload.Action {
+	case "resetTextSizeOverrides":
 		mu.Lock()
 		for ctx, key := range visibleKeys {
 			key.settings.ValueSize = ""
@@ -322,7 +329,105 @@ func handleSendToPlugin(conn *streamdeck.Connection, ev streamdeck.Event) {
 		}
 		mu.Unlock()
 		go refreshAllVisible(conn)
+	case "getCookieStatus":
+		go replyCookieStatus(conn, ev.Context, ev.Action)
+	case "registerCookieHost":
+		go replyRegisterCookieHost(conn, ev.Context, ev.Action, ev.Payload)
+	case "unregisterCookieHost":
+		go replyUnregisterCookieHost(conn, ev.Context, ev.Action)
 	}
+}
+
+// cookieHostPayload is the PI → plugin shape for registerCookieHost.
+type cookieHostPayload struct {
+	Action      string `json:"action"`
+	ExtensionID string `json:"extensionId,omitempty"`
+}
+
+func replyCookieStatus(conn *streamdeck.Connection, ctxStr, action string) {
+	pctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	available := cookies.HostAvailable(pctx)
+	conn.SendToPropertyInspector(ctxStr, action, map[string]any{
+		"action":      "cookieStatus",
+		"available":   available,
+		"ipcAddress":  cookies.IPCAddress(),
+		"hostName":    cookies.HostName,
+		"extensionId": settings.CookieExtensionID(),
+	})
+}
+
+func replyRegisterCookieHost(conn *streamdeck.Connection, ctxStr, action string, raw json.RawMessage) {
+	var p cookieHostPayload
+	_ = json.Unmarshal(raw, &p)
+
+	result := map[string]any{"action": "cookieHostRegistered"}
+	extID := strings.TrimSpace(p.ExtensionID)
+	if extID == "" {
+		result["success"] = false
+		result["error"] = "Extension ID is required (paste it from chrome://extensions)."
+		conn.SendToPropertyInspector(ctxStr, action, result)
+		return
+	}
+	hostPath, err := nativeHostBinaryPath()
+	if err != nil {
+		result["success"] = false
+		result["error"] = "Could not locate native-host binary: " + err.Error()
+		conn.SendToPropertyInspector(ctxStr, action, result)
+		return
+	}
+	if _, err := os.Stat(hostPath); err != nil {
+		result["success"] = false
+		result["error"] = "Native-host binary missing at " + hostPath + ". Rebuild the plugin."
+		conn.SendToPropertyInspector(ctxStr, action, result)
+		return
+	}
+	origins := []string{cookies.ExtensionOrigin(extID)}
+	if err := cookies.RegisterHost(cookies.HostName, hostPath, origins); err != nil {
+		result["success"] = false
+		result["error"] = err.Error()
+		conn.SendToPropertyInspector(ctxStr, action, result)
+		return
+	}
+	result["success"] = true
+	result["hostPath"] = hostPath
+	result["hostName"] = cookies.HostName
+	conn.SendToPropertyInspector(ctxStr, action, result)
+}
+
+func replyUnregisterCookieHost(conn *streamdeck.Connection, ctxStr, action string) {
+	result := map[string]any{"action": "cookieHostUnregistered"}
+	if err := cookies.UnregisterHost(cookies.HostName); err != nil {
+		result["success"] = false
+		result["error"] = err.Error()
+	} else {
+		result["success"] = true
+	}
+	conn.SendToPropertyInspector(ctxStr, action, result)
+}
+
+// nativeHostBinaryPath resolves the companion native-host binary that
+// ships alongside the main plugin binary.
+func nativeHostBinaryPath() (string, error) {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Dir(exePath)
+	var name string
+	switch runtime.GOOS {
+	case "windows":
+		name = "usagebuttons-native-host-win.exe"
+	case "darwin":
+		if runtime.GOARCH == "arm64" {
+			name = "usagebuttons-native-host-mac-arm64"
+		} else {
+			name = "usagebuttons-native-host-mac-x64"
+		}
+	default:
+		return "", errors.New("native host is only supported on Windows and macOS")
+	}
+	return filepath.Join(dir, name), nil
 }
 
 func handleKeyDown(conn *streamdeck.Connection, ev streamdeck.Event) {

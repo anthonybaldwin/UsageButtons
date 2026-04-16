@@ -405,6 +405,38 @@
       over everywhere. Buttons on inactive profiles pick up the reset
       the next time they appear.
     </p>
+
+    <div class="group-heading">Browser cookies extension</div>
+    <p class="hint">
+      Installs a companion Chrome extension that forwards cookies for
+      <code>claude.ai</code>, <code>cursor.com</code>, and
+      <code>ollama.com</code> to this plugin. Without it, those
+      providers' cookie-gated metrics (Claude balance / extras, Cursor,
+      Ollama) require a manual cookie paste in each provider's Auth
+      section.
+    </p>
+    <div id="cookieHostStatus" class="hint" style="margin-top: 10px; padding: 6px 8px; border-radius: 4px; background: #1f2937; border: 1px solid #374151;">
+      <span id="cookieHostStatusDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; background:#6b7280;"></span>
+      <span id="cookieHostStatusText">Checking extension status…</span>
+    </div>
+
+    <label for="cookieExtensionId">Extension ID
+      <span style="opacity: 0.6; font-weight: normal;">(from chrome://extensions after Load unpacked)</span>
+    </label>
+    <input id="cookieExtensionId" type="text" placeholder="32 lowercase letters a–p" autocomplete="off">
+    <p class="hint">
+      Chrome assigns a unique ID when you sideload the extension. Paste
+      it here so the plugin can authorize the native-messaging bridge
+      for your specific install.
+    </p>
+
+    <button type="button" id="registerCookieHost" class="action">
+      Register native host
+    </button>
+    <button type="button" id="unregisterCookieHost" class="action">
+      Unregister native host
+    </button>
+    <div id="cookieHostActionResult" class="hint" style="display:none; margin-top: 6px;"></div>
   </div>
 
   <script>
@@ -678,6 +710,7 @@
       // Ollama settings
       const ollama = (globals.providers && globals.providers.ollama) || {};
       document.getElementById("ollamaCookie").value = ollama.cookieHeader || "";
+      document.getElementById("cookieExtensionId").value = globals.cookieExtensionId || "";
     }
 
     function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
@@ -699,8 +732,16 @@
         if (msg.event === "didReceiveGlobalSettings") {
           applyGlobalSettings(msg.payload && msg.payload.settings);
         }
+        if (msg.event === "sendToPropertyInspector" && msg.payload) {
+          handlePluginMessage(msg.payload);
+        }
       };
       applyKeySettings(actionInfo.payload.settings || {});
+      // Poll cookie-host status every few seconds while the PI is
+      // open so the user sees the extension connect without
+      // reopening the inspector.
+      requestCookieStatus();
+      setInterval(requestCookieStatus, 2500);
     }
 
     function pushSettings() {
@@ -757,6 +798,7 @@
       const source = document.getElementById("claudeSource").value;
       const cursorCookie = document.getElementById("cursorCookie").value.trim();
       const ollamaCookie = document.getElementById("ollamaCookie").value.trim();
+      const extensionId = document.getElementById("cookieExtensionId").value.trim();
       const providers = {
         claude: {
           source,
@@ -776,6 +818,7 @@
         invertFill:            document.getElementById("invertFill").checked,
         showGlyphs:            document.getElementById("showGlyphs").checked,
         skipUpdateCheck:       document.getElementById("skipUpdateCheck").checked,
+        ...(extensionId ? { cookieExtensionId: extensionId } : {}),
         providers,
       };
       websocket.send(JSON.stringify({
@@ -786,6 +829,87 @@
       document.getElementById("claudeCookieRow").style.display =
         source === "oauth" ? "none" : "";
     }
+
+    // ---------- Cookie host status + register UI ----------
+    function requestCookieStatus() {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      websocket.send(JSON.stringify({
+        event: "sendToPlugin",
+        context: uuid,
+        payload: { action: "getCookieStatus" },
+      }));
+    }
+
+    function setCookieStatus(available, extensionId) {
+      const dot = document.getElementById("cookieHostStatusDot");
+      const text = document.getElementById("cookieHostStatusText");
+      if (available) {
+        dot.style.background = "#22c55e";
+        text.textContent = "Extension connected. Cookie-gated metrics are live.";
+      } else if (extensionId) {
+        dot.style.background = "#f59e0b";
+        text.textContent = "Waiting for extension. Open Chrome with the extension loaded.";
+      } else {
+        dot.style.background = "#6b7280";
+        text.textContent = "Extension not registered. Load it in Chrome, paste the ID, and click Register.";
+      }
+    }
+
+    function showActionResult(text, ok) {
+      const el = document.getElementById("cookieHostActionResult");
+      el.style.display = "block";
+      el.textContent = text;
+      el.style.color = ok ? "#86efac" : "#fca5a5";
+    }
+
+    function handlePluginMessage(payload) {
+      if (!payload || typeof payload !== "object") return;
+      switch (payload.action) {
+        case "cookieStatus":
+          setCookieStatus(!!payload.available, payload.extensionId);
+          break;
+        case "cookieHostRegistered":
+          if (payload.success) {
+            showActionResult(
+              "Native host registered. Reload the extension in chrome://extensions and it should connect within a second.",
+              true,
+            );
+          } else {
+            showActionResult("Register failed: " + (payload.error || "unknown"), false);
+          }
+          requestCookieStatus();
+          break;
+        case "cookieHostUnregistered":
+          if (payload.success) {
+            showActionResult("Native host unregistered.", true);
+          } else {
+            showActionResult("Unregister failed: " + (payload.error || "unknown"), false);
+          }
+          requestCookieStatus();
+          break;
+      }
+    }
+
+    document.getElementById("registerCookieHost").addEventListener("click", () => {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      const extensionId = document.getElementById("cookieExtensionId").value.trim();
+      showActionResult("Registering…", true);
+      websocket.send(JSON.stringify({
+        event: "sendToPlugin",
+        context: uuid,
+        payload: { action: "registerCookieHost", extensionId },
+      }));
+    });
+
+    document.getElementById("unregisterCookieHost").addEventListener("click", () => {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      showActionResult("Unregistering…", true);
+      websocket.send(JSON.stringify({
+        event: "sendToPlugin",
+        context: uuid,
+        payload: { action: "unregisterCookieHost" },
+      }));
+    });
 
     // ---------- Event wiring ----------
     document.getElementById("metric").addEventListener("change", () => {
@@ -814,6 +938,7 @@
       "invertFill", "showGlyphs", "skipUpdateCheck",
       "claudeSource", "claudeCookie",
       "cursorCookie", "ollamaCookie",
+      "cookieExtensionId",
     ]) {
       const el = document.getElementById(id);
       el.addEventListener("change", pushGlobalSettings);

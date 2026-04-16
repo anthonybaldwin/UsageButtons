@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Usage Buttons Helper",
   "short_name": "UsageButtons",
-  "version": "0.1.0",
+  "version": "0.3.3",
   "description": "Companion extension for the Usage Buttons Stream Deck plugin. Proxies a narrow allowlist of AI usage APIs (claude.ai, cursor.com, ollama.com) using your logged-in browser session — credentials stay in Chrome.",
   "author": "Anthony Baldwin",
   "minimum_chrome_version": "127",

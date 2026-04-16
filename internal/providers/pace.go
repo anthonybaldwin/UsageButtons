@@ -68,15 +68,17 @@ func PaceMetric(in PaceInput) *MetricValue {
 		valueStr = fmt.Sprintf("%+d%%", int(math.Round(reserve)))
 	}
 
-	// Caption
+	// Caption — always contains the word "pace" so a glance at the
+	// subtext disambiguates a pace tile from its percent sibling
+	// (which share the same top label, e.g. "SESSION").
 	var caption string
 	switch {
 	case absReserve < 2:
 		caption = "On pace"
 	case reserve > 0:
-		caption = "Reserve"
+		caption = "Pace reserve"
 	default:
-		caption = "Deficit"
+		caption = "Pace deficit"
 	}
 
 	nv := reserve

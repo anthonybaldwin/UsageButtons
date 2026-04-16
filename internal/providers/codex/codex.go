@@ -377,14 +377,14 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	if session := remainingMetric("session-percent", "SESSION", "Session window remaining (5h)", windows.session); session != nil {
 		metrics = append(metrics, *session)
 	}
-	if p := paceFromWindow("session-pace", "Session pace", "Session pace (5h)", windows.session); p != nil {
+	if p := paceFromWindow("session-pace", "Session", "Session pace (5h)", windows.session); p != nil {
 		metrics = append(metrics, *p)
 	}
 
 	if weekly := remainingMetric("weekly-percent", "WEEKLY", "Weekly window remaining", windows.weekly); weekly != nil {
 		metrics = append(metrics, *weekly)
 	}
-	if p := paceFromWindow("weekly-pace", "Weekly pace", "Weekly pace (7d)", windows.weekly); p != nil {
+	if p := paceFromWindow("weekly-pace", "Weekly", "Weekly pace (7d)", windows.weekly); p != nil {
 		metrics = append(metrics, *p)
 	}
 

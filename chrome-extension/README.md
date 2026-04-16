@@ -1,25 +1,24 @@
-# Usage Buttons cookie bridge (Chrome extension)
+# Usage Buttons Helper (Chrome extension)
 
 Companion Chrome extension for the
 [Usage Buttons Stream Deck plugin](https://github.com/anthonybaldwin/usage-buttons).
 Proxies a narrow allowlist of AI usage-monitoring APIs
-(`claude.ai`, `cursor.com`, `ollama.com`) to the plugin over Chrome's
-native-messaging protocol.
+(`claude.ai`, `cursor.com`, `ollama.com`) so the plugin can read your
+usage stats using your real logged-in browser session.
 
-**Cookies never leave the browser.** The extension uses
-`fetch(url, { credentials: "include" })` — Chrome itself applies the
+**Cookies never leave the browser.** The extension issues
+`fetch(url, { credentials: "include" })` — Chrome itself attaches the
 user's cookies, the plugin only sees the API response bodies.
 
 ## Why it exists
 
 Cookie-gated usage APIs (Claude's web extras, Cursor, Ollama) sit
-behind Cloudflare. Going through Chrome means:
+behind Cloudflare. Routing through Chrome means:
 
-- Real Chrome TLS fingerprint + User-Agent. Any future Cloudflare
-  fingerprint tightening doesn't break the plugin.
-- `cf_clearance` and `sessionKey` stay in the browser's cookie jar —
-  never serialized, never handed to a local binary.
-- No "cookies" permission needed. The extension only has
+- Real Chrome TLS fingerprint + User-Agent. No JA3 surprises.
+- `cf_clearance` and session cookies stay in the browser's cookie jar
+  — never serialized, never handed to a local binary.
+- No `cookies` permission needed. The extension holds only
   `nativeMessaging` + narrow `host_permissions` for the three
   allowlisted domains.
 
@@ -27,38 +26,51 @@ behind Cloudflare. Going through Chrome means:
 
 | Does | Doesn't |
 |---|---|
-| Fetches `claude.ai`, `cursor.com`, `ollama.com` on behalf of the plugin | Touch any other site |
-| Uses your existing browser session (credentials: "include") | Read cookies directly |
-| Mirrors the plugin's allowlist — refuses off-list URLs in the service worker | Allow the plugin to widen it at runtime |
-| Runs a persistent native-messaging port so the plugin can probe liveness | Run unless you opened Chrome |
+| Fetch `claude.ai`, `cursor.com`, `ollama.com` on behalf of the plugin | Touch any other site |
+| Use your existing browser session (`credentials: "include"`) | Read cookies directly |
+| Mirror the plugin's allowlist — refuse off-list URLs in the service worker | Let the plugin widen it at runtime |
+| Hold a persistent native-messaging port so the plugin can probe liveness | Run unless Chrome is open |
 
-## Install (developer sideload)
+## Install
 
-1. In the plugin's property inspector → **Plugin settings** tab →
-   **Browser cookies extension** section, paste the extension ID (see
-   step 3 below) and click **Register native host**. This writes the
-   native-messaging manifest Chrome needs to launch the bridge.
-2. Open `chrome://extensions` → toggle **Developer mode** (top-right).
-3. Click **Load unpacked** → select this `chrome-extension/`
-   directory. Copy the ID Chrome assigns — it's the 32-character
-   string under the extension's card.
-4. Paste that ID into the plugin's **Extension ID** field and click
-   **Register** again if you hadn't yet.
+### From a GitHub Release (simplest)
 
-The plugin's status indicator flips to "Extension connected" within a
-second of Chrome launching. Cookie-gated metrics then go live.
+1. Grab `UsageButtons-Helper-unpacked.zip` from the
+   [latest release](https://github.com/anthonybaldwin/usage-buttons/releases)
+   and unzip it anywhere.
+2. Open `chrome://extensions`, toggle **Developer mode** on
+   (top-right).
+3. Click **Load unpacked** and pick the unzipped folder.
 
-## Install (Chrome Web Store)
+That's it. The Stream Deck plugin auto-registers the native-messaging
+bridge on launch — the extension ID is deterministic thanks to the
+pinned public key in `manifest.json`, so no ID paste, no admin
+prompt, no follow-up clicks.
 
-TBD — a published version will have a fixed extension ID, so the
-registration step becomes automatic on first install.
+### From source
+
+`chrome://extensions` → **Load unpacked** → pick this
+`chrome-extension/` directory.
+
+### Chrome Web Store
+
+Not yet published. Because the extension's ID is pinned by the `key`
+field in `manifest.json`, publishing later won't break existing
+installs — the ID stays the same.
+
+## Why not a `.crx`?
+
+Chrome blocks drag-and-drop `.crx` installs from anywhere except the
+Chrome Web Store (since 2019). `.zip` + **Load unpacked** is the only
+consumer path until this is published to the Web Store.
 
 ## Supported browsers
 
 Any Chromium-based browser with standard native messaging and MV3
 fetch: Chrome (stable/beta/Canary), Microsoft Edge, Brave, Chromium.
-The plugin installs the native-messaging manifest for all of them.
+The plugin installs the native-messaging manifest for every browser
+on the machine.
 
-A Firefox port is on the roadmap (same JS, slightly different manifest
-+ `browser.*` API shim). Safari is out of scope — its extension model
-is Swift/Xcode-based with a distinct native-messaging story.
+A Firefox port is on the roadmap (same JS, slightly different
+manifest + `browser.*` shim). Safari is out of scope — its extension
+model is Swift/Xcode-based with a distinct native-messaging story.

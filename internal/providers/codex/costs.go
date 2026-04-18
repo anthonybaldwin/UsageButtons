@@ -98,6 +98,17 @@ func scanCodexCosts() (*codexCostResult, error) {
 		return codexCostCache, nil
 	}
 
+	// If the sessions directory doesn't exist (e.g. Codex not installed,
+	// or on Windows where the path may differ), return empty — not an
+	// error. This keeps the button from entering an error state on
+	// platforms where local Codex session logs simply aren't present.
+	if _, err := os.Stat(root); os.IsNotExist(err) {
+		codexCostCacheErr = nil
+		codexCostCache = &codexCostResult{}
+		codexCostCacheT = time.Now()
+		return codexCostCache, nil
+	}
+
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	thirtyDaysAgo := now.AddDate(0, 0, -30)

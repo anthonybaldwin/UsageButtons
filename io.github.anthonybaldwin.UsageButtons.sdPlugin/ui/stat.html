@@ -208,14 +208,6 @@
 
     <div class="group-heading">Text</div>
 
-    <label for="labelOverride">Label override (blank = provider default)</label>
-    <textarea id="labelOverride" rows="2" placeholder="e.g. CLAUDE&#10;SESSION"></textarea>
-
-    <div class="checkbox-row">
-      <input id="hideLabel" type="checkbox">
-      <label for="hideLabel">Hide built-in label</label>
-    </div>
-
     <label for="captionOverride">Subtext override (blank = metric default)</label>
     <input id="captionOverride" type="text" placeholder="e.g. Work, Monthly, Prepaid">
     <p class="hint">
@@ -472,6 +464,8 @@
         ["sonnet-pace",               "Sonnet pace (7d burn rate)",     "pace"],
         ["weekly-opus-percent",       "Opus % remaining (weekly)",      "pct"],
         ["opus-pace",                 "Opus pace (7d burn rate)",       "pace"],
+        ["weekly-design-percent",     "Claude Design % remaining (weekly)", "pct"],
+        ["design-pace",               "Claude Design pace (7d burn rate)",  "pace"],
         ["extra-usage-enabled",       "Extra usage — ON / OFF",         "toggle"],
         ["extra-usage-percent",       "Extra usage headroom %",         "pct"],
         ["extra-usage-limit",         "Extra usage monthly limit ($)",  "ref-dollar"],
@@ -714,8 +708,6 @@
       updateFeatureVisibility(currentProviderId, metricId);
       document.getElementById("refreshMinutes").value =
         settings.refreshMinutes != null ? String(settings.refreshMinutes) : "";
-      document.getElementById("labelOverride").value = settings.labelOverride || "";
-      document.getElementById("hideLabel").checked = !!settings.hideLabel;
       document.getElementById("captionOverride").value = settings.captionOverride || "";
       document.getElementById("showResetTimer").checked = settings.showResetTimer !== false;
       document.getElementById("showRawCounts").checked = !!settings.showRawCounts;
@@ -806,8 +798,6 @@
       const payload = {
         metricId:       metricId,
         refreshMinutes: refreshRaw === "" ? undefined : Number(refreshRaw),
-        labelOverride:  document.getElementById("labelOverride").value,
-        hideLabel:      document.getElementById("hideLabel").checked,
         captionOverride: document.getElementById("captionOverride").value,
         showResetTimer: document.getElementById("showResetTimer").checked,
         showRawCounts:  document.getElementById("showRawCounts").checked || undefined,
@@ -1031,7 +1021,7 @@
       pushSettings();
     });
     for (const id of [
-      "metric", "refreshMinutes", "labelOverride", "hideLabel",
+      "metric", "refreshMinutes",
       "captionOverride",
       "showResetTimer", "showRawCounts", "showBorder", "showGlyph",
       "valueSize", "subvalueSize",

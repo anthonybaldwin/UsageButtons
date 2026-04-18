@@ -236,11 +236,14 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 			latest = "?"
 		}
 		conn.SetImage(ev.Context, render.RenderButton(render.ButtonInput{
-			Label: "UPDATE", Value: "v" + latest,
+			Value: "v" + latest,
 			Subvalue: "New Version", Fill: "#f59e0b", ValueSize: "medium",
 		}))
+		conn.SetTitle(ev.Context, "UPDATE")
 		return
 	}
+
+	title := deriveLabelFromMetricID(metricID)
 
 	// Try to render from cache immediately (avoid loading flash).
 	cached := providers.PeekSnapshot(providerID)
@@ -257,9 +260,16 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 
 		metric := findMetric(cached.Metrics, metricID)
 		if metric != nil {
+			metricLabel := strings.ToUpper(metric.Label)
+			if metricLabel == "" {
+				metricLabel = title
+			}
 			conn.SetImage(ev.Context, renderMetric(prov, cached.ProviderName, *metric, ks))
+			conn.SetTitle(ev.Context, metricLabel)
 		} else {
-			conn.SetImage(ev.Context, placeholderFace(prov, deriveLabelFromMetricID(metricID), "—", "", ks))
+			caption := metricCaptionForPlaceholder(metricID)
+			conn.SetImage(ev.Context, placeholderFace(prov, "", "—", caption, ks))
+			conn.SetTitle(ev.Context, title)
 		}
 		conn.Logf("key appeared with cached data (now tracking %d visible key(s))", countVisible())
 		return
@@ -275,6 +285,7 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	mu.Unlock()
 
 	conn.SetImage(ev.Context, loadingFaceFor(providerID, &ks))
+	conn.SetTitle(ev.Context, title)
 	conn.Logf("key appeared, no cache (now tracking %d visible key(s))", countVisible())
 	go refreshKey(conn, ev.Context, false)
 }
@@ -526,7 +537,6 @@ func showUpdateFace(conn *streamdeck.Connection) {
 		latest = "?"
 	}
 	svg := render.RenderButton(render.ButtonInput{
-		Label:     "UPDATE",
 		Value:     "v" + latest,
 		Subvalue:  "New Version",
 		Fill:      "#f59e0b",
@@ -535,6 +545,7 @@ func showUpdateFace(conn *streamdeck.Connection) {
 	mu.Lock()
 	for ctx := range visibleKeys {
 		conn.SetImage(ctx, svg)
+		conn.SetTitle(ctx, "UPDATE")
 	}
 	mu.Unlock()
 }
@@ -563,13 +574,15 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 	prov := providers.Get(providerID)
 	if prov == nil {
 		conn.SetImage(context, render.RenderButton(render.ButtonInput{
-			Label: "ERR",
 			Value: "?",
 			Subvalue: providerID,
 			Stale: boolPtr(true),
 		}))
+		conn.SetTitle(context, "ERR")
 		return
 	}
+
+	title := deriveLabelFromMetricID(metricID)
 
 	snapshot := providers.GetSnapshot(prov, providers.GetSnapshotOptions{Force: force})
 
@@ -615,7 +628,8 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 		}
 
 		conn.SetImage(context, placeholderFace(prov,
-			strings.ToUpper(prov.Name()), value, subHint, ks))
+			"", value, subHint, ks))
+		conn.SetTitle(context, title)
 		return
 	}
 
@@ -642,17 +656,28 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 						fake.ResetInSeconds = m.ResetInSeconds
 					}
 					conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, fake, ks))
+					conn.SetTitle(context, title)
 					return
 				}
 			}
 		}
 
+		// Dashed-out placeholder — show metric caption as subtext
+		// so the user knows what this button is for.
+		caption := metricCaptionForPlaceholder(metricID)
 		conn.SetImage(context, placeholderFace(prov,
-			deriveLabelFromMetricID(metricID), "—", "", ks))
+			"", "—", caption, ks))
+		conn.SetTitle(context, title)
 		return
 	}
 
+	// Use the metric's own label for the title (uppercased).
+	metricLabel := strings.ToUpper(metric.Label)
+	if metricLabel == "" {
+		metricLabel = title
+	}
 	conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, *metric, ks))
+	conn.SetTitle(context, metricLabel)
 }
 
 // --- Rendering helpers ---
@@ -678,19 +703,8 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 		Value: valueStr,
 	}
 
-	// Label
-	if !ks.HideLabel {
-		override := strings.TrimSpace(ks.LabelOverride)
-		if override != "" {
-			in.Label = override
-		} else {
-			label := metric.Label
-			if label == "" {
-				label = providerName
-			}
-			in.Label = strings.ToUpper(label)
-		}
-	}
+	// Label is handled by the SDK native title (setTitle), so we
+	// don't render it in SVG. The title is set by the caller.
 
 	// Ratio
 	isReferenceCard := metric.RatioVal() < 0
@@ -789,9 +803,8 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 	return render.RenderButton(in)
 }
 
-func placeholderFace(prov providers.Provider, label, value, subvalue string, ks settings.KeySettings) string {
+func placeholderFace(prov providers.Provider, _, value, subvalue string, ks settings.KeySettings) string {
 	in := render.ButtonInput{
-		Label: label,
 		Value: value,
 		Fill:  prov.BrandColor(),
 		Bg:    prov.BrandBg(),
@@ -946,23 +959,58 @@ func formatValue(v any, unit string) string {
 
 var knownLabels = map[string]string{
 	"session-percent":        "SESSION",
-	"session-pace":           "Session",
+	"session-pace":           "SESSION",
 	"weekly-percent":         "WEEKLY",
-	"weekly-pace":            "Weekly",
+	"weekly-pace":            "WEEKLY",
 	"weekly-sonnet-percent":  "SONNET",
 	"weekly-opus-percent":    "OPUS",
-	"sonnet-pace":            "Sonnet",
-	"opus-pace":              "Opus",
+	"weekly-design-percent":  "DESIGN",
+	"sonnet-pace":            "SONNET",
+	"opus-pace":              "OPUS",
+	"design-pace":            "DESIGN",
 	"extra-usage-percent":    "EXTRA USAGE",
 	"extra-usage-limit":      "LIMIT",
 	"extra-usage-remaining":  "LEFT",
 	"extra-usage-spent":      "SPENT",
 	"extra-usage-balance":    "BALANCE",
 	"extra-usage-enabled":    "EXTRA USAGE",
+	"extra-usage-auto-reload": "RELOAD",
 	"credits-balance":        "CREDITS",
 	"credits":                "CREDITS",
 	"cost-today":             "TODAY",
 	"cost-30d":               "30 DAYS",
+}
+
+// metricCaptionForPlaceholder returns a short caption for dashed-out
+// placeholder buttons (no data yet) so the user knows what the button
+// is for even when the glyph is the only visual.
+var knownCaptions = map[string]string{
+	"session-percent":        "Remaining",
+	"session-pace":           "Pace",
+	"weekly-percent":         "Remaining",
+	"weekly-pace":            "Pace",
+	"weekly-sonnet-percent":  "Remaining",
+	"weekly-opus-percent":    "Remaining",
+	"weekly-design-percent":  "Remaining",
+	"sonnet-pace":            "Pace",
+	"opus-pace":              "Pace",
+	"design-pace":            "Pace",
+	"extra-usage-percent":    "Remaining",
+	"extra-usage-limit":      "Monthly",
+	"extra-usage-spent":      "This month",
+	"extra-usage-balance":    "Prepaid",
+	"extra-usage-enabled":    "Toggle",
+	"extra-usage-auto-reload": "Auto-reload",
+	"credits-balance":        "Balance",
+	"cost-today":             "Cost (local)",
+	"cost-30d":               "Cost (local)",
+}
+
+func metricCaptionForPlaceholder(metricID string) string {
+	if caption, ok := knownCaptions[metricID]; ok {
+		return caption
+	}
+	return ""
 }
 
 func deriveLabelFromMetricID(metricID string) string {

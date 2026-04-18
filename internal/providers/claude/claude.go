@@ -169,6 +169,10 @@ type usageResponse struct {
 	SevenDay       *usageWindow   `json:"seven_day"`
 	SevenDaySonnet *usageWindow   `json:"seven_day_sonnet"`
 	SevenDayOpus   *usageWindow   `json:"seven_day_opus"`
+	// seven_day_omelette is Anthropic's internal codename for the
+	// Claude Design weekly bucket (surfaced in the claude.ai UI as
+	// "Claude Design" alongside "Sonnet only" and "All models").
+	SevenDayDesign *usageWindow   `json:"seven_day_omelette"`
 	ExtraUsage     *extraUsageRaw `json:"extra_usage"`
 }
 
@@ -485,6 +489,7 @@ func (Provider) MetricIDs() []string {
 	return []string{
 		"session-percent", "session-pace", "weekly-percent", "weekly-pace",
 		"weekly-sonnet-percent", "sonnet-pace", "weekly-opus-percent", "opus-pace",
+		"weekly-design-percent", "design-pace",
 		"extra-usage-percent", "extra-usage-limit", "extra-usage-spent",
 		"extra-usage-enabled", "extra-usage-balance", "extra-usage-auto-reload",
 		"cost-today", "cost-30d",
@@ -552,7 +557,7 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 	if resp.FiveHour != nil && resp.FiveHour.Utilization != nil && resp.FiveHour.ResetsAt != nil {
 		if t, err := time.Parse(time.RFC3339, *resp.FiveHour.ResetsAt); err == nil {
 			if p := providers.PaceMetric(providers.PaceInput{
-				MetricID: "session-pace", Label: "Session", Name: "Session pace (5h)",
+				MetricID: "session-pace", Label: "SESSION", Name: "Session pace (5h)",
 				UsedPercent: *resp.FiveHour.Utilization, WindowDuration: 5 * time.Hour, ResetIn: time.Until(t),
 			}); p != nil {
 				metrics = append(metrics, *p)
@@ -567,7 +572,7 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 	if resp.SevenDay != nil && resp.SevenDay.Utilization != nil && resp.SevenDay.ResetsAt != nil {
 		if t, err := time.Parse(time.RFC3339, *resp.SevenDay.ResetsAt); err == nil {
 			if p := providers.PaceMetric(providers.PaceInput{
-				MetricID: "weekly-pace", Label: "Weekly", Name: "Weekly pace (7d)",
+				MetricID: "weekly-pace", Label: "WEEKLY", Name: "Weekly pace (7d)",
 				UsedPercent: *resp.SevenDay.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
 			}); p != nil {
 				metrics = append(metrics, *p)
@@ -584,7 +589,7 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 	if resp.SevenDaySonnet != nil && resp.SevenDaySonnet.Utilization != nil && resp.SevenDaySonnet.ResetsAt != nil {
 		if t, err := time.Parse(time.RFC3339, *resp.SevenDaySonnet.ResetsAt); err == nil {
 			if p := providers.PaceMetric(providers.PaceInput{
-				MetricID: "sonnet-pace", Label: "Sonnet", Name: "Sonnet pace (7d)",
+				MetricID: "sonnet-pace", Label: "SONNET", Name: "Sonnet pace (7d)",
 				UsedPercent: *resp.SevenDaySonnet.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
 			}); p != nil {
 				metrics = append(metrics, *p)
@@ -602,8 +607,27 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 		if resp.SevenDayOpus.Utilization != nil && resp.SevenDayOpus.ResetsAt != nil {
 			if t, err := time.Parse(time.RFC3339, *resp.SevenDayOpus.ResetsAt); err == nil {
 				if p := providers.PaceMetric(providers.PaceInput{
-					MetricID: "opus-pace", Label: "Opus", Name: "Opus pace (7d)",
+					MetricID: "opus-pace", Label: "OPUS", Name: "Opus pace (7d)",
 					UsedPercent: *resp.SevenDayOpus.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
+				}); p != nil {
+					metrics = append(metrics, *p)
+				}
+			}
+		}
+	}
+
+	if resp.SevenDayDesign != nil {
+		if md := remainingMetric("weekly-design-percent", "DESIGN", "Weekly Claude Design remaining", resp.SevenDayDesign); md != nil {
+			if md.ResetInSeconds == nil && weekly != nil && weekly.ResetInSeconds != nil {
+				md.ResetInSeconds = weekly.ResetInSeconds
+			}
+			metrics = append(metrics, *md)
+		}
+		if resp.SevenDayDesign.Utilization != nil && resp.SevenDayDesign.ResetsAt != nil {
+			if t, err := time.Parse(time.RFC3339, *resp.SevenDayDesign.ResetsAt); err == nil {
+				if p := providers.PaceMetric(providers.PaceInput{
+					MetricID: "design-pace", Label: "DESIGN", Name: "Claude Design pace (7d)",
+					UsedPercent: *resp.SevenDayDesign.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
 				}); p != nil {
 					metrics = append(metrics, *p)
 				}

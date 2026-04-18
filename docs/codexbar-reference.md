@@ -55,7 +55,7 @@ so any of these can be bound to a button.
 |---|---|---|---|
 | `session-percent` | 5h / session window remaining | up (as remaining) | 5h |
 | `weekly-percent` | 7-day window remaining | up | 7d |
-| `weekly-opus-percent` / `weekly-sonnet-percent` | Claude model-specific weekly | up | 7d |
+| `weekly-opus-percent` / `weekly-sonnet-percent` / `weekly-design-percent` | Claude model-specific weekly | up | 7d |
 | `pro-percent` / `flash-percent` / `flash-lite-percent` | Gemini model-family remaining | up | 1d |
 | `credits-remaining` | credits left as an absolute number | up | n/a or purchase |
 | `credits-percent` | credits / limit | up | monthly or n/a |

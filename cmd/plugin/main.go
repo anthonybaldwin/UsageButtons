@@ -368,6 +368,7 @@ func replyCookieStatus(conn *streamdeck.Connection, ctxStr, action string) {
 		"updateAvailable":  updateAvailable,
 		"ipcAddress":       cookies.IPCAddress(),
 		"hostName":         cookies.HostName,
+		"hostRegistered":   cookies.IsHostRegistered(cookies.HostName),
 	})
 }
 

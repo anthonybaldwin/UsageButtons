@@ -415,18 +415,19 @@
       prompts.
     </p>
 
-    <button type="button" id="registerCookieHost" class="action">
-      Re-register native host
+    <button type="button" id="registerCookieHost" class="action" style="display:none;">
+      Register native host
     </button>
-    <button type="button" id="unregisterCookieHost" class="action">
+    <button type="button" id="unregisterCookieHost" class="action" style="display:none;">
       Unregister native host
     </button>
     <div id="cookieHostActionResult" class="hint" style="display:none; margin-top: 6px;"></div>
     <p class="hint">
-      <strong>Re-register</strong> rewrites the manifest if you've
-      rebuilt the plugin or moved the install. <strong>Unregister</strong>
-      cleanly removes every registry key and manifest file the plugin
-      has written.
+      <strong>Register</strong> writes the native-messaging manifest
+      so browsers can talk to the plugin.
+      <strong>Unregister</strong> cleanly removes every registry key
+      and manifest file. Tip: unregister before removing the plugin
+      from Stream Deck.
     </p>
   </div>
 
@@ -913,6 +914,11 @@
       } else {
         versionLine.style.display = "none";
       }
+
+      // Toggle register/unregister button visibility.
+      const registered = !!payload.hostRegistered;
+      document.getElementById("registerCookieHost").style.display = registered ? "none" : "";
+      document.getElementById("unregisterCookieHost").style.display = registered ? "" : "none";
 
       // Repopulate the metric dropdown if the connection state flipped
       // so disabled/labeled options reflect current reality.

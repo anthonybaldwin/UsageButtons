@@ -82,6 +82,17 @@ func RegisterHost(hostName, binaryPath string, allowedOrigins []string) error {
 	return firstErr
 }
 
+// IsHostRegistered reports whether the native-messaging manifest file
+// exists on disk.
+func IsHostRegistered(hostName string) bool {
+	path, err := manifestFilePath(hostName)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
+	return err == nil
+}
+
 // UnregisterHost removes the registry keys for every browser and the
 // manifest file. Missing keys are treated as success (already gone is
 // the desired end state).

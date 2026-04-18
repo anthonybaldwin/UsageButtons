@@ -75,6 +75,22 @@ func RegisterHost(hostName, binaryPath string, allowedOrigins []string) error {
 	return firstErr
 }
 
+// IsHostRegistered reports whether a native-messaging manifest file
+// exists for at least one browser.
+func IsHostRegistered(hostName string) bool {
+	base, err := appSupportDir()
+	if err != nil {
+		return false
+	}
+	for _, b := range darwinBrowserDirs {
+		path := filepath.Join(base, b.dir, "NativeMessagingHosts", hostName+".json")
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // UnregisterHost removes every per-browser manifest file for hostName.
 func UnregisterHost(hostName string) error {
 	base, err := appSupportDir()

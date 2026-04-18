@@ -470,7 +470,7 @@ func extraUsageMetrics(extra *extraUsageSource) []providers.MetricValue {
 			Name: fmt.Sprintf("Extra usage spent (%s)", extra.currency),
 			Value: fmt.Sprintf("$%.2f", spent), NumericValue: &spent,
 			NumericUnit: "dollars", NumericGoodWhen: "low", NumericMax: &limit,
-			Ratio: &spentRatio, Direction: "up", Caption: "This month",
+			Ratio: &spentRatio, Direction: "up", Caption: "Account total",
 		},
 	)
 	return out

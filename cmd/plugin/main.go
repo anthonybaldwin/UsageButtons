@@ -997,13 +997,13 @@ var knownCaptions = map[string]string{
 	"design-pace":            "Pace",
 	"extra-usage-percent":    "Remaining",
 	"extra-usage-limit":      "Monthly",
-	"extra-usage-spent":      "This month",
+	"extra-usage-spent":      "Account total",
 	"extra-usage-balance":    "Prepaid",
 	"extra-usage-enabled":    "Toggle",
 	"extra-usage-auto-reload": "Auto-reload",
 	"credits-balance":        "Balance",
-	"cost-today":             "Cost (local)",
-	"cost-30d":               "Cost (local)",
+	"cost-today":             "This machine",
+	"cost-30d":               "This machine",
 }
 
 func metricCaptionForPlaceholder(metricID string) string {

@@ -185,6 +185,12 @@ type extraUsageSource struct {
 	currency          string
 	balanceCents      *int64
 	autoReloadEnabled *bool
+	// disabledReason / disabledUntil come from the web overage
+	// endpoint and describe why account-level overage is paused
+	// (e.g. "self_selected_spend_limit_reached" until the next
+	// billing cycle). OAuth doesn't expose them.
+	disabledReason string
+	disabledUntil  *time.Time
 }
 
 // --- Extras caching ---
@@ -248,6 +254,8 @@ type overageResponse struct {
 	AccountEmail       string `json:"account_email"`
 	OutOfCredits       *bool  `json:"out_of_credits"`
 	SeatTier           string `json:"seat_tier"`
+	DisabledReason     string `json:"disabled_reason"`
+	DisabledUntil      string `json:"disabled_until"`
 }
 
 type prepaidCreditsResponse struct {
@@ -356,6 +364,12 @@ func fetchWebExtras() *extraUsageSource {
 		monthlyLimitCents: valOr(overage.MonthlyCreditLimit, 0),
 		usedCreditsCents:  valOr(overage.UsedCredits, 0),
 		currency:          defStr(overage.Currency, "USD"),
+		disabledReason:    overage.DisabledReason,
+	}
+	if overage.DisabledUntil != "" {
+		if t, err := time.Parse(time.RFC3339, overage.DisabledUntil); err == nil && t.After(time.Now()) {
+			result.disabledUntil = &t
+		}
 	}
 
 	if prepaidErr == nil {
@@ -452,6 +466,25 @@ func extraUsageMetrics(extra *extraUsageSource) []providers.MetricValue {
 	remRatio := remPct / 100
 	spentRatio := usedPct / 100
 
+	spentCaption := "Account total"
+	if reason := humanizeDisabledReason(extra.disabledReason); reason != "" {
+		spentCaption = reason
+	}
+
+	spentMetric := providers.MetricValue{
+		ID: "extra-usage-spent", Label: "SPENT",
+		Name:  fmt.Sprintf("Extra usage spent (%s)", extra.currency),
+		Value: fmt.Sprintf("$%.2f", spent), NumericValue: &spent,
+		NumericUnit: "dollars", NumericGoodWhen: "low", NumericMax: &limit,
+		Ratio: &spentRatio, Direction: "up", Caption: spentCaption,
+	}
+	if extra.disabledUntil != nil {
+		delta := time.Until(*extra.disabledUntil).Seconds()
+		if delta > 0 {
+			spentMetric.ResetInSeconds = &delta
+		}
+	}
+
 	out = append(out,
 		providers.MetricValue{
 			ID: "extra-usage-percent", Label: "HEADROOM", Name: "Extra usage headroom",
@@ -465,13 +498,7 @@ func extraUsageMetrics(extra *extraUsageSource) []providers.MetricValue {
 			NumericUnit: "dollars", NumericGoodWhen: "low", NumericMax: &limit,
 			Caption: "Monthly",
 		},
-		providers.MetricValue{
-			ID: "extra-usage-spent", Label: "SPENT",
-			Name: fmt.Sprintf("Extra usage spent (%s)", extra.currency),
-			Value: fmt.Sprintf("$%.2f", spent), NumericValue: &spent,
-			NumericUnit: "dollars", NumericGoodWhen: "low", NumericMax: &limit,
-			Ratio: &spentRatio, Direction: "up", Caption: "Account total",
-		},
+		spentMetric,
 	)
 	return out
 }
@@ -713,6 +740,24 @@ func defStr(v, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+// humanizeDisabledReason maps Anthropic's machine-readable
+// disabled_reason values to a short caption that fits a Stream Deck
+// button. Returns "" for unknown or empty reasons.
+func humanizeDisabledReason(r string) string {
+	switch strings.ToLower(strings.TrimSpace(r)) {
+	case "":
+		return ""
+	case "self_selected_spend_limit_reached":
+		return "Limit hit"
+	case "out_of_credits":
+		return "No credits"
+	case "payment_failed":
+		return "Payment failed"
+	default:
+		return ""
+	}
 }
 
 func ptrStr(p *string) string {

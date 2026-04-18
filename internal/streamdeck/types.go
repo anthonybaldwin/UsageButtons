@@ -26,9 +26,29 @@ type Event struct {
 // WillAppearPayload is the payload of a willAppear event.
 type WillAppearPayload struct {
 	Settings  json.RawMessage `json:"settings"`
+	Title     string          `json:"title"`
 	Row       int             `json:"row"`
 	Column    int             `json:"column"`
 	IsInMulti bool            `json:"isInMultiAction"`
+}
+
+// TitleParameters carries the native title display settings.
+type TitleParameters struct {
+	ShowTitle bool `json:"showTitle"`
+}
+
+// TitleParametersDidChangePayload is sent when the user edits a
+// key's title or title settings in the Stream Deck UI.
+type TitleParametersDidChangePayload struct {
+	Settings        json.RawMessage `json:"settings"`
+	Title           string          `json:"title"`
+	TitleParameters TitleParameters  `json:"titleParameters"`
+}
+
+// WillAppearTitleParameters extends WillAppearPayload with title info.
+// Parsed separately so existing code doesn't break.
+type WillAppearTitleParameters struct {
+	TitleParameters *TitleParameters `json:"titleParameters"`
 }
 
 // DidReceiveSettingsPayload is the payload of didReceiveSettings.

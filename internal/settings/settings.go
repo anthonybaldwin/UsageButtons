@@ -52,6 +52,7 @@ type KeySettings struct {
 	ShowGlyph      *bool    `json:"showGlyph,omitempty"`
 	ShowResetTimer *bool    `json:"showResetTimer,omitempty"`
 	ShowRawCounts  *bool    `json:"showRawCounts,omitempty"`
+	HideSubvalue   bool     `json:"hideSubvalue,omitempty"`
 }
 
 // --- Global settings singleton ---

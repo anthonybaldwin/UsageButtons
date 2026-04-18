@@ -210,6 +210,11 @@
 
     <label for="captionOverride">Subtext override (blank = metric default)</label>
     <input id="captionOverride" type="text" placeholder="e.g. Work, Monthly, Prepaid">
+
+    <div class="checkbox-row">
+      <input id="hideSubvalue" type="checkbox">
+      <label for="hideSubvalue">Hide subtext</label>
+    </div>
     <p class="hint">
       Replaces the subtext under the big number (e.g. "Remaining",
       "Used", "Prepaid"). Reset countdowns always win — if the
@@ -709,6 +714,7 @@
       document.getElementById("refreshMinutes").value =
         settings.refreshMinutes != null ? String(settings.refreshMinutes) : "";
       document.getElementById("captionOverride").value = settings.captionOverride || "";
+      document.getElementById("hideSubvalue").checked = !!settings.hideSubvalue;
       document.getElementById("showResetTimer").checked = settings.showResetTimer !== false;
       document.getElementById("showRawCounts").checked = !!settings.showRawCounts;
       document.getElementById("showBorder").checked = settings.showBorder !== false;
@@ -799,6 +805,7 @@
         metricId:       metricId,
         refreshMinutes: refreshRaw === "" ? undefined : Number(refreshRaw),
         captionOverride: document.getElementById("captionOverride").value,
+        hideSubvalue:   document.getElementById("hideSubvalue").checked || undefined,
         showResetTimer: document.getElementById("showResetTimer").checked,
         showRawCounts:  document.getElementById("showRawCounts").checked || undefined,
         showBorder:     document.getElementById("showBorder").checked,
@@ -1022,7 +1029,7 @@
     });
     for (const id of [
       "metric", "refreshMinutes",
-      "captionOverride",
+      "captionOverride", "hideSubvalue",
       "showResetTimer", "showRawCounts", "showBorder", "showGlyph",
       "valueSize", "subvalueSize",
       "fillDirection", "fillColor", "bgColor", "textColor",

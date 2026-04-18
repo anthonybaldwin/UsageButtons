@@ -111,32 +111,17 @@ func RenderButton(in ButtonInput) string {
 	}
 	labelLineHeight := int(math.Round(float64(labelFontSize) * 1.08))
 
-	// Vertical layout.
-	// Compute subvalue geometry first so the value-centering math can
-	// mirror the bottom padding at the top when the label is hidden —
-	// without the mirror the value drifts upward instead of staying in
-	// the visual center of the tile.
+	// Vertical layout: always computed as if label AND subvalue are
+	// present. This prevents the value and glyph from shifting when
+	// content is toggled (hide subtext, show native title, etc.).
 
 	// Subvalue baseline: leave subvalueFontSize*0.35 pixels of bottom padding
 	subvalueBaselineY := float64(Canvas) - math.Round(float64(preferredSubFont)*0.35)
-	subvalueTop := float64(Canvas)
-	if hasSub {
-		subvalueTop = subvalueBaselineY - math.Round(float64(preferredSubFont)*0.85)
-	}
+	subvalueTop := subvalueBaselineY - math.Round(float64(preferredSubFont)*0.85)
 
-	labelBlockHeight := 0
-	if hasLabel {
-		labelBlockHeight = len(labelLinesRaw) * labelLineHeight
-	}
-	labelBottom := 0.0
-	switch {
-	case hasLabel:
-		labelBottom = 14.0 + float64(labelBlockHeight)
-	case hasSub:
-		// No label but subvalue present: mirror the subvalue's bottom
-		// gap at the top so the big number stays centered.
-		labelBottom = float64(Canvas) - subvalueTop
-	}
+	// Label block height for one line at the default label size.
+	defaultLabelH := float64(labelFontMax) * 1.08
+	labelBottom := 14.0 + defaultLabelH
 
 	// Value Y: centered between label bottom and subvalue top
 	top := labelBottom + float64(valueFontSize)*0.75
@@ -193,14 +178,11 @@ func RenderButton(in ButtonInput) string {
 	if showGlyph && in.Glyph != nil {
 		switch glyphMode {
 		case "watermark":
-			zoneTop := 6.0
-			if hasLabel {
-				zoneTop = labelBottom + 6
-			}
-			zoneBot := float64(Canvas) - 6
-			if hasSub {
-				zoneBot = subvalueTop - 6
-			}
+			// Fixed glyph: sized and centered within the label-to-
+			// subvalue zone. Positions never change regardless of
+			// whether label/subvalue are actually rendered.
+			zoneTop := labelBottom + 6
+			zoneBot := subvalueTop - 6
 			zoneH := zoneBot - zoneTop
 			gSize := math.Max(44, math.Min(72, zoneH))
 			gxOff := (float64(Canvas) - gSize) / 2
@@ -302,11 +284,22 @@ func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, sho
 		glyphColor = fg
 	}
 
+	// Use the same glyph zone as RenderButton's watermark so the
+	// glyph never shifts between loading and data states.
+	defaultLabelH := float64(labelFontMax) * 1.08
+	loadLabelBottom := 14.0 + defaultLabelH
+	prefSub := subvalueFontSizes["large"]
+	loadSubTop := float64(Canvas) - math.Round(float64(prefSub)*0.35) - math.Round(float64(prefSub)*0.85)
+	lzTop := loadLabelBottom + 6
+	lzBot := loadSubTop - 6
+	lzH := lzBot - lzTop
+	loadGlyphSize := math.Max(44, math.Min(72, lzH))
+
 	glyphElement := ""
 	if glyph != nil {
-		glyphSize := 56.0
-		glyphOffset := (float64(Canvas) - glyphSize) / 2
-		xf := ContentFitTransform(glyph.D, glyphOffset, glyphOffset, glyphSize, glyphSize)
+		gxOff := (float64(Canvas) - loadGlyphSize) / 2
+		gyOff := math.Round(lzTop + (lzH-loadGlyphSize)/2)
+		xf := ContentFitTransform(glyph.D, gxOff, gyOff, loadGlyphSize, loadGlyphSize)
 		glyphElement = fmt.Sprintf(
 			`<g transform="%s" fill="%s" fill-opacity="0.85"><path d="%s"/></g>`,
 			xf, glyphColor, glyph.D)

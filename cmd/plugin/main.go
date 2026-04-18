@@ -48,6 +48,7 @@ type visibleKey struct {
 	action     string
 	settings   settings.KeySettings
 	lastPollAt time.Time
+	showTitle  bool // true when user has enabled the native SD title
 }
 
 var (
@@ -155,6 +156,8 @@ func handleEvent(conn *streamdeck.Connection, ev streamdeck.Event) {
 		handleDidReceiveSettings(conn, ev)
 	case "didReceiveGlobalSettings":
 		handleDidReceiveGlobalSettings(conn, ev)
+	case "titleParametersDidChange":
+		handleTitleParametersDidChange(conn, ev)
 	case "sendToPlugin":
 		handleSendToPlugin(conn, ev)
 	case "keyDown":
@@ -178,6 +181,11 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	if metricID == "" {
 		metricID = defaultMetric
 	}
+
+	// Check if the user has "Show Title" enabled for this key.
+	var tp streamdeck.WillAppearTitleParameters
+	json.Unmarshal(ev.Payload, &tp)
+	showTitle := tp.TitleParameters != nil && tp.TitleParameters.ShowTitle
 
 	// Stale fillColor / bgColor migration.
 	{
@@ -229,6 +237,7 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		visibleKeys[ev.Context] = &visibleKey{
 			context: ev.Context, action: ev.Action,
 			settings: ks, lastPollAt: time.Now(),
+			showTitle: showTitle,
 		}
 		mu.Unlock()
 		latest := update.LatestVersion()
@@ -236,14 +245,16 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 			latest = "?"
 		}
 		conn.SetImage(ev.Context, render.RenderButton(render.ButtonInput{
+			Label: "UPDATE",
 			Value: "v" + latest,
 			Subvalue: "New Version", Fill: "#f59e0b", ValueSize: "medium",
 		}))
-		conn.SetTitle(ev.Context, "UPDATE")
+		conn.SetTitle(ev.Context, "")
 		return
 	}
 
 	title := deriveLabelFromMetricID(metricID)
+	hasUserTitle := showTitle
 
 	// Try to render from cache immediately (avoid loading flash).
 	cached := providers.PeekSnapshot(providerID)
@@ -255,6 +266,7 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 			action:     ev.Action,
 			settings:   ks,
 			lastPollAt: time.Now(),
+			showTitle:  showTitle,
 		}
 		mu.Unlock()
 
@@ -264,12 +276,16 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 			if metricLabel == "" {
 				metricLabel = title
 			}
-			conn.SetImage(ev.Context, renderMetric(prov, cached.ProviderName, *metric, ks))
-			conn.SetTitle(ev.Context, metricLabel)
+			conn.SetImage(ev.Context, renderMetric(prov, cached.ProviderName, *metric, ks, hasUserTitle))
+			setTitleForKey(conn, ev.Context, hasUserTitle, metricLabel)
 		} else {
+			svgLabel := ""
+			if !hasUserTitle {
+				svgLabel = title
+			}
 			caption := metricCaptionForPlaceholder(metricID)
-			conn.SetImage(ev.Context, placeholderFace(prov, "", "—", caption, ks))
-			conn.SetTitle(ev.Context, title)
+			conn.SetImage(ev.Context, placeholderFace(prov, svgLabel, "—", caption, ks))
+			setTitleForKey(conn, ev.Context, hasUserTitle, title)
 		}
 		conn.Logf("key appeared with cached data (now tracking %d visible key(s))", countVisible())
 		return
@@ -278,14 +294,23 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	// No cache — first fetch.
 	mu.Lock()
 	visibleKeys[ev.Context] = &visibleKey{
-		context:  ev.Context,
-		action:   ev.Action,
-		settings: ks,
+		context:   ev.Context,
+		action:    ev.Action,
+		settings:  ks,
+		showTitle: showTitle,
 	}
 	mu.Unlock()
 
-	conn.SetImage(ev.Context, loadingFaceFor(providerID, &ks))
-	conn.SetTitle(ev.Context, title)
+	if prov := providers.Get(providerID); prov != nil {
+		svgLabel := ""
+		if !hasUserTitle {
+			svgLabel = title
+		}
+		conn.SetImage(ev.Context, placeholderFace(prov, svgLabel, "", "", ks))
+	} else {
+		conn.SetImage(ev.Context, loadingFaceFor(providerID, &ks))
+	}
+	setTitleForKey(conn, ev.Context, hasUserTitle, title)
 	conn.Logf("key appeared, no cache (now tracking %d visible key(s))", countVisible())
 	go refreshKey(conn, ev.Context, false)
 }
@@ -296,6 +321,22 @@ func handleWillDisappear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	n := len(visibleKeys)
 	mu.Unlock()
 	conn.Logf("key disappeared (now tracking %d visible key(s))", n)
+}
+
+func handleTitleParametersDidChange(conn *streamdeck.Connection, ev streamdeck.Event) {
+	var payload streamdeck.TitleParametersDidChangePayload
+	json.Unmarshal(ev.Payload, &payload)
+
+	mu.Lock()
+	key, ok := visibleKeys[ev.Context]
+	if ok {
+		key.showTitle = payload.TitleParameters.ShowTitle
+	}
+	mu.Unlock()
+
+	if ok {
+		go refreshKey(conn, ev.Context, false)
+	}
 }
 
 func handleDidReceiveSettings(conn *streamdeck.Connection, ev streamdeck.Event) {
@@ -537,6 +578,7 @@ func showUpdateFace(conn *streamdeck.Connection) {
 		latest = "?"
 	}
 	svg := render.RenderButton(render.ButtonInput{
+		Label:     "UPDATE",
 		Value:     "v" + latest,
 		Subvalue:  "New Version",
 		Fill:      "#f59e0b",
@@ -545,7 +587,7 @@ func showUpdateFace(conn *streamdeck.Connection) {
 	mu.Lock()
 	for ctx := range visibleKeys {
 		conn.SetImage(ctx, svg)
-		conn.SetTitle(ctx, "UPDATE")
+		conn.SetTitle(ctx, "")
 	}
 	mu.Unlock()
 }
@@ -560,6 +602,7 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 	key.lastPollAt = time.Now()
 	action := key.action
 	ks := key.settings
+	hasUserTitle := key.showTitle
 	mu.Unlock()
 
 	providerID := streamdeck.ProviderIDFromAction(action)
@@ -627,9 +670,13 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 			subHint = "See Settings"
 		}
 
+		svgLabel := ""
+		if !hasUserTitle {
+			svgLabel = title
+		}
 		conn.SetImage(context, placeholderFace(prov,
-			"", value, subHint, ks))
-		conn.SetTitle(context, title)
+			svgLabel, value, subHint, ks))
+		setTitleForKey(conn, context, hasUserTitle, title)
 		return
 	}
 
@@ -655,8 +702,8 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 					if m.ResetInSeconds != nil {
 						fake.ResetInSeconds = m.ResetInSeconds
 					}
-					conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, fake, ks))
-					conn.SetTitle(context, title)
+					conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, fake, ks, hasUserTitle))
+					setTitleForKey(conn, context, hasUserTitle, title)
 					return
 				}
 			}
@@ -665,9 +712,13 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 		// Dashed-out placeholder — show metric caption as subtext
 		// so the user knows what this button is for.
 		caption := metricCaptionForPlaceholder(metricID)
+		svgLabel := ""
+		if !hasUserTitle {
+			svgLabel = title
+		}
 		conn.SetImage(context, placeholderFace(prov,
-			"", "—", caption, ks))
-		conn.SetTitle(context, title)
+			svgLabel, "—", caption, ks))
+		setTitleForKey(conn, context, hasUserTitle, title)
 		return
 	}
 
@@ -676,13 +727,22 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 	if metricLabel == "" {
 		metricLabel = title
 	}
-	conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, *metric, ks))
-	conn.SetTitle(context, metricLabel)
+	conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, *metric, ks, hasUserTitle))
+	setTitleForKey(conn, context, hasUserTitle, metricLabel)
+}
+
+// setTitleForKey pre-populates the native title with our label so
+// that when the user enables "Show Title", they see a 1:1 match.
+// When ShowTitle is off (default), the SD hides it anyway.
+// When ShowTitle is on, we still set it so the field stays current
+// if the user hasn't edited the text.
+func setTitleForKey(conn *streamdeck.Connection, context string, hasUserTitle bool, label string) {
+	conn.SetTitle(context, label)
 }
 
 // --- Rendering helpers ---
 
-func renderMetric(prov providers.Provider, providerName string, metric providers.MetricValue, ks settings.KeySettings) string {
+func renderMetric(prov providers.Provider, providerName string, metric providers.MetricValue, ks settings.KeySettings, hideLabel bool) string {
 	invert := settings.InvertFillEnabled()
 
 	effectiveValue := metric.Value
@@ -703,8 +763,15 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 		Value: valueStr,
 	}
 
-	// Label is handled by the SDK native title (setTitle), so we
-	// don't render it in SVG. The title is set by the caller.
+	// Label: render in SVG unless the user has set a custom native
+	// title (in which case we let the SDK title show instead).
+	if !hideLabel {
+		label := metric.Label
+		if label == "" {
+			label = providerName
+		}
+		in.Label = strings.ToUpper(label)
+	}
 
 	// Ratio
 	isReferenceCard := metric.RatioVal() < 0
@@ -776,8 +843,10 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 		in.ShowGlyph = &f
 	}
 
-	// Subvalue priority: countdown > captionOverride > rawCounts > caption > auto
-	if metric.ResetInSeconds != nil && (ks.ShowResetTimer == nil || *ks.ShowResetTimer) {
+	// Subvalue priority: hideSubvalue > countdown > captionOverride > rawCounts > caption > auto
+	if ks.HideSubvalue {
+		// User explicitly hid the subtext.
+	} else if metric.ResetInSeconds != nil && (ks.ShowResetTimer == nil || *ks.ShowResetTimer) {
 		in.Subvalue = render.FormatCountdown(*metric.ResetInSeconds)
 	} else {
 		override := strings.TrimSpace(ks.CaptionOverride)
@@ -803,8 +872,9 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 	return render.RenderButton(in)
 }
 
-func placeholderFace(prov providers.Provider, _, value, subvalue string, ks settings.KeySettings) string {
+func placeholderFace(prov providers.Provider, label, value, subvalue string, ks settings.KeySettings) string {
 	in := render.ButtonInput{
+		Label: label,
 		Value: value,
 		Fill:  prov.BrandColor(),
 		Bg:    prov.BrandBg(),

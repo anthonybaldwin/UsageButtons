@@ -414,7 +414,7 @@ func extraUsageMetrics(extra *extraUsageSource) []providers.MetricValue {
 	}
 	out = append(out, providers.MetricValue{
 		ID: "extra-usage-enabled", Label: "EXTRA USAGE", Name: "Extra usage enabled",
-		Value: val, Ratio: &onRatio, Direction: "up",
+		Value: val, Ratio: &onRatio, Direction: "up", Caption: "Toggle",
 	})
 
 	if extra.balanceCents != nil {
@@ -433,7 +433,7 @@ func extraUsageMetrics(extra *extraUsageSource) []providers.MetricValue {
 		}
 		out = append(out, providers.MetricValue{
 			ID: "extra-usage-auto-reload", Label: "RELOAD", Name: "Extras auto-reload",
-			Value: rv, Ratio: &rr, Direction: "up",
+			Value: rv, Ratio: &rr, Direction: "up", Caption: "Auto-reload",
 		})
 	}
 
@@ -466,7 +466,7 @@ func extraUsageMetrics(extra *extraUsageSource) []providers.MetricValue {
 			Name: fmt.Sprintf("Extra usage spent (%s)", extra.currency),
 			Value: fmt.Sprintf("$%.2f", spent), NumericValue: &spent,
 			NumericUnit: "dollars", NumericGoodWhen: "low", NumericMax: &limit,
-			Ratio: &spentRatio, Direction: "up",
+			Ratio: &spentRatio, Direction: "up", Caption: "This month",
 		},
 	)
 	return out

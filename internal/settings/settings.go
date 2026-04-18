@@ -25,6 +25,7 @@ type GlobalSettings struct {
 	InvertFill            bool     `json:"invertFill,omitempty"`
 	ShowGlyphs            *bool    `json:"showGlyphs,omitempty"`
 	SkipUpdateCheck       bool     `json:"skipUpdateCheck,omitempty"`
+	CookieHostOptedOut    bool     `json:"cookieHostOptedOut,omitempty"`
 }
 
 // KeySettings are per-button settings stored by Stream Deck.

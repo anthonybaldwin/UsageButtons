@@ -734,8 +734,11 @@
       document.getElementById("criticalColor").value = settings.criticalColor || "#ef4444";
     }
 
+    let lastGlobalSettings = {};
+
     function applyGlobalSettings(globals) {
       globals = globals || {};
+      lastGlobalSettings = globals;
       const minutes = globals.defaultRefreshMinutes;
       document.getElementById("defaultRefresh").value =
         [5, 10, 15, 30, 60].includes(minutes) ? String(minutes) : "15";
@@ -837,6 +840,8 @@
         invertFill:            document.getElementById("invertFill").checked,
         showGlyphs:            document.getElementById("showGlyphs").checked,
         skipUpdateCheck:       document.getElementById("skipUpdateCheck").checked,
+        // Preserve plugin-managed flags that have no UI control.
+        cookieHostOptedOut:     lastGlobalSettings.cookieHostOptedOut || false,
       };
       websocket.send(JSON.stringify({
         event: "setGlobalSettings",

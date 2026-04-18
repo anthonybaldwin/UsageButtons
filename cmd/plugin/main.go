@@ -53,6 +53,8 @@ type visibleKey struct {
 var (
 	mu          sync.Mutex
 	visibleKeys = map[string]*visibleKey{}
+
+	autoRegisterOnce sync.Once
 )
 
 func main() {
@@ -71,18 +73,8 @@ func main() {
 	// Request global settings before first tick.
 	conn.GetGlobalSettings()
 
-	// Idempotently register the native-messaging host manifest on
-	// every launch. The extension ID is deterministic (pinned public
-	// key in chrome-extension/manifest.json), so the user never has
-	// to paste it. If Chrome / Edge / Brave / Firefox isn't installed
-	// the corresponding per-browser write is a harmless no-op.
-	go func() {
-		if err := registerCookieHost(); err != nil {
-			conn.Logf("cookie host auto-register: %v", err)
-		} else {
-			conn.Logf("cookie host auto-register ok (%s)", cookies.DefaultExtensionID)
-		}
-	}()
+	// Auto-register of the native-messaging host is deferred until
+	// global settings arrive so we can respect the opt-out flag.
 
 	// Start scheduler and display refresh tickers.
 	go schedulerLoop(conn)
@@ -325,6 +317,23 @@ func handleDidReceiveGlobalSettings(conn *streamdeck.Connection, ev streamdeck.E
 
 	conn.Logf("global settings updated")
 	go refreshAllVisible(conn)
+
+	// Auto-register the native-messaging host on the first global
+	// settings event (i.e. plugin startup), unless the user has
+	// explicitly opted out by clicking Unregister.
+	autoRegisterOnce.Do(func() {
+		if gs.CookieHostOptedOut {
+			conn.Logf("cookie host auto-register skipped (user opted out)")
+			return
+		}
+		go func() {
+			if err := registerCookieHost(); err != nil {
+				conn.Logf("cookie host auto-register: %v", err)
+			} else {
+				conn.Logf("cookie host auto-register ok (%s)", cookies.DefaultExtensionID)
+			}
+		}()
+	})
 }
 
 func handleSendToPlugin(conn *streamdeck.Connection, ev streamdeck.Event) {
@@ -383,6 +392,7 @@ func replyRegisterCookieHost(conn *streamdeck.Connection, ctxStr, action string,
 	result["success"] = true
 	result["hostName"] = cookies.HostName
 	conn.SendToPropertyInspector(ctxStr, action, result)
+	setCookieHostOptedOut(conn, false)
 }
 
 // registerCookieHost writes the native-messaging manifest (+ registry
@@ -410,6 +420,17 @@ func replyUnregisterCookieHost(conn *streamdeck.Connection, ctxStr, action strin
 		result["success"] = true
 	}
 	conn.SendToPropertyInspector(ctxStr, action, result)
+	setCookieHostOptedOut(conn, true)
+}
+
+// setCookieHostOptedOut persists the opt-out flag in global settings
+// so auto-register on next launch respects the user's choice.
+func setCookieHostOptedOut(conn *streamdeck.Connection, optedOut bool) {
+	gs := settings.Get()
+	gs.CookieHostOptedOut = optedOut
+	settings.Set(gs)
+	raw, _ := json.Marshal(gs)
+	conn.SetGlobalSettings(raw)
 }
 
 // nativeHostBinaryPath resolves the companion native-host binary that

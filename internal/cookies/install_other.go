@@ -15,3 +15,7 @@ func RegisterHost(hostName, binaryPath string, allowedOrigins []string) error {
 func UnregisterHost(hostName string) error {
 	return errUnsupported
 }
+
+func IsHostRegistered(hostName string) bool {
+	return false
+}

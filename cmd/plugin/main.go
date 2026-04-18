@@ -550,12 +550,30 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 
 		value := "ERR"
 		subHint := ""
-		if notConfigured {
+		switch {
+		case notConfigured:
 			value = "SETUP"
 			subHint = "Needs Key"
-		} else if rateLimit {
+		case rateLimit:
 			value = "WAIT"
 			subHint = "Rate Limit"
+		case isExpired(snapshot.Error):
+			value = "AUTH"
+			subHint = "Re-auth Needed"
+		case isSignedOut(snapshot.Error):
+			value = "AUTH"
+			subHint = "Signed Out"
+		case isMissingScope(snapshot.Error):
+			value = "AUTH"
+			subHint = "Bad Scope"
+		case isNetworkError(snapshot.Error):
+			value = "NET"
+			subHint = "Offline"
+		case isServerError(snapshot.Error):
+			value = "ERR"
+			subHint = "Server Error"
+		default:
+			subHint = "See Settings"
 		}
 
 		conn.SetImage(context, placeholderFace(prov,
@@ -929,10 +947,20 @@ func findMetric(metrics []providers.MetricValue, id string) *providers.MetricVal
 var (
 	rateLimitRe     = regexp.MustCompile(`(?i)429|rate.?limit`)
 	notConfiguredRe = regexp.MustCompile(`(?i)not.?configured|not found|Set \w+_\w+|Paste a Cookie|Install the Usage Buttons|No .+ token found`)
+	expiredRe       = regexp.MustCompile(`(?i)expired|unauthorized|re-authenticate`)
+	signedOutRe     = regexp.MustCompile(`(?i)signed out|session is signed out`)
+	scopeRe         = regexp.MustCompile(`(?i)missing.*scope`)
+	networkRe       = regexp.MustCompile(`(?i)network error|dial tcp|connection refused|timeout|ETIMEDOUT`)
+	serverErrRe     = regexp.MustCompile(`(?i)server error|HTTP [5]\d\d`)
 )
 
 func isRateLimit(msg string) bool     { return rateLimitRe.MatchString(msg) }
 func isNotConfigured(msg string) bool  { return notConfiguredRe.MatchString(msg) }
+func isExpired(msg string) bool        { return expiredRe.MatchString(msg) }
+func isSignedOut(msg string) bool      { return signedOutRe.MatchString(msg) }
+func isMissingScope(msg string) bool   { return scopeRe.MatchString(msg) }
+func isNetworkError(msg string) bool   { return networkRe.MatchString(msg) }
+func isServerError(msg string) bool    { return serverErrRe.MatchString(msg) }
 
 func countVisible() int {
 	return len(visibleKeys)

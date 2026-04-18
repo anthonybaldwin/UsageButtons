@@ -109,8 +109,12 @@ Current topics: `go`, `golang`, `stream-deck`, `stream-deck-plugin`,
 - Plugin connects to Stream Deck over a local WebSocket; see
   `internal/streamdeck/` for the protocol wrapper.
 - Button images are sent as SVG data URIs via `setImage`.
-- `UserTitleEnabled: false` on all actions — we own the full 144x144
-  canvas. Never use `setTitle()` or re-enable native titles.
+- Metric labels are rendered via the SDK's native title (`setTitle`),
+  not in the SVG. All actions ship with `UserTitleEnabled: true` and
+  `ShowTitle: true` so users can override the label per-key from the
+  Stream Deck UI. The SVG owns the value, glyph, and ratio fill; the
+  title bar owns the label text. Send labels in UPPERCASE
+  (`SESSION`, `WEEKLY`, …) to match the title font's expected look.
 
 ## Browser fetch bridge (Usage Buttons Helper extension)
 

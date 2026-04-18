@@ -33,11 +33,11 @@
       "Icon": "assets/action-claude",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
-      "UserTitleEnabled": false,
+      "UserTitleEnabled": true,
       "States": [
         {
           "Image": "assets/action-claude-key",
-          "ShowTitle": false
+          "ShowTitle": true
         }
       ]
     },
@@ -48,11 +48,11 @@
       "Icon": "assets/action-codex",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
-      "UserTitleEnabled": false,
+      "UserTitleEnabled": true,
       "States": [
         {
           "Image": "assets/action-codex-key",
-          "ShowTitle": false
+          "ShowTitle": true
         }
       ]
     },
@@ -63,11 +63,11 @@
       "Icon": "assets/action-copilot",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
-      "UserTitleEnabled": false,
+      "UserTitleEnabled": true,
       "States": [
         {
           "Image": "assets/action-copilot-key",
-          "ShowTitle": false
+          "ShowTitle": true
         }
       ]
     },
@@ -78,11 +78,11 @@
       "Icon": "assets/action-cursor",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
-      "UserTitleEnabled": false,
+      "UserTitleEnabled": true,
       "States": [
         {
           "Image": "assets/action-cursor-key",
-          "ShowTitle": false
+          "ShowTitle": true
         }
       ]
     },
@@ -93,11 +93,11 @@
       "Icon": "assets/action-ollama",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
-      "UserTitleEnabled": false,
+      "UserTitleEnabled": true,
       "States": [
         {
           "Image": "assets/action-ollama-key",
-          "ShowTitle": false
+          "ShowTitle": true
         }
       ]
     },
@@ -108,11 +108,11 @@
       "Icon": "assets/action-openrouter",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
-      "UserTitleEnabled": false,
+      "UserTitleEnabled": true,
       "States": [
         {
           "Image": "assets/action-openrouter-key",
-          "ShowTitle": false
+          "ShowTitle": true
         }
       ]
     },
@@ -123,11 +123,11 @@
       "Icon": "assets/action-warp",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
-      "UserTitleEnabled": false,
+      "UserTitleEnabled": true,
       "States": [
         {
           "Image": "assets/action-warp-key",
-          "ShowTitle": false
+          "ShowTitle": true
         }
       ]
     },
@@ -138,11 +138,11 @@
       "Icon": "assets/action-zai",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
-      "UserTitleEnabled": false,
+      "UserTitleEnabled": true,
       "States": [
         {
           "Image": "assets/action-zai-key",
-          "ShowTitle": false
+          "ShowTitle": true
         }
       ]
     },
@@ -153,11 +153,11 @@
       "Icon": "assets/action-kimi-k2",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
-      "UserTitleEnabled": false,
+      "UserTitleEnabled": true,
       "States": [
         {
           "Image": "assets/action-kimi-k2-key",
-          "ShowTitle": false
+          "ShowTitle": true
         }
       ]
     }

@@ -102,6 +102,17 @@ func (c *Connection) SetImage(context, svg string) {
 	}
 }
 
+// SetTitle sets the native Stream Deck title for a key.
+func (c *Connection) SetTitle(ctx, title string) {
+	if err := c.sendJSON(SetTitleEvent{
+		Event:   "setTitle",
+		Context: ctx,
+		Payload: SetTitlePayload{Title: title, Target: 0},
+	}); err != nil {
+		log.Printf("[streamdeck] setTitle error: %v", err)
+	}
+}
+
 // OpenURL opens a URL in the user's default browser.
 func (c *Connection) OpenURL(url string) {
 	if err := c.sendJSON(OpenURLEvent{

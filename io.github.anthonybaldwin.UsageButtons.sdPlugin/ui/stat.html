@@ -89,6 +89,12 @@
     <button class="tab" data-tab="plugin" type="button">Plugin settings</button>
   </nav>
 
+  <!-- Provider error banner (shown above both tabs when provider has an error) -->
+  <div id="providerErrorBanner" style="display:none; margin: 0 12px 10px; padding: 8px; border-radius: 4px; background: #1f2937; border: 1px solid #7f1d1d; font-size: 12px; line-height: 1.4;">
+    <span id="providerErrorDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; background:#ef4444;"></span>
+    <span id="providerErrorText" style="color: #fca5a5;"></span>
+  </div>
+
   <!-- ================== Button tab (per-key) ================== -->
   <div id="buttonPanel" class="panel active">
 
@@ -781,6 +787,8 @@
       // reopening the inspector.
       requestCookieStatus();
       setInterval(requestCookieStatus, 2500);
+      requestProviderStatus();
+      setInterval(requestProviderStatus, 5000);
     }
 
     function pushSettings() {
@@ -848,6 +856,27 @@
         context: uuid,
         payload,
       }));
+    }
+
+    // ---------- Provider error banner ----------
+    function requestProviderStatus() {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      websocket.send(JSON.stringify({
+        event: "sendToPlugin",
+        context: uuid,
+        payload: { action: "getProviderStatus" },
+      }));
+    }
+
+    function setProviderError(payload) {
+      const banner = document.getElementById("providerErrorBanner");
+      const text = document.getElementById("providerErrorText");
+      if (payload.error) {
+        text.textContent = payload.error;
+        banner.style.display = "block";
+      } else {
+        banner.style.display = "none";
+      }
     }
 
     // ---------- Cookie host status + register UI ----------
@@ -965,6 +994,9 @@
             showActionResult("Unregister failed: " + (payload.error || "unknown"), false);
           }
           requestCookieStatus();
+          break;
+        case "providerStatus":
+          setProviderError(payload);
           break;
       }
     }

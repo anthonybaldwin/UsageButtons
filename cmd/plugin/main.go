@@ -357,6 +357,8 @@ func handleSendToPlugin(conn *streamdeck.Connection, ev streamdeck.Event) {
 		go replyRegisterCookieHost(conn, ev.Context, ev.Action, ev.Payload)
 	case "unregisterCookieHost":
 		go replyUnregisterCookieHost(conn, ev.Context, ev.Action)
+	case "getProviderStatus":
+		go replyProviderStatus(conn, ev.Context, ev.Action)
 	}
 }
 
@@ -421,6 +423,20 @@ func replyUnregisterCookieHost(conn *streamdeck.Connection, ctxStr, action strin
 	}
 	conn.SendToPropertyInspector(ctxStr, action, result)
 	setCookieHostOptedOut(conn, true)
+}
+
+func replyProviderStatus(conn *streamdeck.Connection, ctxStr, action string) {
+	providerID := streamdeck.ProviderIDFromAction(action)
+	prov := providers.Get(providerID)
+	if prov == nil {
+		return
+	}
+	snapshot := providers.GetSnapshot(prov, providers.GetSnapshotOptions{})
+	conn.SendToPropertyInspector(ctxStr, action, map[string]any{
+		"action":     "providerStatus",
+		"providerId": providerID,
+		"error":      snapshot.Error,
+	})
 }
 
 // setCookieHostOptedOut persists the opt-out flag in global settings

@@ -111,21 +111,31 @@ func RenderButton(in ButtonInput) string {
 	}
 	labelLineHeight := int(math.Round(float64(labelFontSize) * 1.08))
 
-	// Vertical layout
-	labelBlockHeight := 0
-	if hasLabel {
-		labelBlockHeight = len(labelLinesRaw) * labelLineHeight
-	}
-	labelBottom := 0.0
-	if hasLabel {
-		labelBottom = 14.0 + float64(labelBlockHeight)
-	}
+	// Vertical layout.
+	// Compute subvalue geometry first so the value-centering math can
+	// mirror the bottom padding at the top when the label is hidden —
+	// without the mirror the value drifts upward instead of staying in
+	// the visual center of the tile.
 
 	// Subvalue baseline: leave subvalueFontSize*0.35 pixels of bottom padding
 	subvalueBaselineY := float64(Canvas) - math.Round(float64(preferredSubFont)*0.35)
 	subvalueTop := float64(Canvas)
 	if hasSub {
 		subvalueTop = subvalueBaselineY - math.Round(float64(preferredSubFont)*0.85)
+	}
+
+	labelBlockHeight := 0
+	if hasLabel {
+		labelBlockHeight = len(labelLinesRaw) * labelLineHeight
+	}
+	labelBottom := 0.0
+	switch {
+	case hasLabel:
+		labelBottom = 14.0 + float64(labelBlockHeight)
+	case hasSub:
+		// No label but subvalue present: mirror the subvalue's bottom
+		// gap at the top so the big number stays centered.
+		labelBottom = float64(Canvas) - subvalueTop
 	}
 
 	// Value Y: centered between label bottom and subvalue top

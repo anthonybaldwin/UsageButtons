@@ -67,23 +67,43 @@ func credPath() string {
 	return filepath.Join(home, ".claude", ".credentials.json")
 }
 
-func loadCreds() (creds, error) {
+// readCredBlob returns the raw Claude credentials JSON and a
+// human-readable label for where it came from. File first (primary on
+// Linux/Windows and older macOS installs), then macOS keychain on
+// darwin. A second-argument label is returned so downstream error
+// messages can say "invalid JSON in macOS keychain" vs. a path.
+func readCredBlob() ([]byte, string, error) {
 	path := credPath()
 	data, err := os.ReadFile(path)
+	if err == nil {
+		return data, path, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, "", err
+	}
+
+	if blob, kcErr := readKeychainBlob(); kcErr == nil {
+		return blob, "macOS keychain", nil
+	}
+
+	return nil, "", fmt.Errorf(
+		"Claude credentials not found in %s. Run `claude` in a terminal to sign in.",
+		credsSourceHint())
+}
+
+func loadCreds() (creds, error) {
+	data, source, err := readCredBlob()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return creds{}, fmt.Errorf("Claude credentials not found at %s. Run `claude` in a terminal to sign in.", path)
-		}
 		return creds{}, err
 	}
 
 	var f credFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		return creds{}, fmt.Errorf("invalid JSON in %s: %w", path, err)
+		return creds{}, fmt.Errorf("invalid JSON in %s: %w", source, err)
 	}
 
 	if f.ClaudeAiOauth == nil || strings.TrimSpace(f.ClaudeAiOauth.AccessToken) == "" {
-		return creds{}, fmt.Errorf("Claude credentials at %s missing claudeAiOauth.accessToken", path)
+		return creds{}, fmt.Errorf("Claude credentials in %s missing claudeAiOauth.accessToken", source)
 	}
 
 	c := creds{

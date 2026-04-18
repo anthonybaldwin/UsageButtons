@@ -79,7 +79,13 @@ start_sd() {
     fi
     powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '$SD_EXE'" 2>/dev/null || true
   else
-    open -a "Stream Deck" 2>/dev/null || true
+    # Modern Elgato installs ship as "Elgato Stream Deck.app"; older
+    # installs as "Stream Deck.app". The process name stays "Stream
+    # Deck" in both, so pkill works — but `open -a` needs the bundle
+    # name. Try the newer name first, then fall back.
+    open -a "Elgato Stream Deck" 2>/dev/null \
+      || open -a "Stream Deck" 2>/dev/null \
+      || true
   fi
 }
 

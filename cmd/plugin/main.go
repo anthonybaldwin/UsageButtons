@@ -445,7 +445,41 @@ func handleKeyDown(conn *streamdeck.Connection, ev streamdeck.Event) {
 		conn.OpenURL(update.URL())
 		return
 	}
-	go refreshKey(conn, ev.Context, true)
+	providerID := streamdeck.ProviderIDFromAction(ev.Action)
+	skipContext := ev.Context
+	go func() {
+		refreshKey(conn, skipContext, true)
+		// The forced fetch just populated the provider cache. Re-render
+		// sibling keys of the same provider so a single press updates
+		// every button that shares the data source (e.g. pressing the
+		// SESSION key also refreshes WEEKLY, which comes from the same
+		// OAuth response). Siblings pass force=false so they hit the
+		// warm cache — no extra upstream calls.
+		if providerID != "" {
+			refreshProviderSiblings(conn, providerID, skipContext)
+		}
+	}()
+}
+
+// refreshProviderSiblings re-renders every visible key of providerID
+// except skipContext. Intended to run after a forced fetch so all
+// buttons fed by one snapshot update together.
+func refreshProviderSiblings(conn *streamdeck.Connection, providerID, skipContext string) {
+	mu.Lock()
+	var siblings []string
+	for ctx, key := range visibleKeys {
+		if ctx == skipContext {
+			continue
+		}
+		if streamdeck.ProviderIDFromAction(key.action) == providerID {
+			siblings = append(siblings, ctx)
+		}
+	}
+	mu.Unlock()
+
+	for _, ctx := range siblings {
+		refreshKey(conn, ctx, false)
+	}
 }
 
 func showUpdateFace(conn *streamdeck.Connection) {

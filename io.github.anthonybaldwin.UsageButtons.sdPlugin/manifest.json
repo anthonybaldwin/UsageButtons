@@ -37,7 +37,8 @@
       "States": [
         {
           "Image": "assets/action-claude-key",
-          "ShowTitle": true
+          "ShowTitle": true,
+          "TitleAlignment": "top"
         }
       ]
     },
@@ -52,7 +53,8 @@
       "States": [
         {
           "Image": "assets/action-codex-key",
-          "ShowTitle": true
+          "ShowTitle": true,
+          "TitleAlignment": "top"
         }
       ]
     },
@@ -67,7 +69,8 @@
       "States": [
         {
           "Image": "assets/action-copilot-key",
-          "ShowTitle": true
+          "ShowTitle": true,
+          "TitleAlignment": "top"
         }
       ]
     },
@@ -82,7 +85,8 @@
       "States": [
         {
           "Image": "assets/action-cursor-key",
-          "ShowTitle": true
+          "ShowTitle": true,
+          "TitleAlignment": "top"
         }
       ]
     },
@@ -97,7 +101,8 @@
       "States": [
         {
           "Image": "assets/action-ollama-key",
-          "ShowTitle": true
+          "ShowTitle": true,
+          "TitleAlignment": "top"
         }
       ]
     },
@@ -112,7 +117,8 @@
       "States": [
         {
           "Image": "assets/action-openrouter-key",
-          "ShowTitle": true
+          "ShowTitle": true,
+          "TitleAlignment": "top"
         }
       ]
     },
@@ -127,7 +133,8 @@
       "States": [
         {
           "Image": "assets/action-warp-key",
-          "ShowTitle": true
+          "ShowTitle": true,
+          "TitleAlignment": "top"
         }
       ]
     },
@@ -142,7 +149,8 @@
       "States": [
         {
           "Image": "assets/action-zai-key",
-          "ShowTitle": true
+          "ShowTitle": true,
+          "TitleAlignment": "top"
         }
       ]
     },
@@ -157,7 +165,8 @@
       "States": [
         {
           "Image": "assets/action-kimi-k2-key",
-          "ShowTitle": true
+          "ShowTitle": true,
+          "TitleAlignment": "top"
         }
       ]
     }

@@ -158,8 +158,8 @@ type usageWindow struct {
 
 type extraUsageRaw struct {
 	IsEnabled    *bool    `json:"is_enabled"`
-	MonthlyLimit *int64   `json:"monthly_limit"` // cents
-	UsedCredits  *int64   `json:"used_credits"`  // cents
+	MonthlyLimit *float64 `json:"monthly_limit"` // cents (API may return int or float)
+	UsedCredits  *float64 `json:"used_credits"`  // cents (API may return int or float)
 	Utilization  *float64 `json:"utilization"`
 	Currency     *string  `json:"currency"`
 }
@@ -247,9 +247,9 @@ type orgRow struct {
 }
 
 type overageResponse struct {
-	IsEnabled          *bool  `json:"is_enabled"`
-	MonthlyCreditLimit *int64 `json:"monthly_credit_limit"`
-	UsedCredits        *int64 `json:"used_credits"`
+	IsEnabled          *bool    `json:"is_enabled"`
+	MonthlyCreditLimit *float64 `json:"monthly_credit_limit"`
+	UsedCredits        *float64 `json:"used_credits"`
 	Currency           string `json:"currency"`
 	AccountEmail       string `json:"account_email"`
 	OutOfCredits       *bool  `json:"out_of_credits"`
@@ -259,7 +259,7 @@ type overageResponse struct {
 }
 
 type prepaidCreditsResponse struct {
-	Amount             *int64 `json:"amount"`
+	Amount             *float64 `json:"amount"`
 	Currency           string `json:"currency"`
 	AutoReloadSettings any    `json:"auto_reload_settings"`
 }
@@ -374,7 +374,8 @@ func fetchWebExtras() *extraUsageSource {
 
 	if prepaidErr == nil {
 		if prepaid.Amount != nil {
-			result.balanceCents = prepaid.Amount
+			rounded := int64(math.Round(*prepaid.Amount))
+			result.balanceCents = &rounded
 		}
 		autoReload := prepaid.AutoReloadSettings != nil
 		result.autoReloadEnabled = &autoReload
@@ -573,6 +574,11 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 				"Claude OAuth server error: %s body=%s",
 				strings.Join(parts, " "), httputil.Truncate(httpErr.Body, 200))
 		}
+		// Distinguish JSON parse errors (API returned unexpected schema)
+		// from actual network failures.
+		if strings.Contains(err.Error(), "invalid JSON") || strings.Contains(err.Error(), "cannot unmarshal") {
+			return providers.Snapshot{}, fmt.Errorf("Claude API response parse error: %v", err)
+		}
 		return providers.Snapshot{}, fmt.Errorf("Claude OAuth network error: %v", err)
 	}
 
@@ -728,9 +734,9 @@ func cacheExtras(src *extraUsageSource) {
 	extrasMu.Unlock()
 }
 
-func valOr(p *int64, def int64) int64 {
+func valOr(p *float64, def int64) int64 {
 	if p != nil {
-		return *p
+		return int64(math.Round(*p))
 	}
 	return def
 }

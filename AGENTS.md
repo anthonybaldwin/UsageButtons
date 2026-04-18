@@ -66,6 +66,7 @@ gh workflow run release.yml --field bump=patch   # 0.3.2 → 0.3.3
 gh workflow run release.yml --field bump=minor   # 0.3.2 → 0.4.0
 gh workflow run release.yml --field bump=major   # 0.3.2 → 1.0.0
 gh workflow run release.yml --field bump=custom --field custom_version=0.4.0
+gh workflow run release.yml --field bump=patch --field draft=true  # draft release
 ```
 
 No local releasing — the workflow bumps both manifests (plugin +

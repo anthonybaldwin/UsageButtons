@@ -112,6 +112,7 @@ Cut via the manual `release` GitHub Action — no local git work:
 gh workflow run release.yml --field bump=patch
 gh workflow run release.yml --field bump=minor
 gh workflow run release.yml --field bump=custom --field custom_version=0.4.0
+gh workflow run release.yml --field bump=patch --field draft=true  # draft release
 ```
 
 The workflow bumps both manifests, tags, builds plugin + native host

@@ -23,7 +23,8 @@ type ButtonInput struct {
 	Subvalue     string
 	Ratio        *float64 // nil = reference card
 	Direction    string   // "up"|"down"|"right"|"left"
-	Fill         string   // hex
+	Fill         string   // hex — meter fill (top stop if Fill2 is set)
+	Fill2        string   // hex — optional second stop; when non-empty, meter paints a vertical linear gradient from Fill (top) to Fill2 (bottom)
 	Bg           string   // hex
 	Fg           string   // hex
 	Border       *bool    // nil = true
@@ -239,6 +240,19 @@ func RenderButton(in ButtonInput) string {
 			Canvas/2, valueY, valueFontSize, fg, value)
 	}
 
+	// Meter paint: either a solid hex, or a vertical gradient from
+	// Fill (top) to Fill2 (bottom) when Fill2 is set. The gradient
+	// lives in userSpaceOnUse over the full canvas so the ratio-
+	// clipped meter shows a consistent slice regardless of direction.
+	meterFill := fill
+	gradientDef := ""
+	if in.Fill2 != "" {
+		meterFill = "url(#ubMeter)"
+		gradientDef = fmt.Sprintf(
+			`<linearGradient id="ubMeter" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="%d"><stop offset="0" stop-color="%s"/><stop offset="1" stop-color="%s"/></linearGradient>`,
+			Canvas, fill, in.Fill2)
+	}
+
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" opacity="%s">
   <defs>
     <clipPath id="card">
@@ -247,6 +261,7 @@ func RenderButton(in ButtonInput) string {
     <filter id="ts" x="-5%%" y="-5%%" width="110%%" height="110%%">
       <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.55"/>
     </filter>
+    %s
   </defs>
   <g clip-path="url(#card)">
     <rect width="%d" height="%d" fill="%s"/>
@@ -263,9 +278,10 @@ func RenderButton(in ButtonInput) string {
 </svg>`,
 		Canvas, Canvas, opacity,
 		Canvas, Canvas,
+		gradientDef,
 		Canvas, Canvas, bg,
 		glyphBack,
-		rect.X, rect.Y, rect.W, rect.H, fill,
+		rect.X, rect.Y, rect.W, rect.H, meterFill,
 		borderElement,
 		glyphFront,
 		labelElements,
@@ -275,13 +291,22 @@ func RenderButton(in ButtonInput) string {
 }
 
 // RenderLoading produces a loading face with just the provider glyph.
-func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, showBorder *bool) string {
+// When fillColor2 is non-empty, the glyph is painted with a vertical
+// linear gradient from fillColor (top) to fillColor2 (bottom).
+func RenderLoading(glyph *ProviderGlyph, fillColor, fillColor2, bgColor, fgColor string, showBorder *bool) string {
 	fg := def(fgColor, "#f9fafb")
 	bg := def(bgColor, "#111827")
 	border := showBorder == nil || *showBorder
 	glyphColor := fillColor
 	if glyphColor == "" {
 		glyphColor = fg
+	}
+	gradientDef := ""
+	if fillColor2 != "" && fillColor != "" {
+		gradientDef = fmt.Sprintf(
+			`<linearGradient id="ubLoad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="%d"><stop offset="0" stop-color="%s"/><stop offset="1" stop-color="%s"/></linearGradient>`,
+			Canvas, fillColor, fillColor2)
+		glyphColor = "url(#ubLoad)"
 	}
 
 	// Use the same glyph zone as RenderButton's watermark so the
@@ -321,6 +346,7 @@ func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, sho
     <clipPath id="card-loading">
       <rect width="%d" height="%d" rx="16" ry="16"/>
     </clipPath>
+    %s
   </defs>
   <g clip-path="url(#card-loading)">
     <rect width="%d" height="%d" fill="%s"/>
@@ -330,6 +356,7 @@ func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, sho
 </svg>`,
 		Canvas, Canvas,
 		Canvas, Canvas,
+		gradientDef,
 		Canvas, Canvas, bg,
 		glyphElement,
 		borderEl,

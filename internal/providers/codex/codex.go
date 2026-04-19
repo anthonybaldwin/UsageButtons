@@ -423,10 +423,17 @@ func parseBalance(raw any) (float64, bool) {
 // Provider fetches Codex usage data.
 type Provider struct{}
 
-func (Provider) ID() string         { return "codex" }
-func (Provider) Name() string       { return "Codex" }
-func (Provider) BrandColor() string { return "#10A37F" }
-func (Provider) BrandBg() string    { return "#000000" }
+func (Provider) ID() string   { return "codex" }
+func (Provider) Name() string { return "Codex" }
+
+// Brand paint is a vertical lavender→indigo gradient matching the
+// colored Codex mark from lobehub/lobe-icons (top lavender #B1A7FF
+// → bottom indigo #3941FF). BrandColor2 is detected at render time
+// via an optional interface; providers that don't implement it fall
+// back to a solid BrandColor fill.
+func (Provider) BrandColor() string  { return "#B1A7FF" }
+func (Provider) BrandColor2() string { return "#3941FF" }
+func (Provider) BrandBg() string     { return "#000000" }
 func (Provider) MetricIDs() []string {
 	return []string{
 		"session-percent", "session-pace",

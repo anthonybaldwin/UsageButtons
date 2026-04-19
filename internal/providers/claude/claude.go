@@ -384,6 +384,50 @@ func fetchWebExtras() *extraUsageSource {
 	return result
 }
 
+// fetchWebPrepaid fetches only the prepaid balance + auto-reload state
+// via the browser extension. The OAuth extras block doesn't expose
+// these fields, so they're layered onto an OAuth-sourced
+// extraUsageSource when the extension is available.
+func fetchWebPrepaid() (*int64, *bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
+	if !cookies.HostAvailable(ctx) {
+		logf("prepaid: extension not connected; skipping web path")
+		return nil, nil
+	}
+	const cacheKey = "extension"
+
+	orgID, err := fetchOrgID(ctx, cacheKey)
+	if err != nil {
+		logf("prepaid: org fetch failed: %v", err)
+		return nil, nil
+	}
+
+	var prepaid prepaidCreditsResponse
+	if err := cookies.FetchJSON(ctx,
+		fmt.Sprintf("%s/organizations/%s/prepaid/credits", baseWebURL, orgID),
+		nil, &prepaid,
+	); err != nil {
+		logf("prepaid: fetch failed: %v", err)
+		var httpErr *httputil.Error
+		if errors.As(err, &httpErr) && httpErr.Status == 401 {
+			orgMu.Lock()
+			delete(orgCache, cacheKey)
+			orgMu.Unlock()
+		}
+		return nil, nil
+	}
+
+	var balanceCents *int64
+	if prepaid.Amount != nil {
+		rounded := int64(math.Round(*prepaid.Amount))
+		balanceCents = &rounded
+	}
+	autoReload := prepaid.AutoReloadSettings != nil
+	return balanceCents, &autoReload
+}
+
 // --- Metric construction ---
 
 func remainingMetric(id, label, name string, w *usageWindow) *providers.MetricValue {
@@ -690,6 +734,10 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 		extrasMu.Unlock()
 	} else if oauthUsable {
 		extraSrc = oauthToSource(resp.ExtraUsage)
+		if bal, ar := fetchWebPrepaid(); bal != nil || ar != nil {
+			extraSrc.balanceCents = bal
+			extraSrc.autoReloadEnabled = ar
+		}
 		cacheExtras(extraSrc)
 	} else if web := fetchWebExtras(); web != nil {
 		extraSrc = web

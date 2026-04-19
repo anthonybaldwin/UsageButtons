@@ -17,51 +17,56 @@ import (
 // Codex CLI writes one JSONL file per session under
 //   ~/.codex/sessions/YYYY/MM/DD/rollout-...-<sessionId>.jsonl
 //
-// Each line is an event. We care about events with
+// Each line is an event. The first line is typically a session_meta
+// event carrying the session_id and, for forked sessions, forked_from_id
+// plus a fork timestamp. Token accounting comes from events of the form
 //   {"type":"event_msg","payload":{"type":"token_count","info":{...}}}
+// where info.total_token_usage is the cumulative-since-session-start
+// input / cached_input / output / reasoning_output token count.
 //
-// where info.total_token_usage carries cumulative-since-session-start
-// input / cached_input / output / reasoning_output token counts. The
-// LAST non-null total_token_usage in the file is the final state of
-// that session. We attribute that total to the timestamp of that
-// event for day-bucketing.
+// To bill correctly we compute per-event deltas (current cumulative minus
+// previous cumulative) and bucket each delta by its own timestamp. For
+// forked sessions, we subtract the parent's cumulative at fork time as
+// the baseline so inherited tokens are not double-counted.
 
 var (
-	codexCostMu      sync.Mutex
-	codexCostCache   *codexCostResult
-	codexCostCacheT  time.Time
+	codexCostMu       sync.Mutex
+	codexCostCache    *codexCostResult
+	codexCostCacheT   time.Time
 	codexCostCacheErr error
 )
 
 const codexCostCacheTTL = 5 * time.Minute
 
 // Per-million-token pricing for GPT-5 class Codex models (USD).
-// Codex CLI uses GPT-5 by default (model_context_window 258400 in
-// the session logs is the GPT-5 signature). Earlier Codex versions
-// used GPT-4.1; rates are similar enough that a single default
-// suffices for a "local estimate" metric — we're not invoicing, we
-// are giving a gauge.
 const (
-	codexPriceInputPerMTok    = 1.25 // $ per million input tokens
-	codexPriceCachedPerMTok   = 0.125
-	codexPriceOutputPerMTok   = 10.0
+	codexPriceInputPerMTok     = 1.25
+	codexPriceCachedPerMTok    = 0.125
+	codexPriceOutputPerMTok    = 10.0
 	codexPriceReasoningPerMTok = 10.0
 )
 
 type codexTokenUsage struct {
-	InputTokens            int `json:"input_tokens"`
-	CachedInputTokens      int `json:"cached_input_tokens"`
-	OutputTokens           int `json:"output_tokens"`
-	ReasoningOutputTokens  int `json:"reasoning_output_tokens"`
-	TotalTokens            int `json:"total_tokens"`
+	InputTokens           int `json:"input_tokens"`
+	CachedInputTokens     int `json:"cached_input_tokens"`
+	OutputTokens          int `json:"output_tokens"`
+	ReasoningOutputTokens int `json:"reasoning_output_tokens"`
+	TotalTokens           int `json:"total_tokens"`
 }
 
-type codexTokenEvent struct {
+// codexLine covers both session_meta and event_msg/token_count lines.
+// Unused fields for a given event type stay zero-valued.
+type codexLine struct {
 	Timestamp string `json:"timestamp"`
 	Type      string `json:"type"`
 	Payload   *struct {
-		Type string `json:"type"`
-		Info *struct {
+		Type            string `json:"type"`
+		SessionID       string `json:"session_id"`
+		ForkedFromID    string `json:"forked_from_id"`
+		ForkedFromIDAlt string `json:"forkedFromId"`
+		ParentSessionID string `json:"parent_session_id"`
+		Timestamp       string `json:"timestamp"`
+		Info            *struct {
 			TotalTokenUsage *codexTokenUsage `json:"total_token_usage"`
 		} `json:"info"`
 	} `json:"payload"`
@@ -70,6 +75,22 @@ type codexTokenEvent struct {
 type codexCostResult struct {
 	Today   float64
 	Last30d float64
+}
+
+type codexRawSnapshot struct {
+	ts    time.Time
+	usage codexTokenUsage
+}
+
+type codexSessionMeta struct {
+	sessionID    string
+	forkedFromID string
+	forkTS       time.Time
+}
+
+type codexScanState struct {
+	byID        map[string]string // session ID → file path, populated during discovery
+	parentCache map[string][]codexRawSnapshot
 }
 
 func sessionsRoot() string {
@@ -97,11 +118,6 @@ func scanCodexCosts() (*codexCostResult, error) {
 		codexCostCacheT = time.Now()
 		return codexCostCache, nil
 	}
-
-	// If the sessions directory doesn't exist (e.g. Codex not installed,
-	// or on Windows where the path may differ), return empty — not an
-	// error. This keeps the button from entering an error state on
-	// platforms where local Codex session logs simply aren't present.
 	if _, err := os.Stat(root); os.IsNotExist(err) {
 		codexCostCacheErr = nil
 		codexCostCache = &codexCostResult{}
@@ -113,29 +129,46 @@ func scanCodexCosts() (*codexCostResult, error) {
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	thirtyDaysAgo := now.AddDate(0, 0, -30)
 
-	var result codexCostResult
+	state := &codexScanState{
+		byID:        make(map[string]string),
+		parentCache: make(map[string][]codexRawSnapshot),
+	}
 
-	// Walk YYYY/MM/DD/*.jsonl. We only need directories whose date
-	// is >= thirtyDaysAgo, but the tree is cheap so a blanket walk
-	// is fine.
+	type fileEntry struct {
+		path string
+		meta codexSessionMeta
+	}
+	var toScan []fileEntry
+
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			// Skip unreadable subtrees; don't fail the whole scan.
 			return nil
 		}
-		if d.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(d.Name(), ".jsonl") {
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".jsonl") {
 			return nil
 		}
 		info, err := d.Info()
-		if err != nil || info.ModTime().Before(thirtyDaysAgo) {
+		if err != nil {
 			return nil
 		}
-		scanCodexSessionFile(path, todayStart, thirtyDaysAgo, &result)
+		meta, _ := readCodexSessionMeta(path)
+		if meta.sessionID != "" {
+			state.byID[meta.sessionID] = path
+		}
+		// Mod-time is a cheap pre-filter; a fork may still need the
+		// file as a parent even if its own last event is out of window,
+		// but byID is already populated above.
+		if info.ModTime().Before(thirtyDaysAgo) {
+			return nil
+		}
+		toScan = append(toScan, fileEntry{path: path, meta: meta})
 		return nil
 	})
+
+	var result codexCostResult
+	for _, fe := range toScan {
+		scanCodexSessionFile(state, fe.path, fe.meta, todayStart, thirtyDaysAgo, &result)
+	}
 
 	codexCostCacheErr = err
 	codexCostCache = &result
@@ -143,27 +176,81 @@ func scanCodexCosts() (*codexCostResult, error) {
 	return codexCostCache, codexCostCacheErr
 }
 
-// scanCodexSessionFile walks one rollout JSONL, keeps the LAST non-
-// nil total_token_usage seen (which is cumulative for the session),
-// then attributes that session's cost to the day of that event.
-func scanCodexSessionFile(path string, todayStart, thirtyDaysAgo time.Time, result *codexCostResult) {
+// readCodexSessionMeta reads the first handful of lines of a JSONL file
+// looking for the session_meta event. Returns an empty meta if not found
+// or the file can't be opened.
+func readCodexSessionMeta(path string) (codexSessionMeta, bool) {
 	f, err := os.Open(path)
 	if err != nil {
-		return
+		return codexSessionMeta{}, false
 	}
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	// Codex session lines can be fat (base_instructions carries a
-	// multi-paragraph system prompt), so give the buffer room to grow.
 	scanner.Buffer(make([]byte, 256*1024), 4*1024*1024)
 
-	var lastUsage codexTokenUsage
-	var lastTS time.Time
-	haveUsage := false
+	for i := 0; i < 20 && scanner.Scan(); i++ {
+		var ev codexLine
+		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
+			continue
+		}
+		if ev.Type != "session_meta" {
+			continue
+		}
+		p := ev.Payload
+		meta := codexSessionMeta{}
+		if p != nil {
+			meta.sessionID = p.SessionID
+			meta.forkedFromID = firstNonEmpty(p.ForkedFromID, p.ForkedFromIDAlt, p.ParentSessionID)
+			// Fork timestamp is the payload's own timestamp (when the
+			// fork was created); fall back to the line timestamp.
+			if t, ok := parseCodexTimestamp(p.Timestamp); ok {
+				meta.forkTS = t
+			}
+		}
+		if meta.forkTS.IsZero() {
+			if t, ok := parseCodexTimestamp(ev.Timestamp); ok {
+				meta.forkTS = t
+			}
+		}
+		return meta, true
+	}
+	return codexSessionMeta{}, false
+}
 
+// parentSnapshots returns every cumulative total_token_usage in the named
+// parent session, in timestamp order. Results are cached on the scan state
+// so multiple children forking from the same parent don't reparse it.
+func parentSnapshots(state *codexScanState, parentID string) []codexRawSnapshot {
+	if snaps, ok := state.parentCache[parentID]; ok {
+		return snaps
+	}
+	path, ok := state.byID[parentID]
+	if !ok {
+		state.parentCache[parentID] = nil
+		return nil
+	}
+	snaps := readCodexSnapshots(path)
+	state.parentCache[parentID] = snaps
+	return snaps
+}
+
+// readCodexSnapshots reads every cumulative total_token_usage from a file
+// in the order it appears. It reads the raw cumulative values — fork
+// inheritance subtraction is applied separately where needed.
+func readCodexSnapshots(path string) []codexRawSnapshot {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 256*1024), 4*1024*1024)
+
+	var out []codexRawSnapshot
 	for scanner.Scan() {
-		var ev codexTokenEvent
+		var ev codexLine
 		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
 			continue
 		}
@@ -177,20 +264,73 @@ func scanCodexSessionFile(path string, todayStart, thirtyDaysAgo time.Time, resu
 		if !ok {
 			continue
 		}
-		lastUsage = *ev.Payload.Info.TotalTokenUsage
-		lastTS = t
-		haveUsage = true
+		out = append(out, codexRawSnapshot{ts: t, usage: *ev.Payload.Info.TotalTokenUsage})
 	}
+	return out
+}
 
-	if !haveUsage || lastTS.Before(thirtyDaysAgo) {
+// inheritedBaseline walks the parent's snapshots and returns the last
+// cumulative usage at or before the fork timestamp. For recursive forks,
+// the parent's cumulative already embeds its own inheritance, which is
+// what we want: child's raw first event minus parent's raw cumulative
+// yields exactly the tokens the child added.
+func inheritedBaseline(state *codexScanState, parentID string, forkTS time.Time) codexTokenUsage {
+	var baseline codexTokenUsage
+	for _, s := range parentSnapshots(state, parentID) {
+		if s.ts.After(forkTS) {
+			break
+		}
+		baseline = s.usage
+	}
+	return baseline
+}
+
+// scanCodexSessionFile walks one rollout JSONL, computes per-event deltas
+// from the raw cumulative totals, and buckets each delta into today /
+// last-30d by its own timestamp (not the session's final timestamp).
+func scanCodexSessionFile(state *codexScanState, path string, meta codexSessionMeta, todayStart, thirtyDaysAgo time.Time, result *codexCostResult) {
+	snaps := readCodexSnapshots(path)
+	if len(snaps) == 0 {
 		return
 	}
 
-	cost := codexTokenCost(lastUsage)
-	result.Last30d += cost
-	if !lastTS.Before(todayStart) {
-		result.Today += cost
+	var prev codexTokenUsage
+	if meta.forkedFromID != "" {
+		prev = inheritedBaseline(state, meta.forkedFromID, meta.forkTS)
 	}
+
+	for _, s := range snaps {
+		delta := subUsage(s.usage, prev)
+		prev = s.usage
+		if s.ts.Before(thirtyDaysAgo) {
+			continue
+		}
+		cost := codexTokenCost(delta)
+		result.Last30d += cost
+		if !s.ts.Before(todayStart) {
+			result.Today += cost
+		}
+	}
+}
+
+// subUsage subtracts b from a field-by-field. Negative fields are floored
+// to zero — total_token_usage should monotonically grow within a session,
+// but defensive clamping guards against log anomalies.
+func subUsage(a, b codexTokenUsage) codexTokenUsage {
+	return codexTokenUsage{
+		InputTokens:           maxZero(a.InputTokens - b.InputTokens),
+		CachedInputTokens:     maxZero(a.CachedInputTokens - b.CachedInputTokens),
+		OutputTokens:          maxZero(a.OutputTokens - b.OutputTokens),
+		ReasoningOutputTokens: maxZero(a.ReasoningOutputTokens - b.ReasoningOutputTokens),
+		TotalTokens:           maxZero(a.TotalTokens - b.TotalTokens),
+	}
+}
+
+func maxZero(n int) int {
+	if n < 0 {
+		return 0
+	}
+	return n
 }
 
 func parseCodexTimestamp(ts string) (time.Time, bool) {
@@ -207,19 +347,15 @@ func parseCodexTimestamp(ts string) (time.Time, bool) {
 }
 
 func codexTokenCost(u codexTokenUsage) float64 {
-	// input_tokens in the Codex log is the non-cached chunk; cached
-	// is billed at a reduced rate. We also bill reasoning tokens at
-	// the output rate.
 	return float64(u.InputTokens)*codexPriceInputPerMTok/1_000_000 +
 		float64(u.CachedInputTokens)*codexPriceCachedPerMTok/1_000_000 +
 		float64(u.OutputTokens)*codexPriceOutputPerMTok/1_000_000 +
 		float64(u.ReasoningOutputTokens)*codexPriceReasoningPerMTok/1_000_000
 }
 
-// codexCostMetrics returns cost-today + cost-30d metrics built from
-// the local session-log scan. Returns nil if no session data was
-// found for the last 30 days — the renderer will draw a dash for
-// those buttons instead of faking $0.00.
+// codexCostMetrics returns cost-today + cost-30d metrics built from the
+// local session-log scan. Returns nil if no session data was found for
+// the last 30 days so the renderer draws a dash instead of a fake $0.00.
 func codexCostMetrics() []providers.MetricValue {
 	result, err := scanCodexCosts()
 	if err != nil || result == nil {

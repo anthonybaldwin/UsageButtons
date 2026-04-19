@@ -194,6 +194,9 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		ratio := remainPct / 100
 		resetSecs := resetSecondsFromLimit(limit)
 		remaining := int(cap - used)
+		if remaining < 0 {
+			remaining = 0
+		}
 		capInt := int(cap)
 
 		id := typeName + "-percent"

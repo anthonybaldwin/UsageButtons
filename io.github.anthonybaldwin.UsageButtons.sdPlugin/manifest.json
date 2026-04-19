@@ -4,7 +4,7 @@
   "Name": "Usage Buttons",
   "Author": "Anthony Baldwin",
   "Description": "Live AI-coding-assistant usage stats (session %, weekly %, credits, resets) as Stream Deck buttons with fill-style icons.",
-  "Version": "0.3.5.0",
+  "Version": "0.4.0.0",
   "Icon": "assets/plugin-icon",
   "Category": "Usage Buttons",
   "CategoryIcon": "assets/category-icon",

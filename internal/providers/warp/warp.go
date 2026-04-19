@@ -7,6 +7,7 @@ package warp
 
 import (
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
@@ -30,6 +31,16 @@ query GetRequestLimitInfo($requestContext: RequestContext!) {
         bonusGrants {
           requestCreditsGranted
           requestCreditsRemaining
+          expiration
+        }
+        workspaces {
+          bonusGrantsInfo {
+            grants {
+              requestCreditsGranted
+              requestCreditsRemaining
+              expiration
+            }
+          }
         }
       }
     }
@@ -46,16 +57,24 @@ type requestLimitInfo struct {
 }
 
 type bonusGrant struct {
-	RequestCreditsGranted   *int `json:"requestCreditsGranted"`
-	RequestCreditsRemaining *int `json:"requestCreditsRemaining"`
+	RequestCreditsGranted   *int    `json:"requestCreditsGranted"`
+	RequestCreditsRemaining *int    `json:"requestCreditsRemaining"`
+	Expiration              *string `json:"expiration"`
+}
+
+type workspaceBonusInfo struct {
+	BonusGrantsInfo *struct {
+		Grants []bonusGrant `json:"grants"`
+	} `json:"bonusGrantsInfo"`
 }
 
 type graphqlResponse struct {
 	Data *struct {
 		User *struct {
 			User *struct {
-				RequestLimitInfo *requestLimitInfo `json:"requestLimitInfo"`
-				BonusGrants      []bonusGrant      `json:"bonusGrants"`
+				RequestLimitInfo *requestLimitInfo    `json:"requestLimitInfo"`
+				BonusGrants      []bonusGrant         `json:"bonusGrants"`
+				Workspaces       []workspaceBonusInfo `json:"workspaces"`
 			} `json:"user"`
 		} `json:"user"`
 	} `json:"data"`
@@ -142,7 +161,12 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	var grants []bonusGrant
 	if resp.Data != nil && resp.Data.User != nil && resp.Data.User.User != nil {
 		info = resp.Data.User.User.RequestLimitInfo
-		grants = resp.Data.User.User.BonusGrants
+		grants = append(grants, resp.Data.User.User.BonusGrants...)
+		for _, ws := range resp.Data.User.User.Workspaces {
+			if ws.BonusGrantsInfo != nil {
+				grants = append(grants, ws.BonusGrantsInfo.Grants...)
+			}
+		}
 	}
 
 	var metrics []providers.MetricValue
@@ -201,16 +225,32 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		}
 	}
 
-	// Bonus credits - aggregate all grants
+	// Bonus credits - aggregate user + workspace grants, track earliest expiration.
 	if len(grants) > 0 {
 		totalGranted := 0
 		totalRemaining := 0
+		var earliestExpiry time.Time
+		earliestRemaining := 0
 		for _, g := range grants {
+			granted := 0
+			remaining := 0
 			if g.RequestCreditsGranted != nil {
-				totalGranted += *g.RequestCreditsGranted
+				granted = *g.RequestCreditsGranted
 			}
 			if g.RequestCreditsRemaining != nil {
-				totalRemaining += *g.RequestCreditsRemaining
+				remaining = *g.RequestCreditsRemaining
+			}
+			totalGranted += granted
+			totalRemaining += remaining
+			if remaining > 0 && g.Expiration != nil && *g.Expiration != "" {
+				if t, err := time.Parse(time.RFC3339, *g.Expiration); err == nil {
+					if earliestExpiry.IsZero() || t.Before(earliestExpiry) {
+						earliestExpiry = t
+						earliestRemaining = remaining
+					} else if t.Equal(earliestExpiry) {
+						earliestRemaining += remaining
+					}
+				}
 			}
 		}
 		if totalGranted > 0 {
@@ -218,7 +258,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			remainPct := 100 - usedPct
 			ratio := remainPct / 100
 
-			metrics = append(metrics, providers.MetricValue{
+			m := providers.MetricValue{
 				ID:           "bonus-credits",
 				Label:        "BONUS",
 				Name:         "Warp bonus credits remaining",
@@ -231,7 +271,11 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 				RawCount:     &totalRemaining,
 				RawMax:       &totalGranted,
 				UpdatedAt:    now,
-			})
+			}
+			if !earliestExpiry.IsZero() && earliestRemaining > 0 {
+				m.Caption = formatExpiryCaption(earliestRemaining, earliestExpiry)
+			}
+			metrics = append(metrics, m)
 		}
 	}
 
@@ -242,6 +286,15 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		Metrics:      metrics,
 		Status:       "operational",
 	}, nil
+}
+
+// formatExpiryCaption returns "N credits expire MMM D" for the earliest-expiring batch.
+func formatExpiryCaption(remaining int, expiry time.Time) string {
+	noun := "credits expire"
+	if remaining == 1 {
+		noun = "credit expires"
+	}
+	return strconv.Itoa(remaining) + " " + noun + " " + expiry.Local().Format("Jan 2")
 }
 
 func init() {

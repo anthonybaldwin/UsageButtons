@@ -81,6 +81,11 @@ func main() {
 	go schedulerLoop(conn)
 	go displayRefreshLoop(conn)
 
+	// Invalidate provider caches when their credential files change,
+	// so a post-login tile update arrives within tens of seconds
+	// instead of waiting up to MinTTL for the next scheduled poll.
+	providers.StartCredentialWatcher()
+
 	// Event loop — blocks forever.
 	for {
 		ev, err := conn.ReadEvent()

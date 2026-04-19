@@ -91,6 +91,32 @@
       font-weight: 700;
     }
     .group-heading:first-child { margin-top: 4px; }
+
+    /* Override pattern: a checkbox that reveals the underlying
+       control when checked. Unchecked = inherit from the parent tier
+       (plugin tab for provider-tier overrides). */
+    .override-row { margin-top: 10px; }
+    .override-row .override-control {
+      margin-top: 4px;
+      padding-left: 20px;
+      border-left: 2px solid #374151;
+    }
+    .override-row.override-active .override-control { display: block; }
+    .override-row:not(.override-active) .override-control { display: none; }
+    .override-row label.override-label {
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      margin: 0;
+    }
+    .override-row .override-inherit {
+      margin-left: 6px;
+      font-weight: 400;
+      opacity: 0.55;
+      font-size: 11px;
+    }
   </style>
 </head>
 <body>
@@ -110,133 +136,235 @@
   <!-- ================== Button tab (per-key) ================== -->
   <div id="buttonPanel" class="panel active">
 
-    <div class="group-heading">Metric</div>
-
-    <label for="metric">Metric</label>
+    <label for="metric">What this button shows</label>
     <select id="metric"></select>
 
-    <label for="refreshMinutes">Refresh interval (this button)</label>
-    <select id="refreshMinutes">
-      <option value="">Use plugin default</option>
-      <option value="5">5 minutes</option>
-      <option value="10">10 minutes</option>
-      <option value="15">15 minutes</option>
-      <option value="30">30 minutes</option>
-      <option value="60">1 hour</option>
-    </select>
+    <!-- ================== Per-button customization ==================
+         Tiered settings (refresh, sizes, colors, border, glyph,
+         thresholds) are checkbox-gated and tucked behind a <details>
+         so the most common case (inheriting provider/plugin defaults)
+         stays clean. Expand to customize any field for this one
+         button. Each checkbox's grey hint shows the inherited value
+         so users know what they'd fall back to. -->
+    <details id="buttonCustomize" style="margin-top: 18px;">
+      <summary style="cursor: pointer; font-weight: 600; padding: 6px 0; opacity: 0.85; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;">
+        Customize this button's appearance
+        <span class="override-inherit" style="text-transform: none; letter-spacing: 0;">(currently inheriting provider / plugin defaults)</span>
+      </summary>
 
-    <div class="group-heading">Text</div>
-
-    <label for="captionOverride">Subtext override (blank = metric default)</label>
-    <input id="captionOverride" type="text" placeholder="e.g. Work, Monthly, Prepaid">
-
-    <div class="checkbox-row">
-      <input id="hideSubvalue" type="checkbox">
-      <label for="hideSubvalue">Hide subtext</label>
-    </div>
-    <p class="hint">
-      Replaces the subtext under the big number (e.g. "Remaining",
-      "Used", "Prepaid"). Reset countdowns always win — if the
-      metric has a live timer, uncheck <strong>Show reset
-      countdown</strong> below to let the override through.
-    </p>
-
-    <label for="valueSize">Big-number size</label>
-    <select id="valueSize">
-      <option value="">Use plugin default</option>
-      <option value="small">Small</option>
-      <option value="medium">Medium</option>
-      <option value="large">Large</option>
-    </select>
-
-    <label for="subvalueSize">Subtext size</label>
-    <select id="subvalueSize">
-      <option value="">Use plugin default</option>
-      <option value="small">Small</option>
-      <option value="medium">Medium</option>
-      <option value="large">Large</option>
-    </select>
-
-    <div class="feature-timer">
-      <div class="checkbox-row">
-        <input id="showResetTimer" type="checkbox" checked>
-        <label for="showResetTimer">Show reset countdown under the number</label>
+    <div class="override-row" data-button-override="captionOverride">
+      <label class="override-label">
+        <input type="checkbox" id="bo-captionOverride-enabled">
+        Subtext override
+        <span class="override-inherit">replaces "Remaining" / "Used" / metric default</span>
+      </label>
+      <div class="override-control">
+        <input id="captionOverride" type="text" placeholder="e.g. Work, Monthly, Prepaid">
       </div>
     </div>
 
-    <div class="feature-rawCounts">
-      <div class="checkbox-row">
-        <input id="showRawCounts" type="checkbox">
-        <label for="showRawCounts">Show raw counts (e.g. 42/56)</label>
+    <div class="override-row" data-button-override="hideSubvalue">
+      <label class="override-label">
+        <input type="checkbox" id="bo-hideSubvalue-enabled">
+        Hide subtext
+        <span class="override-inherit" id="bo-hideSubvalue-inherit"></span>
+      </label>
+      <div class="override-control">
+        <div class="checkbox-row">
+          <input id="hideSubvalue" type="checkbox">
+          <label for="hideSubvalue">Hide subtext on this button</label>
+        </div>
       </div>
-      <p class="hint">
-        When checked, percent metrics with raw count data show the
-        underlying count instead of "Remaining" / "Used". Auto-enables
-        for credit-based providers (Warp, Kimi K2, z.ai, Copilot) when
-        the API returns raw counts. Uncheck to force off.
-      </p>
     </div>
 
-    <div class="feature-meter">
-      <div class="group-heading">Fill</div>
-
-      <label for="fillDirection">Fill direction</label>
-      <select id="fillDirection">
-        <option value="up">Up (default)</option>
-        <option value="down">Down</option>
-        <option value="right">Right</option>
-        <option value="left">Left</option>
-      </select>
+    <div class="override-row feature-timer" data-button-override="showResetTimer">
+      <label class="override-label">
+        <input type="checkbox" id="bo-showResetTimer-enabled">
+        Show reset countdown
+        <span class="override-inherit" id="bo-showResetTimer-inherit"></span>
+      </label>
+      <div class="override-control">
+        <div class="checkbox-row">
+          <input id="showResetTimer" type="checkbox" checked>
+          <label for="showResetTimer">Show countdown under the number</label>
+        </div>
+      </div>
     </div>
 
-    <div class="group-heading">Colors</div>
-
-    <div class="row">
-      <label for="fillColor">Fill color</label>
-      <input id="fillColor" type="color" value="#3b82f6">
+    <div class="override-row feature-rawCounts" data-button-override="showRawCounts">
+      <label class="override-label">
+        <input type="checkbox" id="bo-showRawCounts-enabled">
+        Show raw counts
+        <span class="override-inherit" id="bo-showRawCounts-inherit"></span>
+      </label>
+      <div class="override-control">
+        <div class="checkbox-row">
+          <input id="showRawCounts" type="checkbox">
+          <label for="showRawCounts">Show raw counts (e.g. 42/56)</label>
+        </div>
+      </div>
     </div>
 
-    <div class="row">
-      <label for="bgColor">Background color</label>
-      <input id="bgColor" type="color" value="#111827">
+    <div class="override-row" data-button-override="refreshMinutes">
+      <label class="override-label">
+        <input type="checkbox" id="bo-refreshMinutes-enabled">
+        Refresh interval
+        <span class="override-inherit" id="bo-refreshMinutes-inherit"></span>
+      </label>
+      <div class="override-control">
+        <select id="refreshMinutes">
+          <option value="5">5 minutes</option>
+          <option value="10">10 minutes</option>
+          <option value="15">15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60">1 hour</option>
+        </select>
+      </div>
     </div>
 
-    <div class="row">
-      <label for="textColor">Text color</label>
-      <input id="textColor" type="color" value="#f9fafb">
+    <div class="override-row" data-button-override="valueSize">
+      <label class="override-label">
+        <input type="checkbox" id="bo-valueSize-enabled">
+        Big-number size
+        <span class="override-inherit" id="bo-valueSize-inherit"></span>
+      </label>
+      <div class="override-control">
+        <select id="valueSize">
+          <option value="small">Small</option>
+          <option value="medium">Medium</option>
+          <option value="large">Large</option>
+        </select>
+      </div>
     </div>
 
-    <div class="checkbox-row">
-      <input id="showBorder" type="checkbox" checked>
-      <label for="showBorder">Draw border around the tile</label>
+    <div class="override-row" data-button-override="subvalueSize">
+      <label class="override-label">
+        <input type="checkbox" id="bo-subvalueSize-enabled">
+        Subtext size
+        <span class="override-inherit" id="bo-subvalueSize-inherit"></span>
+      </label>
+      <div class="override-control">
+        <select id="subvalueSize">
+          <option value="small">Small</option>
+          <option value="medium">Medium</option>
+          <option value="large">Large</option>
+        </select>
+      </div>
     </div>
 
-    <div class="checkbox-row">
-      <input id="showGlyph" type="checkbox" checked>
-      <label for="showGlyph">Show provider logo on this button</label>
+    <div class="override-row feature-meter" data-button-override="fillDirection">
+      <label class="override-label">
+        <input type="checkbox" id="bo-fillDirection-enabled">
+        Fill direction
+        <span class="override-inherit" id="bo-fillDirection-inherit"></span>
+      </label>
+      <div class="override-control">
+        <select id="fillDirection">
+          <option value="up">Up</option>
+          <option value="down">Down</option>
+          <option value="right">Right</option>
+          <option value="left">Left</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="override-row" data-button-override="fillColor">
+      <label class="override-label">
+        <input type="checkbox" id="bo-fillColor-enabled">
+        Fill color
+        <span class="override-inherit" id="bo-fillColor-inherit"></span>
+      </label>
+      <div class="override-control">
+        <input id="fillColor" type="color" value="#3b82f6">
+      </div>
+    </div>
+
+    <div class="override-row" data-button-override="bgColor">
+      <label class="override-label">
+        <input type="checkbox" id="bo-bgColor-enabled">
+        Background color
+        <span class="override-inherit" id="bo-bgColor-inherit"></span>
+      </label>
+      <div class="override-control">
+        <input id="bgColor" type="color" value="#111827">
+      </div>
+    </div>
+
+    <div class="override-row" data-button-override="textColor">
+      <label class="override-label">
+        <input type="checkbox" id="bo-textColor-enabled">
+        Text color
+        <span class="override-inherit" id="bo-textColor-inherit"></span>
+      </label>
+      <div class="override-control">
+        <input id="textColor" type="color" value="#f9fafb">
+      </div>
+    </div>
+
+    <div class="override-row" data-button-override="showBorder">
+      <label class="override-label">
+        <input type="checkbox" id="bo-showBorder-enabled">
+        Draw border around tile
+        <span class="override-inherit" id="bo-showBorder-inherit"></span>
+      </label>
+      <div class="override-control">
+        <div class="checkbox-row">
+          <input id="showBorder" type="checkbox" checked>
+          <label for="showBorder">Show border</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="override-row" data-button-override="showGlyph">
+      <label class="override-label">
+        <input type="checkbox" id="bo-showGlyph-enabled">
+        Show provider logo
+        <span class="override-inherit" id="bo-showGlyph-inherit"></span>
+      </label>
+      <div class="override-control">
+        <div class="checkbox-row">
+          <input id="showGlyph" type="checkbox" checked>
+          <label for="showGlyph">Show logo on this button</label>
+        </div>
+      </div>
     </div>
 
     <div class="feature-thresholds">
-      <div class="group-heading">Warn / critical thresholds</div>
-      <p class="hint" style="margin: 0 0 8px">
-        When the metric's dollar value crosses these thresholds,
-        the tile switches to the warn / critical color. Units are
-        raw dollars. Leave blank for defaults ($10 warn / $0
-        critical for balances; 80% / 100% of cap for spend meters).
-      </p>
-      <div class="row">
-        <label for="warnBelow">Warn below</label>
-        <input id="warnBelow" type="text" placeholder="(default)" style="flex: 1">
-        <input id="warnColor" type="color" value="#f59e0b">
+      <div class="override-row" data-button-override="warnBelow">
+        <label class="override-label">
+          <input type="checkbox" id="bo-warnBelow-enabled">
+          Warn threshold + color
+          <span class="override-inherit" id="bo-warnBelow-inherit"></span>
+        </label>
+        <div class="override-control">
+          <div class="row">
+            <input id="warnBelow" type="text" placeholder="e.g. 10" style="flex: 1">
+            <input id="warnColor" type="color" value="#f59e0b">
+          </div>
+        </div>
       </div>
-      <div class="row">
-        <label for="criticalBelow">Critical below</label>
-        <input id="criticalBelow" type="text" placeholder="(default)" style="flex: 1">
-        <input id="criticalColor" type="color" value="#ef4444">
-      </div>
-    </div>
 
-    <p class="hint">
+      <div class="override-row" data-button-override="criticalBelow">
+        <label class="override-label">
+          <input type="checkbox" id="bo-criticalBelow-enabled">
+          Critical threshold + color
+          <span class="override-inherit" id="bo-criticalBelow-inherit"></span>
+        </label>
+        <div class="override-control">
+          <div class="row">
+            <input id="criticalBelow" type="text" placeholder="e.g. 0" style="flex: 1">
+            <input id="criticalColor" type="color" value="#ef4444">
+          </div>
+        </div>
+      </div>
+      <p class="hint" style="margin-top: 6px;">
+        Units are raw dollars. Defaults are per-metric-type — $10 warn
+        / $0 critical for balances, 80% / 100% of cap for spend meters.
+      </p>
+    </div>
+    </details>
+
+    <p class="hint" style="margin-top: 14px;">
       Click the key on your Stream Deck to force an immediate refresh.
     </p>
   </div>
@@ -378,6 +506,216 @@
         <code>KIMI_KEY</code>.
       </p>
     </div>
+
+    <!-- ================== Per-provider defaults ==================
+         Set defaults that apply to every button of this provider.
+         Unchecked = use the plugin / smart default (shown in grey).
+         Checking a row saves that value as the provider-wide default;
+         individual buttons can still customize from "This button". -->
+    <div class="group-heading" style="margin-top: 24px;">
+      Defaults for <span id="providerOverrideNameInline">this provider</span>'s buttons
+    </div>
+    <p class="hint" style="margin: 0 0 4px">
+      Check a row to set a default for every
+      <span id="providerOverrideNameInline2">this provider</span>
+      button. Unchecked rows fall back to the plugin-wide default
+      (or a smart default where applicable). Any button can still
+      customize from the <em>This button</em> tab.
+    </p>
+
+    <div class="override-row" data-provider-override="refreshMinutes">
+      <label class="override-label">
+        <input type="checkbox" id="po-refreshMinutes-enabled">
+        Refresh interval
+        <span class="override-inherit" id="po-refreshMinutes-inherit"></span>
+      </label>
+      <div class="override-control">
+        <select id="po-refreshMinutes">
+          <option value="5">5 minutes</option>
+          <option value="10">10 minutes</option>
+          <option value="15">15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60">1 hour</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="valueSize">
+      <label class="override-label">
+        <input type="checkbox" id="po-valueSize-enabled">
+        Big-number size
+        <span class="override-inherit" id="po-valueSize-inherit"></span>
+      </label>
+      <div class="override-control">
+        <select id="po-valueSize">
+          <option value="small">Small</option>
+          <option value="medium">Medium</option>
+          <option value="large">Large</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="subvalueSize">
+      <label class="override-label">
+        <input type="checkbox" id="po-subvalueSize-enabled">
+        Subtext size
+        <span class="override-inherit" id="po-subvalueSize-inherit"></span>
+      </label>
+      <div class="override-control">
+        <select id="po-subvalueSize">
+          <option value="small">Small</option>
+          <option value="medium">Medium</option>
+          <option value="large">Large</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="fillDirection">
+      <label class="override-label">
+        <input type="checkbox" id="po-fillDirection-enabled">
+        Fill direction
+        <span class="override-inherit" id="po-fillDirection-inherit"></span>
+      </label>
+      <div class="override-control">
+        <select id="po-fillDirection">
+          <option value="up">Up</option>
+          <option value="down">Down</option>
+          <option value="right">Right</option>
+          <option value="left">Left</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="fillColor">
+      <label class="override-label">
+        <input type="checkbox" id="po-fillColor-enabled">
+        Fill color
+        <span class="override-inherit" id="po-fillColor-inherit"></span>
+      </label>
+      <div class="override-control">
+        <input id="po-fillColor" type="color" value="#3b82f6">
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="bgColor">
+      <label class="override-label">
+        <input type="checkbox" id="po-bgColor-enabled">
+        Background color
+        <span class="override-inherit" id="po-bgColor-inherit"></span>
+      </label>
+      <div class="override-control">
+        <input id="po-bgColor" type="color" value="#111827">
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="textColor">
+      <label class="override-label">
+        <input type="checkbox" id="po-textColor-enabled">
+        Text color
+        <span class="override-inherit" id="po-textColor-inherit"></span>
+      </label>
+      <div class="override-control">
+        <input id="po-textColor" type="color" value="#f9fafb">
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="showBorder">
+      <label class="override-label">
+        <input type="checkbox" id="po-showBorder-enabled">
+        Draw border around tile
+        <span class="override-inherit" id="po-showBorder-inherit"></span>
+      </label>
+      <div class="override-control">
+        <div class="checkbox-row">
+          <input id="po-showBorder" type="checkbox" checked>
+          <label for="po-showBorder">Show border</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="showGlyph">
+      <label class="override-label">
+        <input type="checkbox" id="po-showGlyph-enabled">
+        Show provider logo
+        <span class="override-inherit" id="po-showGlyph-inherit"></span>
+      </label>
+      <div class="override-control">
+        <div class="checkbox-row">
+          <input id="po-showGlyph" type="checkbox" checked>
+          <label for="po-showGlyph">Show logo on every button</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="showResetTimer">
+      <label class="override-label">
+        <input type="checkbox" id="po-showResetTimer-enabled">
+        Show reset countdown
+        <span class="override-inherit" id="po-showResetTimer-inherit"></span>
+      </label>
+      <div class="override-control">
+        <div class="checkbox-row">
+          <input id="po-showResetTimer" type="checkbox" checked>
+          <label for="po-showResetTimer">Show countdown under the number</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="showRawCounts">
+      <label class="override-label">
+        <input type="checkbox" id="po-showRawCounts-enabled">
+        Show raw counts
+        <span class="override-inherit" id="po-showRawCounts-inherit"></span>
+      </label>
+      <div class="override-control">
+        <div class="checkbox-row">
+          <input id="po-showRawCounts" type="checkbox">
+          <label for="po-showRawCounts">Show raw counts (e.g. 42/56)</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="hideSubvalue">
+      <label class="override-label">
+        <input type="checkbox" id="po-hideSubvalue-enabled">
+        Hide subtext
+        <span class="override-inherit" id="po-hideSubvalue-inherit"></span>
+      </label>
+      <div class="override-control">
+        <div class="checkbox-row">
+          <input id="po-hideSubvalue" type="checkbox">
+          <label for="po-hideSubvalue">Hide subtext on every button</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="warnBelow">
+      <label class="override-label">
+        <input type="checkbox" id="po-warnBelow-enabled">
+        Warn threshold + color
+        <span class="override-inherit">inherits per-metric-type default</span>
+      </label>
+      <div class="override-control">
+        <div class="row">
+          <input id="po-warnBelow" type="text" placeholder="e.g. 10" style="flex: 1">
+          <input id="po-warnColor" type="color" value="#f59e0b">
+        </div>
+      </div>
+    </div>
+
+    <div class="override-row" data-provider-override="criticalBelow">
+      <label class="override-label">
+        <input type="checkbox" id="po-criticalBelow-enabled">
+        Critical threshold + color
+        <span class="override-inherit">inherits per-metric-type default</span>
+      </label>
+      <div class="override-control">
+        <div class="row">
+          <input id="po-criticalBelow" type="text" placeholder="e.g. 0" style="flex: 1">
+          <input id="po-criticalColor" type="color" value="#ef4444">
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ================== Plugin tab (shared) =================== -->
@@ -395,32 +733,98 @@
     </select>
     <p class="hint">Each button can override this from the "This button" tab.</p>
 
-    <div class="checkbox-row">
-      <input id="skipUpdateCheck" type="checkbox">
-      <label for="skipUpdateCheck">Skip update check</label>
-    </div>
-    <p class="hint">
-      The plugin checks GitHub Releases every 6 hours for a newer
-      version. When an update is found, all buttons show an "UPDATE"
-      notice until you install the new version. Enable this to suppress
-      the check entirely.
-    </p>
-
     <div class="group-heading">Display</div>
     <div class="checkbox-row">
       <input id="invertFill" type="checkbox">
       <label for="invertFill">Invert fill — show "% used" instead of "% remaining"</label>
     </div>
-    <div class="checkbox-row">
+    <p class="hint" style="margin: 4px 0 0;">
+      Plugin-wide only. CodexBar's menu bar shows "N% used" but the
+      plugin default is "N% remaining" (classic fuel-gauge style).
+      Flip this to match your mental model — half your buttons
+      reading one way and half the other is confusing.
+    </p>
+
+    <div class="checkbox-row" style="margin-top: 14px;">
       <input id="showGlyphs" type="checkbox" checked>
-      <label for="showGlyphs">Show provider logo watermark on every button</label>
+      <label for="showGlyphs">Show provider logo watermark</label>
     </div>
+    <div class="checkbox-row">
+      <input id="defaultShowBorder" type="checkbox" checked>
+      <label for="defaultShowBorder">Draw border around every tile</label>
+    </div>
+    <div class="checkbox-row">
+      <input id="defaultShowResetTimer" type="checkbox" checked>
+      <label for="defaultShowResetTimer">Show reset countdown under the number (metrics that have one)</label>
+    </div>
+    <div class="checkbox-row">
+      <input id="defaultShowRawCounts" type="checkbox">
+      <label for="defaultShowRawCounts">Show raw counts (e.g. 42/56) when available</label>
+    </div>
+    <div class="checkbox-row">
+      <input id="defaultHideSubvalue" type="checkbox">
+      <label for="defaultHideSubvalue">Hide subtext on every button</label>
+    </div>
+
+    <!-- Fill color has a smart per-provider default (brand color),
+         so the plugin-wide value is an opt-in override — not a base
+         everyone starts with. Same story for background. Text color
+         has no brand equivalent, so it stays always-set. -->
+    <div class="override-row" data-plugin-override="fillColor" style="margin-top: 10px;">
+      <label class="override-label">
+        <input type="checkbox" id="pd-fillColor-enabled">
+        Override fill color (meter metrics)
+        <span class="override-inherit">default: each provider's brand color</span>
+      </label>
+      <div class="override-control">
+        <input id="defaultFillColor" type="color" value="#3b82f6">
+      </div>
+    </div>
+
+    <div class="override-row" data-plugin-override="bgColor">
+      <label class="override-label">
+        <input type="checkbox" id="pd-bgColor-enabled">
+        Override background color
+        <span class="override-inherit">default: each provider's brand background</span>
+      </label>
+      <div class="override-control">
+        <input id="defaultBgColor" type="color" value="#111827">
+      </div>
+    </div>
+
+    <label for="defaultTextColor" style="margin-top: 10px;">Text color</label>
+    <input id="defaultTextColor" type="color" value="#f9fafb">
+
+    <label for="defaultFillDirection" style="margin-top: 10px;">Fill direction</label>
+    <select id="defaultFillDirection">
+      <option value="up">Up (default — fills from bottom)</option>
+      <option value="down">Down</option>
+      <option value="right">Right</option>
+      <option value="left">Left</option>
+    </select>
+
+    <div class="group-heading">Warn / critical thresholds</div>
+    <p class="hint" style="margin: 0 0 8px">
+      Plugin-wide warn / critical thresholds. Apply to dollar-unit
+      metrics unless a provider or button customizes them. Leave the
+      number blank to fall through to per-metric-type smart defaults
+      ($10 warn / $0 critical for balances, 80% / 100% of cap for
+      spend meters).
+    </p>
+    <div class="row">
+      <label for="defaultWarnBelow">Warn below</label>
+      <input id="defaultWarnBelow" type="text" placeholder="(per-metric default)" style="flex: 1">
+      <input id="defaultWarnColor" type="color" value="#f59e0b">
+    </div>
+    <div class="row">
+      <label for="defaultCriticalBelow">Critical below</label>
+      <input id="defaultCriticalBelow" type="text" placeholder="(per-metric default)" style="flex: 1">
+      <input id="defaultCriticalColor" type="color" value="#ef4444">
+    </div>
+
     <p class="hint">
-      Applies to every button. CodexBar's menu bar shows "N% used"
-      but the plugin default is "N% remaining" (classic fuel-gauge
-      style). Flip this to match your mental model — it's plugin-wide
-      because having half your buttons read one way and half the
-      other is confusing.
+      These are the base values every button uses unless a provider or
+      individual button customizes them from its own tab.
     </p>
 
     <div class="group-heading">Default text sizes</div>
@@ -490,6 +894,18 @@
       and manifest file. Tip: unregister before removing the plugin
       from Stream Deck.
     </p>
+
+    <div class="group-heading">Updates</div>
+    <div class="checkbox-row">
+      <input id="skipUpdateCheck" type="checkbox">
+      <label for="skipUpdateCheck">Skip update check</label>
+    </div>
+    <p class="hint">
+      The plugin checks GitHub Releases every 6 hours for a newer
+      version. When an update is found, all buttons show an "UPDATE"
+      notice until you install the new version. Enable this to
+      suppress the check entirely.
+    </p>
   </div>
 
   <script>
@@ -517,6 +933,11 @@
       "toggle":    { meter: false, thresholds: false, timer: false, rawCounts: false },
     };
 
+    // Row shape: [id, label, flagKey, auth?]
+    // auth ∈ { "browser" } — present only when the metric REQUIRES the
+    // Usage Buttons Helper extension (no OAuth / API-key fallback).
+    // Absent = works without the extension. Kept per-row so the same
+    // mechanism applies uniformly across providers.
     const METRICS = {
       claude: [
         ["session-percent",           "Session % remaining (5h)",       "pct"],
@@ -529,12 +950,12 @@
         ["opus-pace",                 "Opus pace (7d burn rate)",       "pace"],
         ["weekly-design-percent",     "Claude Design % remaining (weekly)", "pct"],
         ["design-pace",               "Claude Design pace (7d burn rate)",  "pace"],
-        ["extra-usage-enabled",       "Extra usage — ON / OFF",         "toggle"],
-        ["extra-usage-percent",       "Extra usage headroom %",         "pct"],
-        ["extra-usage-limit",         "Extra usage monthly limit ($)",  "ref-dollar"],
-        ["extra-usage-spent",         "Extra usage spent ($)",          "dollar-m"],
-        ["extra-usage-balance",       "Prepaid balance ($)",            "ref-dollar"],
-        ["extra-usage-auto-reload",   "Auto-reload ON / OFF",           "toggle"],
+        ["extra-usage-enabled",       "Extra usage — ON / OFF",         "toggle",     "browser"],
+        ["extra-usage-percent",       "Extra usage headroom %",         "pct",        "browser"],
+        ["extra-usage-limit",         "Extra usage monthly limit ($)",  "ref-dollar", "browser"],
+        ["extra-usage-spent",         "Extra usage spent ($)",          "dollar-m",   "browser"],
+        ["extra-usage-balance",       "Prepaid balance ($)",            "ref-dollar", "browser"],
+        ["extra-usage-auto-reload",   "Auto-reload ON / OFF",           "toggle",     "browser"],
         ["cost-today",                "Cost today (local logs)",        "ref-dollar"],
         ["cost-30d",                  "Cost last 30 days (local logs)", "ref-dollar"],
       ],
@@ -560,16 +981,16 @@
         ["chat-percent",    "Chat interactions remaining %",    "pct"],
       ],
       ollama: [
-        ["session-percent", "Session usage remaining %",        "pct"],
-        ["session-pace",    "Session pace (burn rate)",         "pace"],
-        ["weekly-percent",  "Weekly usage remaining %",         "pct"],
-        ["weekly-pace",     "Weekly pace (burn rate)",          "pace"],
+        ["session-percent", "Session usage remaining %",        "pct",  "browser"],
+        ["session-pace",    "Session pace (burn rate)",         "pace", "browser"],
+        ["weekly-percent",  "Weekly usage remaining %",         "pct",  "browser"],
+        ["weekly-pace",     "Weekly pace (burn rate)",          "pace", "browser"],
       ],
       cursor: [
-        ["total-percent",   "Total plan usage remaining %",     "pct"],
-        ["auto-percent",    "Auto / Composer usage remaining %","pct"],
-        ["api-percent",     "API / Named model usage remaining %","pct"],
-        ["ondemand-spent",  "On-demand spend ($)",              "dollar-m"],
+        ["total-percent",   "Total plan usage remaining %",       "pct",      "browser"],
+        ["auto-percent",    "Auto / Composer usage remaining %",  "pct",      "browser"],
+        ["api-percent",     "API / Named model usage remaining %","pct",      "browser"],
+        ["ondemand-spent",  "On-demand spend ($)",                "dollar-m", "browser"],
       ],
       openrouter: [
         ["credits-balance", "Credit balance ($)",  "ref-dollar"],
@@ -603,6 +1024,21 @@
       warp:       "#938bb4",
       zai:        "#e85a6a",
       "kimi-k2":  "#4c00ff",
+    };
+
+    // Per-provider brand background colors. Kept in sync with each
+    // provider's BrandBg() in Go so the PI can pre-fill the hidden
+    // bgColor picker with the actual default the tile will render.
+    const BRAND_BGS = {
+      claude:     "#1c1210",
+      codex:      "#000000",
+      copilot:    "#150d2e",
+      ollama:     "#141414",
+      cursor:     "#1a0e06",
+      openrouter: "#101028",
+      warp:       "#081520",
+      zai:        "#0c0c0c",
+      "kimi-k2":  "#0a1225",
     };
 
     // Providers that have auth config panels
@@ -664,21 +1100,25 @@
     }
 
     // ---------- Browser-gated metric helpers ----------
-    // Providers whose ENTIRE metric set requires the Usage Buttons
-    // Helper extension. For partially-gated providers (claude), the
-    // per-metric check below decides.
-    const FULLY_BROWSER_GATED = new Set(["cursor", "ollama"]);
-
+    // Data-driven: a metric row's 4th element is its `auth` tag. Only
+    // "browser" is meaningful today — rows without it work via OAuth /
+    // API key and need no extension. Keeps every provider on the same
+    // labeling mechanism.
     function needsBrowser(providerId, metricId) {
-      if (FULLY_BROWSER_GATED.has(providerId)) return true;
-      if (providerId === "claude" && metricId && metricId.startsWith("extra-usage-")) return true;
-      return false;
+      const list = METRICS[providerId] || [];
+      const entry = list.find(([id]) => id === metricId);
+      return !!(entry && entry[3] === "browser");
     }
 
     // Live state: has the extension handshaken this session? Updated
-    // from the plugin's cookieStatus replies. Starts false so the
-    // metric dropdown reflects "extension missing" state on open.
-    let extensionConnected = false;
+    // from the plugin's cookieStatus replies. We assume connected by
+    // default so the gate-warning doesn't flash on every PI open
+    // before the first poll reply arrives (~2.5s). extensionStatusKnown
+    // flips true on the first reply; until then we don't surface a
+    // warning, since a 1-second false positive is a worse UX than a
+    // brief delay before surfacing a real disconnect.
+    let extensionConnected = true;
+    let extensionStatusKnown = false;
 
     // ---------- Metric dropdown ----------
     function populateMetrics(providerId, selectedMetric) {
@@ -716,7 +1156,10 @@
         metricEl.parentNode.insertBefore(el, metricEl.nextSibling);
       }
       const selectedNeedsBrowser = needsBrowser(providerId, metricId);
-      if (selectedNeedsBrowser && !extensionConnected) {
+      // Only surface the warning once we have a definitive status
+      // reply. Before that, treat the extension as connected to
+      // avoid a 1-second flash on every PI open.
+      if (selectedNeedsBrowser && extensionStatusKnown && !extensionConnected) {
         el.replaceChildren();
         el.append("This metric needs the ");
         const strong = document.createElement("strong");
@@ -803,35 +1246,168 @@
     let uuid = null;
     let actionInfo = null;
 
+    // Helpers for the button-override (bo-*) checkbox rows.
+    // bindButtonOverrideValue toggles the row's active state, sets the
+    // control to either the saved override or the inherited value, and
+    // writes the inherit-hint so users can see what they'd fall back
+    // to if they uncheck the checkbox.
+    function bindButtonOverrideValue(name, savedValue, inheritedValue, inheritedLabel) {
+      const chk = document.getElementById("bo-" + name + "-enabled");
+      const ctrl = document.getElementById(name);
+      const hint = document.getElementById("bo-" + name + "-inherit");
+      const row = chk && chk.closest(".override-row");
+      const isOverride = savedValue !== null && savedValue !== undefined && savedValue !== "";
+      if (chk) chk.checked = isOverride;
+      if (ctrl) ctrl.value = isOverride ? savedValue : inheritedValue;
+      if (hint) hint.textContent = "inherits " + inheritedLabel;
+      if (row) row.classList.toggle("override-active", isOverride);
+      return isOverride;
+    }
+
+    function bindButtonOverrideCheck(name, savedValue, inheritedOn, inheritedLabel) {
+      const chk = document.getElementById("bo-" + name + "-enabled");
+      const ctrl = document.getElementById(name);
+      const hint = document.getElementById("bo-" + name + "-inherit");
+      const row = chk && chk.closest(".override-row");
+      const isOverride = savedValue !== undefined && savedValue !== null;
+      if (chk) chk.checked = isOverride;
+      if (ctrl) ctrl.checked = isOverride ? !!savedValue : !!inheritedOn;
+      if (hint) hint.textContent = "inherits " + inheritedLabel;
+      if (row) row.classList.toggle("override-active", isOverride);
+      return isOverride;
+    }
+
+    // providerInherited returns the effective tier-above value that this
+    // button will fall back to if it doesn't override the field itself.
+    // For button-override rows this is "provider override → plugin
+    // default → hardcoded default", matching the Go-side EffectiveSettings.
+    function providerInherited() {
+      const all = lastGlobalSettings.providerSettings || {};
+      return all[currentProviderId] || {};
+    }
+
     function applyKeySettings(settings) {
       const metricId = settings.metricId || (METRICS[currentProviderId] ? METRICS[currentProviderId][0][0] : "session-percent");
       populateMetrics(currentProviderId, metricId);
       updateFeatureVisibility(currentProviderId, metricId);
-      document.getElementById("refreshMinutes").value =
-        settings.refreshMinutes != null ? String(settings.refreshMinutes) : "";
-      document.getElementById("captionOverride").value = settings.captionOverride || "";
-      document.getElementById("hideSubvalue").checked = !!settings.hideSubvalue;
-      document.getElementById("showResetTimer").checked = settings.showResetTimer !== false;
-      document.getElementById("showRawCounts").checked = !!settings.showRawCounts;
-      document.getElementById("showBorder").checked = settings.showBorder !== false;
-      document.getElementById("showGlyph").checked = settings.showGlyph !== false;
-      document.getElementById("valueSize").value = settings.valueSize || "";
-      document.getElementById("subvalueSize").value = settings.subvalueSize || "";
-      document.getElementById("fillDirection").value = settings.fillDirection || "up";
-      // Colors: show the saved override if one exists, otherwise
-      // reset the picker to the computed default. This way the user
-      // sees what the plugin will actually use, and changing the
-      // picker only saves a value if it differs from the default.
-      document.getElementById("fillColor").value =
-        settings.fillColor || defaultFillColor(currentProviderId, metricId);
-      document.getElementById("bgColor").value   = settings.bgColor   || "#111827";
-      document.getElementById("textColor").value = settings.textColor || "#f9fafb";
-      document.getElementById("warnBelow").value =
-        settings.warnBelow != null ? String(settings.warnBelow) : "";
-      document.getElementById("criticalBelow").value =
-        settings.criticalBelow != null ? String(settings.criticalBelow) : "";
-      document.getElementById("warnColor").value     = settings.warnColor     || "#f59e0b";
-      document.getElementById("criticalColor").value = settings.criticalColor || "#ef4444";
+
+      // Tiered settings: use the button-override row pattern. Inherited
+      // value comes from the provider tier when set, otherwise plugin
+      // default, otherwise hardcoded fallback.
+      const pi = providerInherited();
+      const defRefresh = String(lastGlobalSettings.defaultRefreshMinutes || 15);
+      const defVal = lastGlobalSettings.defaultValueSize || "large";
+      const defSub = lastGlobalSettings.defaultSubvalueSize || "large";
+      const defTextColor = lastGlobalSettings.defaultTextColor || "#f9fafb";
+      const defBorder = lastGlobalSettings.defaultShowBorder !== false;
+      const defGlyph = lastGlobalSettings.showGlyphs !== false;
+      const brandFill = defaultFillColor(currentProviderId, metricId);
+
+      // Each row returns true when the button has its own override
+      // saved; any true means the customize section should start open.
+      let anyOverride = false;
+      const mark = (b) => { if (b) anyOverride = true; };
+
+      // captionOverride is intrinsically per-tile (not tiered), but we
+      // checkbox-gate it for visual consistency with the other
+      // override rows. Saved = override active; blank = inherit the
+      // metric's built-in caption.
+      const captionRaw = typeof settings.captionOverride === "string"
+        ? settings.captionOverride : "";
+      const captionOn = captionRaw !== "";
+      document.getElementById("captionOverride").value = captionRaw;
+      const captionChk = document.getElementById("bo-captionOverride-enabled");
+      const captionRow = captionChk && captionChk.closest(".override-row");
+      if (captionChk) captionChk.checked = captionOn;
+      if (captionRow) captionRow.classList.toggle("override-active", captionOn);
+      if (captionOn) anyOverride = true;
+
+      // Tiered feature booleans — same pattern as showBorder/showGlyph.
+      const defShowTimer = lastGlobalSettings.defaultShowResetTimer !== false;
+      const defShowRaw = lastGlobalSettings.defaultShowRawCounts === true;
+      const defHideSub = lastGlobalSettings.defaultHideSubvalue === true;
+
+      mark(bindButtonOverrideCheck("hideSubvalue", settings.hideSubvalue,
+        pi.hideSubvalue !== undefined ? !!pi.hideSubvalue : defHideSub,
+        pi.hideSubvalue !== undefined
+          ? "provider default: " + (pi.hideSubvalue ? "hidden" : "shown")
+          : "plugin default: " + (defHideSub ? "hidden" : "shown")));
+
+      mark(bindButtonOverrideCheck("showResetTimer", settings.showResetTimer,
+        pi.showResetTimer !== undefined ? !!pi.showResetTimer : defShowTimer,
+        pi.showResetTimer !== undefined
+          ? "provider default: " + (pi.showResetTimer ? "on" : "off")
+          : "plugin default: " + (defShowTimer ? "on" : "off")));
+
+      mark(bindButtonOverrideCheck("showRawCounts", settings.showRawCounts,
+        pi.showRawCounts !== undefined ? !!pi.showRawCounts : defShowRaw,
+        pi.showRawCounts !== undefined
+          ? "provider default: " + (pi.showRawCounts ? "on" : "off")
+          : "plugin default: " + (defShowRaw ? "on" : "off")));
+
+      const inheritRefresh = pi.refreshMinutes != null ? String(pi.refreshMinutes) : defRefresh;
+      const inheritRefreshLbl = pi.refreshMinutes != null
+        ? "provider default: " + pi.refreshMinutes + " min"
+        : "plugin default: " + defRefresh + " min";
+      mark(bindButtonOverrideValue("refreshMinutes",
+        settings.refreshMinutes != null ? String(settings.refreshMinutes) : null,
+        inheritRefresh, inheritRefreshLbl));
+
+      const defFillDir = lastGlobalSettings.defaultFillDirection || "up";
+      mark(bindButtonOverrideValue("fillDirection", settings.fillDirection || null,
+        pi.fillDirection || defFillDir,
+        pi.fillDirection ? "provider default: " + pi.fillDirection : "plugin default: " + defFillDir));
+
+      mark(bindButtonOverrideValue("valueSize", settings.valueSize || null,
+        pi.valueSize || defVal,
+        pi.valueSize ? "provider default: " + pi.valueSize : "plugin default: " + defVal));
+
+      mark(bindButtonOverrideValue("subvalueSize", settings.subvalueSize || null,
+        pi.subvalueSize || defSub,
+        pi.subvalueSize ? "provider default: " + pi.subvalueSize : "plugin default: " + defSub));
+
+      mark(bindButtonOverrideValue("fillColor", settings.fillColor || null,
+        pi.fillColor || brandFill,
+        pi.fillColor ? "provider default" : "brand color"));
+
+      // bgColor falls back to the per-provider brand bg (no plugin-wide).
+      const brandBg = BRAND_BGS[currentProviderId] || "#111827";
+      mark(bindButtonOverrideValue("bgColor", settings.bgColor || null,
+        pi.bgColor || brandBg,
+        pi.bgColor ? "provider default" : "brand background"));
+
+      mark(bindButtonOverrideValue("textColor", settings.textColor || null,
+        pi.textColor || defTextColor,
+        pi.textColor ? "provider default" : "plugin default: " + defTextColor));
+
+      mark(bindButtonOverrideCheck("showBorder", settings.showBorder,
+        pi.showBorder !== undefined ? !!pi.showBorder : defBorder,
+        pi.showBorder !== undefined
+          ? "provider default: " + (pi.showBorder ? "on" : "off")
+          : "plugin default: " + (defBorder ? "on" : "off")));
+
+      mark(bindButtonOverrideCheck("showGlyph", settings.showGlyph,
+        pi.showGlyph !== undefined ? !!pi.showGlyph : defGlyph,
+        pi.showGlyph !== undefined
+          ? "provider default: " + (pi.showGlyph ? "on" : "off")
+          : "plugin default: " + (defGlyph ? "on" : "off")));
+
+      mark(bindButtonOverrideValue("warnBelow",
+        settings.warnBelow != null ? String(settings.warnBelow) : null,
+        pi.warnBelow != null ? String(pi.warnBelow) : "",
+        pi.warnBelow != null ? "provider default" : "per-metric-type default"));
+      document.getElementById("warnColor").value = settings.warnColor || pi.warnColor || "#f59e0b";
+
+      mark(bindButtonOverrideValue("criticalBelow",
+        settings.criticalBelow != null ? String(settings.criticalBelow) : null,
+        pi.criticalBelow != null ? String(pi.criticalBelow) : "",
+        pi.criticalBelow != null ? "provider default" : "per-metric-type default"));
+      document.getElementById("criticalColor").value = settings.criticalColor || pi.criticalColor || "#ef4444";
+
+      // Auto-open the customize section when any override is active
+      // so the user doesn't have to hunt for what's set.
+      const details = document.getElementById("buttonCustomize");
+      if (details) details.open = anyOverride;
     }
 
     let lastGlobalSettings = {};
@@ -849,8 +1425,180 @@
         validSize(globals.defaultSubvalueSize);
       document.getElementById("invertFill").checked = globals.invertFill === true;
       document.getElementById("showGlyphs").checked = globals.showGlyphs !== false;
+      document.getElementById("defaultShowBorder").checked = globals.defaultShowBorder !== false;
+      document.getElementById("defaultShowResetTimer").checked = globals.defaultShowResetTimer !== false;
+      document.getElementById("defaultShowRawCounts").checked = globals.defaultShowRawCounts === true;
+      document.getElementById("defaultHideSubvalue").checked = globals.defaultHideSubvalue === true;
+      // Plugin-tier fill/bg are opt-in overrides of per-provider brand
+      // defaults. Only flip the checkbox + override-active class when
+      // the user has actually saved a value; otherwise keep the picker
+      // at a neutral default so checking the box doesn't erase brand.
+      const fillOn = !!globals.defaultFillColor;
+      document.getElementById("pd-fillColor-enabled").checked = fillOn;
+      document.getElementById("defaultFillColor").value = globals.defaultFillColor || "#3b82f6";
+      document.querySelector('[data-plugin-override="fillColor"]').classList.toggle("override-active", fillOn);
+
+      const bgOn = !!globals.defaultBgColor;
+      document.getElementById("pd-bgColor-enabled").checked = bgOn;
+      document.getElementById("defaultBgColor").value = globals.defaultBgColor || "#111827";
+      document.querySelector('[data-plugin-override="bgColor"]').classList.toggle("override-active", bgOn);
+      document.getElementById("defaultTextColor").value = globals.defaultTextColor || "#f9fafb";
+      document.getElementById("defaultFillDirection").value = globals.defaultFillDirection || "up";
+      document.getElementById("defaultWarnBelow").value =
+        globals.defaultWarnBelow != null ? String(globals.defaultWarnBelow) : "";
+      document.getElementById("defaultCriticalBelow").value =
+        globals.defaultCriticalBelow != null ? String(globals.defaultCriticalBelow) : "";
+      document.getElementById("defaultWarnColor").value = globals.defaultWarnColor || "#f59e0b";
+      document.getElementById("defaultCriticalColor").value = globals.defaultCriticalColor || "#ef4444";
       document.getElementById("skipUpdateCheck").checked = globals.skipUpdateCheck === true;
       applyProviderKeys(globals.providerKeys);
+      applyProviderSettings(globals.providerSettings);
+    }
+
+    // Apply provider-tier defaults to the provider tab controls.
+    // For each field, the checkbox tracks "this provider has its own
+    // default"; unchecked = inherit from the plugin / smart default.
+    // We pre-fill the hidden control with the actual value the tile
+    // would render, so checking the box doesn't jump the picker to
+    // a random color.
+    function applyProviderSettings(all) {
+      const ps = (all && all[currentProviderId]) || {};
+      const defRefresh = String(lastGlobalSettings.defaultRefreshMinutes || 15);
+      const defVal = lastGlobalSettings.defaultValueSize || "large";
+      const defSub = lastGlobalSettings.defaultSubvalueSize || "large";
+      const defTextColor = lastGlobalSettings.defaultTextColor || "#f9fafb";
+      const defBorder = lastGlobalSettings.defaultShowBorder !== false;
+      const defGlyph = lastGlobalSettings.showGlyphs !== false;
+      const brandFill = BRAND_COLORS[currentProviderId] || "#3b82f6";
+      const brandBg = BRAND_BGS[currentProviderId] || "#111827";
+
+      const defFillDir = lastGlobalSettings.defaultFillDirection || "up";
+
+      // Inherit-hint text — what the tile uses when the row is unchecked.
+      setText("po-refreshMinutes-inherit", "inherits plugin default: " + defRefresh + " min");
+      setText("po-fillDirection-inherit", "inherits plugin default: " + defFillDir);
+      setText("po-valueSize-inherit", "inherits plugin default: " + defVal);
+      setText("po-subvalueSize-inherit", "inherits plugin default: " + defSub);
+      setText("po-fillColor-inherit", "inherits brand color");
+      setText("po-bgColor-inherit", "inherits brand background");
+      setText("po-textColor-inherit", "inherits plugin default");
+      setText("po-showBorder-inherit", "inherits plugin default: " + (defBorder ? "on" : "off"));
+      setText("po-showGlyph-inherit", "inherits plugin default: " + (defGlyph ? "on" : "off"));
+
+      bindOverrideValue("refreshMinutes",
+        ps.refreshMinutes != null ? String(ps.refreshMinutes) : defRefresh,
+        ps.refreshMinutes != null);
+      bindOverrideValue("fillDirection", ps.fillDirection || defFillDir, !!ps.fillDirection);
+      bindOverrideValue("valueSize", ps.valueSize || defVal, !!ps.valueSize);
+      bindOverrideValue("subvalueSize", ps.subvalueSize || defSub, !!ps.subvalueSize);
+      bindOverrideValue("fillColor", ps.fillColor || brandFill, !!ps.fillColor);
+      bindOverrideValue("bgColor", ps.bgColor || brandBg, !!ps.bgColor);
+      bindOverrideValue("textColor", ps.textColor || defTextColor, !!ps.textColor);
+      bindOverrideCheck("showBorder",
+        ps.showBorder !== undefined ? !!ps.showBorder : defBorder,
+        ps.showBorder !== undefined);
+      bindOverrideCheck("showGlyph",
+        ps.showGlyph !== undefined ? !!ps.showGlyph : defGlyph,
+        ps.showGlyph !== undefined);
+
+      const defShowTimer = lastGlobalSettings.defaultShowResetTimer !== false;
+      const defShowRaw = lastGlobalSettings.defaultShowRawCounts === true;
+      const defHideSub = lastGlobalSettings.defaultHideSubvalue === true;
+      setText("po-showResetTimer-inherit", "inherits plugin default: " + (defShowTimer ? "on" : "off"));
+      setText("po-showRawCounts-inherit", "inherits plugin default: " + (defShowRaw ? "on" : "off"));
+      setText("po-hideSubvalue-inherit", "inherits plugin default: " + (defHideSub ? "hidden" : "shown"));
+      bindOverrideCheck("showResetTimer",
+        ps.showResetTimer !== undefined ? !!ps.showResetTimer : defShowTimer,
+        ps.showResetTimer !== undefined);
+      bindOverrideCheck("showRawCounts",
+        ps.showRawCounts !== undefined ? !!ps.showRawCounts : defShowRaw,
+        ps.showRawCounts !== undefined);
+      bindOverrideCheck("hideSubvalue",
+        ps.hideSubvalue !== undefined ? !!ps.hideSubvalue : defHideSub,
+        ps.hideSubvalue !== undefined);
+      bindOverrideValue("warnBelow",
+        ps.warnBelow != null ? String(ps.warnBelow) : "",
+        ps.warnBelow != null);
+      document.getElementById("po-warnColor").value = ps.warnColor || "#f59e0b";
+      bindOverrideValue("criticalBelow",
+        ps.criticalBelow != null ? String(ps.criticalBelow) : "",
+        ps.criticalBelow != null);
+      document.getElementById("po-criticalColor").value = ps.criticalColor || "#ef4444";
+
+      // Reflect provider name in the two inline spans at the top of
+      // the defaults section.
+      const name = PROVIDER_DISPLAY_NAMES[currentProviderId] || "this provider";
+      setText("providerOverrideNameInline", name);
+      setText("providerOverrideNameInline2", name);
+    }
+
+    function setText(id, s) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = s;
+    }
+
+    function bindOverrideValue(name, value, enabled) {
+      const chk = document.getElementById("po-" + name + "-enabled");
+      const ctrl = document.getElementById("po-" + name);
+      const row = chk && chk.closest(".override-row");
+      if (chk) chk.checked = !!enabled;
+      if (ctrl) ctrl.value = value;
+      if (row) row.classList.toggle("override-active", !!enabled);
+    }
+
+    function bindOverrideCheck(name, checked, enabled) {
+      const chk = document.getElementById("po-" + name + "-enabled");
+      const ctrl = document.getElementById("po-" + name);
+      const row = chk && chk.closest(".override-row");
+      if (chk) chk.checked = !!enabled;
+      if (ctrl) ctrl.checked = !!checked;
+      if (row) row.classList.toggle("override-active", !!enabled);
+    }
+
+    function collectProviderSettings() {
+      // Clone the persisted map so providers we aren't editing right
+      // now keep their overrides intact.
+      const all = Object.assign({}, lastGlobalSettings.providerSettings || {});
+      const ps = {};
+      const enabled = (n) => document.getElementById("po-" + n + "-enabled").checked;
+      const val = (n) => document.getElementById("po-" + n).value;
+      const parseNum = (s) => {
+        const n = Number(s);
+        return s === "" || Number.isNaN(n) ? undefined : n;
+      };
+
+      if (enabled("refreshMinutes")) {
+        const n = parseNum(val("refreshMinutes"));
+        if (n !== undefined) ps.refreshMinutes = n;
+      }
+      if (enabled("fillDirection")) ps.fillDirection = val("fillDirection");
+      if (enabled("valueSize")) ps.valueSize = val("valueSize");
+      if (enabled("subvalueSize")) ps.subvalueSize = val("subvalueSize");
+      if (enabled("fillColor")) ps.fillColor = val("fillColor");
+      if (enabled("bgColor")) ps.bgColor = val("bgColor");
+      if (enabled("textColor")) ps.textColor = val("textColor");
+      if (enabled("showBorder")) ps.showBorder = document.getElementById("po-showBorder").checked;
+      if (enabled("showGlyph")) ps.showGlyph = document.getElementById("po-showGlyph").checked;
+      if (enabled("showResetTimer")) ps.showResetTimer = document.getElementById("po-showResetTimer").checked;
+      if (enabled("showRawCounts")) ps.showRawCounts = document.getElementById("po-showRawCounts").checked;
+      if (enabled("hideSubvalue")) ps.hideSubvalue = document.getElementById("po-hideSubvalue").checked;
+      if (enabled("warnBelow")) {
+        const n = parseNum(val("warnBelow"));
+        if (n !== undefined) ps.warnBelow = n;
+        ps.warnColor = document.getElementById("po-warnColor").value;
+      }
+      if (enabled("criticalBelow")) {
+        const n = parseNum(val("criticalBelow"));
+        if (n !== undefined) ps.criticalBelow = n;
+        ps.criticalColor = document.getElementById("po-criticalColor").value;
+      }
+
+      if (Object.keys(ps).length === 0) {
+        delete all[currentProviderId];
+      } else {
+        all[currentProviderId] = ps;
+      }
+      return all;
     }
 
     function applyProviderKeys(keys) {
@@ -914,44 +1662,60 @@
 
     function pushSettings() {
       if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
-      const refreshRaw = document.getElementById("refreshMinutes").value;
-      const valueRaw = document.getElementById("valueSize").value;
-      const subvalueRaw = document.getElementById("subvalueSize").value;
-      const warnBelowRaw = document.getElementById("warnBelow").value.trim();
-      const criticalBelowRaw = document.getElementById("criticalBelow").value.trim();
       const parseNum = (s) => {
         const n = Number(s);
         return s === "" || Number.isNaN(n) ? undefined : n;
       };
       const metricId = document.getElementById("metric").value;
-      const payload = {
-        metricId:       metricId,
-        refreshMinutes: refreshRaw === "" ? undefined : Number(refreshRaw),
-        captionOverride: document.getElementById("captionOverride").value,
-        hideSubvalue:   document.getElementById("hideSubvalue").checked || undefined,
-        showResetTimer: document.getElementById("showResetTimer").checked,
-        showRawCounts:  document.getElementById("showRawCounts").checked || undefined,
-        showBorder:     document.getElementById("showBorder").checked,
-        showGlyph:      document.getElementById("showGlyph").checked,
-        // Empty-string "Use plugin default" omits the field so it
-        // falls through to the global default at render time.
-        ...(valueRaw ? { valueSize: valueRaw } : {}),
-        ...(subvalueRaw ? { subvalueSize: subvalueRaw } : {}),
-        fillDirection:  document.getElementById("fillDirection").value,
-        // Color settings: only include when the user has explicitly
-        // customized them (differs from the computed default). This
-        // lets the render-time logic pick the right color (brand for
-        // meters, lightened-bg for reference cards) without a stale
-        // saved value overriding it.
-        ...colorOverride("fillColor", defaultFillColor(currentProviderId, metricId)),
-        ...colorOverride("bgColor", "#111827"),
-        ...colorOverride("textColor", "#f9fafb"),
-        // Threshold settings — blank fields fall through to defaults.
-        ...(parseNum(warnBelowRaw) !== undefined ? { warnBelow: parseNum(warnBelowRaw) } : {}),
-        ...(parseNum(criticalBelowRaw) !== undefined ? { criticalBelow: parseNum(criticalBelowRaw) } : {}),
-        ...colorOverride("warnColor", "#f59e0b"),
-        ...colorOverride("criticalColor", "#ef4444"),
+      const boEnabled = (n) => {
+        const el = document.getElementById("bo-" + n + "-enabled");
+        return el && el.checked;
       };
+
+      const payload = {
+        // Metric is the only always-emitted per-tile field; every
+        // other display setting is now checkbox-gated so the user
+        // explicitly opts into customizing it for this button.
+        metricId: metricId,
+      };
+
+      // Caption override: intrinsically per-tile, but we still gate it
+      // behind a checkbox for consistency. Emit only when enabled and
+      // non-empty so omitted = inherit metric default.
+      if (boEnabled("captionOverride")) {
+        const raw = document.getElementById("captionOverride").value;
+        if (raw !== "") payload.captionOverride = raw;
+      }
+
+      // Tiered fields — only emit when the per-button override checkbox
+      // is on. Omit otherwise so the field falls through to the provider
+      // tier, then the plugin default, at render time.
+      if (boEnabled("hideSubvalue")) payload.hideSubvalue = document.getElementById("hideSubvalue").checked;
+      if (boEnabled("showResetTimer")) payload.showResetTimer = document.getElementById("showResetTimer").checked;
+      if (boEnabled("showRawCounts")) payload.showRawCounts = document.getElementById("showRawCounts").checked;
+      if (boEnabled("refreshMinutes")) {
+        const raw = document.getElementById("refreshMinutes").value;
+        if (raw !== "") payload.refreshMinutes = Number(raw);
+      }
+      if (boEnabled("fillDirection")) payload.fillDirection = document.getElementById("fillDirection").value;
+      if (boEnabled("valueSize")) payload.valueSize = document.getElementById("valueSize").value;
+      if (boEnabled("subvalueSize")) payload.subvalueSize = document.getElementById("subvalueSize").value;
+      if (boEnabled("fillColor")) payload.fillColor = document.getElementById("fillColor").value;
+      if (boEnabled("bgColor")) payload.bgColor = document.getElementById("bgColor").value;
+      if (boEnabled("textColor")) payload.textColor = document.getElementById("textColor").value;
+      if (boEnabled("showBorder")) payload.showBorder = document.getElementById("showBorder").checked;
+      if (boEnabled("showGlyph")) payload.showGlyph = document.getElementById("showGlyph").checked;
+      if (boEnabled("warnBelow")) {
+        const n = parseNum(document.getElementById("warnBelow").value.trim());
+        if (n !== undefined) payload.warnBelow = n;
+        payload.warnColor = document.getElementById("warnColor").value;
+      }
+      if (boEnabled("criticalBelow")) {
+        const n = parseNum(document.getElementById("criticalBelow").value.trim());
+        if (n !== undefined) payload.criticalBelow = n;
+        payload.criticalColor = document.getElementById("criticalColor").value;
+      }
+
       websocket.send(JSON.stringify({
         event: "setSettings",
         context: uuid,
@@ -961,14 +1725,44 @@
 
     function pushGlobalSettings() {
       if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      const providerSettings = collectProviderSettings();
       const payload = {
         defaultRefreshMinutes: Number(document.getElementById("defaultRefresh").value),
         defaultValueSize:      document.getElementById("defaultValueSize").value,
         defaultSubvalueSize:   document.getElementById("defaultSubvalueSize").value,
+        defaultTextColor:      document.getElementById("defaultTextColor").value,
+        // fill / bg are opt-in: only emit when the plugin-tab checkbox
+        // is on. Empty string serializes omitempty in Go so render
+        // falls through to the per-provider brand default.
+        ...(document.getElementById("pd-fillColor-enabled").checked
+          ? { defaultFillColor: document.getElementById("defaultFillColor").value }
+          : {}),
+        ...(document.getElementById("pd-bgColor-enabled").checked
+          ? { defaultBgColor: document.getElementById("defaultBgColor").value }
+          : {}),
+        defaultShowBorder:     document.getElementById("defaultShowBorder").checked,
+        defaultShowResetTimer: document.getElementById("defaultShowResetTimer").checked,
+        defaultShowRawCounts:  document.getElementById("defaultShowRawCounts").checked,
+        defaultHideSubvalue:   document.getElementById("defaultHideSubvalue").checked,
+        defaultFillDirection:  document.getElementById("defaultFillDirection").value,
+        ...(function() {
+          const warnRaw = document.getElementById("defaultWarnBelow").value.trim();
+          const critRaw = document.getElementById("defaultCriticalBelow").value.trim();
+          const out = {
+            defaultWarnColor:     document.getElementById("defaultWarnColor").value,
+            defaultCriticalColor: document.getElementById("defaultCriticalColor").value,
+          };
+          const w = Number(warnRaw);
+          if (warnRaw !== "" && !Number.isNaN(w)) out.defaultWarnBelow = w;
+          const c = Number(critRaw);
+          if (critRaw !== "" && !Number.isNaN(c)) out.defaultCriticalBelow = c;
+          return out;
+        })(),
         invertFill:            document.getElementById("invertFill").checked,
         showGlyphs:            document.getElementById("showGlyphs").checked,
         skipUpdateCheck:       document.getElementById("skipUpdateCheck").checked,
         providerKeys:          collectProviderKeys(),
+        providerSettings,
         // Preserve plugin-managed flags that have no UI control.
         cookieHostOptedOut:    lastGlobalSettings.cookieHostOptedOut || false,
       };
@@ -1089,8 +1883,12 @@
       document.getElementById("unregisterCookieHost").style.display = registered ? "" : "none";
 
       // Repopulate the metric dropdown if the connection state flipped
-      // so disabled/labeled options reflect current reality.
-      if (extensionConnected !== available) {
+      // OR we just learned the real state for the first time (since
+      // extensionConnected defaults to true to suppress the gate-flash).
+      const flipped = extensionConnected !== available;
+      const firstKnown = !extensionStatusKnown;
+      extensionStatusKnown = true;
+      if (flipped || firstKnown) {
         extensionConnected = available;
         const selected = document.getElementById("metric").value;
         populateMetrics(currentProviderId, selected);
@@ -1160,26 +1958,55 @@
       const metricId = document.getElementById("metric").value;
       updateFeatureVisibility(currentProviderId, metricId);
       updateBrowserGateNotice(currentProviderId, metricId);
-      // Update fill color default when switching between meter/reference card metrics
-      document.getElementById("fillColor").value = defaultFillColor(currentProviderId, metricId);
+      // Refresh the inherited-value hints — fill color's brand/
+      // metric-type default moves when switching between meter and
+      // reference-card metrics, but we only overwrite the picker if
+      // the per-button override isn't active.
+      if (!document.getElementById("bo-fillColor-enabled").checked) {
+        const pi = providerInherited();
+        document.getElementById("fillColor").value =
+          pi.fillColor || defaultFillColor(currentProviderId, metricId);
+      }
       pushSettings();
     });
-    for (const id of [
-      "metric", "refreshMinutes",
+    // (metric change is wired above — updates fillColor picker + pushes)
+    // Tiered per-button-override rows: toggle row activation on checkbox
+    // change, and push settings when either the checkbox or the
+    // underlying control changes.
+    document.querySelectorAll("[data-button-override]").forEach((row) => {
+      const name = row.getAttribute("data-button-override");
+      const chk = document.getElementById("bo-" + name + "-enabled");
+      if (chk) {
+        chk.addEventListener("change", () => {
+          row.classList.toggle("override-active", chk.checked);
+          pushSettings();
+        });
+      }
+    });
+    [
       "captionOverride", "hideSubvalue",
-      "showResetTimer", "showRawCounts", "showBorder", "showGlyph",
+      "showResetTimer", "showRawCounts",
+      "refreshMinutes", "fillDirection",
       "valueSize", "subvalueSize",
-      "fillDirection", "fillColor", "bgColor", "textColor",
-      "warnBelow", "criticalBelow", "warnColor", "criticalColor",
-    ]) {
+      "fillColor", "bgColor", "textColor",
+      "showBorder", "showGlyph",
+      "warnBelow", "warnColor",
+      "criticalBelow", "criticalColor",
+    ].forEach((id) => {
       const el = document.getElementById(id);
+      if (!el) return;
       el.addEventListener("change", pushSettings);
-      if (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && el.type === "text")) {
+      if (el.tagName === "INPUT" && el.type === "text") {
         el.addEventListener("input", pushSettings);
       }
-    }
+    });
     for (const id of [
       "defaultRefresh", "defaultValueSize", "defaultSubvalueSize",
+      "defaultTextColor", "defaultFillColor", "defaultBgColor",
+      "defaultShowBorder", "defaultFillDirection",
+      "defaultShowResetTimer", "defaultShowRawCounts", "defaultHideSubvalue",
+      "defaultWarnBelow", "defaultWarnColor",
+      "defaultCriticalBelow", "defaultCriticalColor",
       "invertFill", "showGlyphs", "skipUpdateCheck",
     ]) {
       const el = document.getElementById(id);
@@ -1193,6 +2020,53 @@
         el.addEventListener("input", pushGlobalSettings);
       }
     }
+
+    // Plugin-tier override controls (plugin tab). Only fillColor/bgColor
+    // need the opt-in checkbox — text color / border / etc. have flat
+    // hardcoded fallbacks so sending an unchanged picker value is a
+    // no-op for them.
+    document.querySelectorAll("[data-plugin-override]").forEach((row) => {
+      const name = row.getAttribute("data-plugin-override");
+      const chk = document.getElementById("pd-" + name + "-enabled");
+      if (chk) {
+        chk.addEventListener("change", () => {
+          row.classList.toggle("override-active", chk.checked);
+          pushGlobalSettings();
+        });
+      }
+    });
+
+    // Per-provider override controls (provider tab). Each "po-*-enabled"
+    // checkbox toggles the override-active class on its row and pushes
+    // the resulting providerSettings map to the plugin. Value / color
+    // controls under each row push on change once the override is
+    // active.
+    document.querySelectorAll("[data-provider-override]").forEach((row) => {
+      const name = row.getAttribute("data-provider-override");
+      const chk = document.getElementById("po-" + name + "-enabled");
+      if (chk) {
+        chk.addEventListener("change", () => {
+          row.classList.toggle("override-active", chk.checked);
+          pushGlobalSettings();
+        });
+      }
+    });
+    [
+      "po-refreshMinutes", "po-fillDirection",
+      "po-valueSize", "po-subvalueSize",
+      "po-fillColor", "po-bgColor", "po-textColor",
+      "po-showBorder", "po-showGlyph",
+      "po-showResetTimer", "po-showRawCounts", "po-hideSubvalue",
+      "po-warnBelow", "po-warnColor",
+      "po-criticalBelow", "po-criticalColor",
+    ].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("change", pushGlobalSettings);
+      if (el.tagName === "INPUT" && el.type === "text") {
+        el.addEventListener("input", pushGlobalSettings);
+      }
+    });
 
     // Per-provider key / URL / region inputs live in the "Authentication"
     // section on the button tab. They all carry a data-provider-key

@@ -128,7 +128,8 @@ func scheduleDueKeys(conn *streamdeck.Connection) {
 	now := time.Now()
 	var due []string
 	for ctx, key := range visibleKeys {
-		interval := time.Duration(settings.ResolveRefreshMs(key.settings)) * time.Millisecond
+		providerID := streamdeck.ProviderIDFromAction(key.action)
+		interval := time.Duration(settings.ResolveRefreshMs(key.settings, providerID)) * time.Millisecond
 		if now.Sub(key.lastPollAt) >= interval {
 			due = append(due, ctx)
 		}
@@ -720,7 +721,10 @@ func redrawKeyFromCache(conn *streamdeck.Connection, context string) {
 
 func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov providers.Provider, snapshot providers.Snapshot, snapshotAge time.Duration) {
 	context := key.context
-	ks := key.settings
+	// Merge provider-tier overrides under the per-button settings so
+	// every downstream consumer sees a single resolved KeySettings.
+	// Button values win; provider overrides fill in the rest.
+	ks := settings.EffectiveSettings(key.settings, prov.ID())
 	hideLabel := key.showTitle
 	customTitle := key.customTitle
 	metricID := resolveMetricID(ks)
@@ -889,38 +893,59 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 		in.Ratio = &effectiveRatio
 	}
 
-	// Direction
+	// Direction: button override > provider override > plugin default >
+	// metric-provided direction. ks is already merged with provider
+	// overrides via EffectiveSettings, so ks.FillDirection being set
+	// means button or provider tier chose it.
 	if ks.FillDirection != "" {
 		in.Direction = ks.FillDirection
+	} else if d := settings.DefaultFillDirectionValue(); d != "" && d != "up" {
+		// Only apply the plugin default when the user has explicitly
+		// changed it from "up"; otherwise let metric.Direction (which
+		// encodes "up for remaining, down for used") take the lead.
+		in.Direction = d
 	} else if metric.Direction != "" {
 		in.Direction = metric.Direction
 	}
 
-	// Background: user override > brand bg
+	// Background: button/provider override > plugin default > brand bg
 	in.Bg = prov.BrandBg()
+	if v := settings.DefaultBgColorValue(); v != "" && render.IsValidHexColor(v) {
+		in.Bg = v
+	}
 	if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
 		in.Bg = ks.BgColor
 	}
+	// Text color: button/provider override > plugin default > hardcoded
 	if ks.TextColor != "" && render.IsValidHexColor(ks.TextColor) {
 		in.Fg = ks.TextColor
+	} else if v := settings.DefaultTextColorValue(); render.IsValidHexColor(v) {
+		in.Fg = v
 	}
 
-	// Fill color: threshold > user override > reference card > monetary > brand
+	// Fill color: threshold > user override > plugin default > reference
+	// card / monetary / brand. Threshold-state colors also walk the
+	// button -> provider -> plugin chain via settings helpers.
 	thState := computeThresholdState(metric, ks)
 	switch thState {
 	case "critical":
-		c := defStr(ks.CriticalColor, "#ef4444")
+		c := defStr(ks.CriticalColor, settings.DefaultCriticalColorValue())
 		if render.IsValidHexColor(c) {
 			in.Fill = c
 		}
 	case "warn":
-		c := defStr(ks.WarnColor, "#f59e0b")
+		c := defStr(ks.WarnColor, settings.DefaultWarnColorValue())
 		if render.IsValidHexColor(c) {
 			in.Fill = c
 		}
 	default:
 		if ks.FillColor != "" && render.IsValidHexColor(ks.FillColor) {
 			in.Fill = ks.FillColor
+		} else if v := settings.DefaultFillColorValue(); v != "" && render.IsValidHexColor(v) && !isReferenceCard {
+			// Plugin-wide default wins over brand for meter metrics.
+			// Reference cards keep their lightened-bg trick since it's
+			// a visual differentiation, not a user-picked color.
+			in.Fill = v
 		} else if isReferenceCard {
 			in.Fill = render.LightenHex(in.Bg, 0.09)
 		} else {
@@ -932,7 +957,14 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 	in.ValueSize = string(resolveTextSize(ks.ValueSize, settings.DefaultValueSz()))
 	in.SubvalueSize = string(resolveTextSize(ks.SubvalueSize, settings.DefaultSubvalueSz()))
 
-	if ks.ShowBorder != nil && !*ks.ShowBorder {
+	// Border: button override > provider override > plugin default.
+	// Button/provider values are merged into ks by EffectiveSettings;
+	// when still unset, fall back to the plugin default.
+	borderOn := settings.DefaultShowBorderEnabled()
+	if ks.ShowBorder != nil {
+		borderOn = *ks.ShowBorder
+	}
+	if !borderOn {
 		f := false
 		in.Border = &f
 	}
@@ -951,9 +983,20 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 	}
 
 	// Subvalue priority: hideSubvalue > countdown > captionOverride > rawCounts > caption > auto
-	if ks.HideSubvalue {
+	// hideSubvalue / showResetTimer follow the same plugin-tier
+	// fallback chain as the other toggles: button > provider > plugin.
+	// ks.* is nil when nothing at button/provider tier is set.
+	hideSub := settings.DefaultHideSubvalueEnabled()
+	if ks.HideSubvalue != nil {
+		hideSub = *ks.HideSubvalue
+	}
+	showTimer := settings.DefaultShowResetTimerEnabled()
+	if ks.ShowResetTimer != nil {
+		showTimer = *ks.ShowResetTimer
+	}
+	if hideSub {
 		// User explicitly hid the subtext.
-	} else if metric.ResetInSeconds != nil && (ks.ShowResetTimer == nil || *ks.ShowResetTimer) {
+	} else if metric.ResetInSeconds != nil && showTimer {
 		in.Subvalue = render.FormatCountdown(*metric.ResetInSeconds)
 	} else {
 		override := strings.TrimSpace(ks.CaptionOverride)
@@ -994,8 +1037,14 @@ func placeholderFace(prov providers.Provider, label, value, subvalue string, ks 
 	}
 	if ks.TextColor != "" && render.IsValidHexColor(ks.TextColor) {
 		in.Fg = ks.TextColor
+	} else if v := settings.DefaultTextColorValue(); render.IsValidHexColor(v) {
+		in.Fg = v
 	}
-	if ks.ShowBorder != nil && !*ks.ShowBorder {
+	borderOn := settings.DefaultShowBorderEnabled()
+	if ks.ShowBorder != nil {
+		borderOn = *ks.ShowBorder
+	}
+	if !borderOn {
 		f := false
 		in.Border = &f
 	}
@@ -1025,8 +1074,16 @@ func loadingFaceFor(providerID string, ks *settings.KeySettings) string {
 		fillColor = prov.BrandColor()
 		bg = prov.BrandBg()
 	}
-	var fg string
+	// Start with plugin-tier defaults; button/provider overrides layer
+	// on top via EffectiveSettings (already applied before this is called
+	// from renderSnapshotForKey, but ks may also come in raw from other
+	// call sites, so keep the defaults as a base).
+	fg := settings.DefaultTextColorValue()
 	var border *bool
+	if !settings.DefaultShowBorderEnabled() {
+		f := false
+		border = &f
+	}
 	if ks != nil {
 		if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
 			bg = ks.BgColor
@@ -1034,7 +1091,7 @@ func loadingFaceFor(providerID string, ks *settings.KeySettings) string {
 		if ks.TextColor != "" && render.IsValidHexColor(ks.TextColor) {
 			fg = ks.TextColor
 		}
-		if ks.ShowBorder != nil && !*ks.ShowBorder {
+		if ks.ShowBorder != nil {
 			border = ks.ShowBorder
 		}
 	}
@@ -1054,6 +1111,8 @@ func computeThresholdState(metric providers.MetricValue, ks settings.KeySettings
 	n := *metric.NumericValue
 	direction := defStr(metric.NumericGoodWhen, "high")
 
+	// Per-metric-type built-in defaults. These fire only when neither
+	// the button, provider, nor plugin tier has supplied a threshold.
 	var defaultWarn, defaultCritical *float64
 	if direction == "high" {
 		w, c := 10.0, 0.0
@@ -1064,13 +1123,23 @@ func computeThresholdState(metric providers.MetricValue, ks settings.KeySettings
 		defaultWarn, defaultCritical = &w, &c
 	}
 
+	// Precedence: button / provider merged into ks > plugin default >
+	// per-metric-type built-in.
 	warn := ks.WarnBelow
 	if warn == nil {
-		warn = defaultWarn
+		if v, ok := settings.DefaultWarnBelowValue(); ok {
+			warn = &v
+		} else {
+			warn = defaultWarn
+		}
 	}
 	critical := ks.CriticalBelow
 	if critical == nil {
-		critical = defaultCritical
+		if v, ok := settings.DefaultCriticalBelowValue(); ok {
+			critical = &v
+		} else {
+			critical = defaultCritical
+		}
 	}
 
 	if direction == "high" {
@@ -1094,13 +1163,21 @@ func computeThresholdState(metric providers.MetricValue, ks settings.KeySettings
 // --- Utility ---
 
 func resolveShowRawCounts(metric providers.MetricValue, ks settings.KeySettings) bool {
-	if ks.ShowRawCounts != nil && !*ks.ShowRawCounts {
+	// Effective show-raw-counts value: button > provider > plugin.
+	// ks.ShowRawCounts already carries the merged button/provider
+	// value from EffectiveSettings; nil means "inherit plugin".
+	effective := settings.DefaultShowRawCountsEnabled()
+	explicit := ks.ShowRawCounts != nil
+	if explicit {
+		effective = *ks.ShowRawCounts
+	}
+	if explicit && !effective {
 		return false
 	}
 	if metric.RawCount != nil && metric.RawMax != nil {
-		return ks.ShowRawCounts == nil || *ks.ShowRawCounts
+		return effective
 	}
-	if ks.ShowRawCounts != nil && *ks.ShowRawCounts &&
+	if effective &&
 		metric.NumericValue != nil && metric.NumericMax != nil &&
 		metric.NumericUnit == "dollars" {
 		return true

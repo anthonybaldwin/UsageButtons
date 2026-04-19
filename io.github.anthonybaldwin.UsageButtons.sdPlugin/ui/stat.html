@@ -295,12 +295,18 @@
     <!-- Codex auth -->
     <div id="authConfig-codex" class="auth-config" style="display:none">
       <p class="hint">
-        Codex reads your OAuth token automatically from
-        <code>~/.codex/auth.json</code> (written by
-        <code>codex auth login</code>). No manual configuration.
-        Cost-today / cost-30d metrics are estimated locally from
-        <code>~/.codex/sessions/**/*.jsonl</code> — same pattern
-        Claude uses.
+        <strong>Preferred:</strong> usage comes from
+        <code>chatgpt.com</code> via your logged-in browser session
+        when the <strong>Usage Buttons Helper</strong> extension is
+        connected — keeps your OAuth token out of the plugin entirely.
+        <strong>Fallback:</strong> the plugin reads the OAuth token
+        from <code>~/.codex/auth.json</code> (written by
+        <code>codex auth login</code>) and calls
+        <code>chatgpt.com</code> directly. No manual configuration
+        either way. Cost-today / cost-30d metrics are estimated
+        locally from <code>~/.codex/sessions/**/*.jsonl</code>.
+        Self-hosted Codex (<code>chatgpt_base_url</code> override)
+        always uses the OAuth path.
       </p>
     </div>
 

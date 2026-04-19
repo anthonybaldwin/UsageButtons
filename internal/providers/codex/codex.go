@@ -8,16 +8,19 @@
 package codex
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
@@ -207,6 +210,8 @@ type additionalRateLimit struct {
 
 type usageResponse struct {
 	PlanType  *string         `json:"plan_type"`
+	Email     *string         `json:"email"`
+	AccountID *string         `json:"account_id"`
 	RateLimit *rateLimitBlock `json:"rate_limit"`
 	// Code Review (codex /review) quota — same primary/secondary shape
 	// as rate_limit. Null when the user hasn't used Code Review yet.
@@ -479,10 +484,65 @@ func slugify(s string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
+// fetchUsage tries the browser-proxied path first (when the extension is
+// connected and the configured base URL points at chatgpt.com), then falls
+// back to the OAuth / API-key direct path. Returns the parsed response plus
+// a source tag ("cookie" / "oauth" / "api-key") for Snapshot.Source and an
+// email hint (empty when the browser payload didn't carry one — caller
+// decodes from the OAuth id_token in that case).
+func fetchUsage() (usageResponse, string, string, error) {
+	base := chatGPTBaseURL()
+	if browserPathApplicable(base) {
+		if resp, ok := tryFetchViaExtension(base); ok {
+			email := ""
+			if resp.Email != nil {
+				email = strings.TrimSpace(*resp.Email)
+			}
+			return resp, "cookie", email, nil
+		}
+	}
+	return fetchUsageOAuth()
+}
+
+// browserPathApplicable returns true when the configured base URL is one
+// of the public ChatGPT hosts the Chrome extension is allowlisted for.
+// Self-hosted / proxied Codex setups (custom chatgpt_base_url) skip the
+// browser path because the extension can't authenticate those hosts.
+func browserPathApplicable(baseURL string) bool {
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Scheme != "https" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "chatgpt.com" || strings.HasSuffix(host, ".chatgpt.com")
+}
+
+// tryFetchViaExtension attempts the browser-proxied fetch. Any failure
+// (extension missing, network error, non-2xx) returns ok=false so the
+// caller falls through to OAuth. We deliberately swallow errors here —
+// the direct path is the canonical fallback and will surface the real
+// error if it fails too.
+func tryFetchViaExtension(base string) (usageResponse, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if !cookies.HostAvailable(ctx) {
+		return usageResponse{}, false
+	}
+	var resp usageResponse
+	if err := cookies.FetchJSON(ctx, base+"/wham/usage", nil, &resp); err != nil {
+		return usageResponse{}, false
+	}
+	return resp, true
+}
+
+// fetchUsageOAuth is the historical direct-HTTP path: read the Bearer
+// token from ~/.codex/auth.json and hit chatgpt.com ourselves. Kept as
+// the fallback so users without the extension still work, and so custom
+// chatgpt_base_url setups continue to function.
+func fetchUsageOAuth() (usageResponse, string, string, error) {
 	creds, err := loadCredentials()
 	if err != nil {
-		return providers.Snapshot{}, err
+		return usageResponse{}, "", "", err
 	}
 
 	headers := map[string]string{
@@ -500,12 +560,25 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		var httpErr *httputil.Error
 		if errors.As(err, &httpErr) {
 			if httpErr.Status == 401 || httpErr.Status == 403 {
-				return providers.Snapshot{}, fmt.Errorf(
+				return usageResponse{}, "", "", fmt.Errorf(
 					"Codex OAuth request unauthorized. Run `codex` to re-authenticate. (Token refresh is not yet implemented in this plugin.)")
 			}
-			return providers.Snapshot{}, fmt.Errorf("Codex OAuth server error: HTTP %d", httpErr.Status)
+			return usageResponse{}, "", "", fmt.Errorf("Codex OAuth server error: HTTP %d", httpErr.Status)
 		}
-		return providers.Snapshot{}, fmt.Errorf("Codex OAuth network error: %v", err)
+		return usageResponse{}, "", "", fmt.Errorf("Codex OAuth network error: %v", err)
+	}
+
+	source := "oauth"
+	if creds.isAPIKey {
+		source = "api-key"
+	}
+	return resp, source, emailFromIDToken(creds.idToken), nil
+}
+
+func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
+	resp, source, email, err := fetchUsage()
+	if err != nil {
+		return providers.Snapshot{}, err
 	}
 
 	var primary, secondary *usageWindow
@@ -623,14 +696,11 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	if provName == "" {
 		provName = "Codex"
 	}
-	email := emailFromIDToken(creds.idToken)
+	if email == "" && resp.Email != nil {
+		email = strings.TrimSpace(*resp.Email)
+	}
 	if email != "" {
 		provName = provName + " \u2014 " + email
-	}
-
-	source := "oauth"
-	if creds.isAPIKey {
-		source = "api-key"
 	}
 
 	return providers.Snapshot{

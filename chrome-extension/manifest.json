@@ -3,7 +3,7 @@
   "name": "Usage Buttons Helper",
   "short_name": "UsageButtons",
   "version": "0.4.0",
-  "description": "Companion extension for the Usage Buttons Stream Deck plugin. Proxies a narrow allowlist of AI usage APIs (claude.ai, cursor.com, ollama.com) using your logged-in browser session — credentials stay in Chrome.",
+  "description": "Companion extension for the Usage Buttons Stream Deck plugin. Proxies a narrow allowlist of AI usage APIs (claude.ai, cursor.com, ollama.com, chatgpt.com) using your logged-in browser session — credentials stay in Chrome.",
   "author": "Anthony Baldwin",
   "minimum_chrome_version": "127",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw9ORM+dqvSh7hhkrNud2OfTcWXt4x+bG3cKPsC0SwPXxmt2UefkTjYL3XxFYqZJDsgY0pskZ05AAJB65yKFjfBBU9UAhiiKIrF0//G1pLZTgpo/X+ZQi5v9TPvR9QdjlX3NRKmHxPME6a2wouN90PaWnyaE1ILqEkHd+QUD559A2ef5VW1+k2Kgj6y0as8VISPjP5KClfMdzZJnl1jaQ7pY5q3GDAyMT3IRW2EI8H6mB2hzuTflOop0tQ7bDwzHOsLMGVRUD/o4c1I7vqhALdD2T1ltiZZg4fWJwiT5mI1wMoK+eCM3k2HTdtaWv4CLJ6YS15qknjgyZnKRoI+mFuQIDAQAB",
@@ -23,6 +23,7 @@
   "host_permissions": [
     "*://*.claude.ai/*",
     "*://*.cursor.com/*",
-    "*://*.ollama.com/*"
+    "*://*.ollama.com/*",
+    "*://*.chatgpt.com/*"
   ]
 }

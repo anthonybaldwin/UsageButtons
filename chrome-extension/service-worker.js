@@ -19,7 +19,7 @@
 
 const HOST_NAME = "io.github.anthonybaldwin.usagebuttons";
 
-const ALLOWED = ["claude.ai", "cursor.com", "ollama.com"];
+const ALLOWED = ["claude.ai", "cursor.com", "ollama.com", "chatgpt.com"];
 
 function originAllowed(rawURL) {
   let u;
@@ -34,17 +34,42 @@ function originAllowed(rawURL) {
 }
 
 let port = null;
+let isConnecting = false;
+let lastConnectAt = 0;
 let reconnectDelay = 1000;
 const RECONNECT_MAX = 30000;
+const MIN_CONNECT_INTERVAL_MS = 1000;
+const HEARTBEAT_ALARM = "ub-heartbeat";
 
 function connect() {
+  // Single-flight: never have more than one connectNative pending.
+  // Multiple events (alarm + setTimeout + onInstalled + module load) can
+  // race; without this every race would spawn its own native-host process
+  // before the first had a chance to settle.
+  if (port || isConnecting) return;
+
+  // Rate limit: cap respawns at one per second, even when the host keeps
+  // exiting immediately. Stops the reconnect storm we saw when something
+  // upstream was killing the port within 300ms of every spawn.
+  const now = Date.now();
+  const sinceLast = now - lastConnectAt;
+  if (sinceLast < MIN_CONNECT_INTERVAL_MS) {
+    setTimeout(connect, MIN_CONNECT_INTERVAL_MS - sinceLast);
+    return;
+  }
+  lastConnectAt = now;
+  isConnecting = true;
+
+  let p;
   try {
-    port = chrome.runtime.connectNative(HOST_NAME);
+    p = chrome.runtime.connectNative(HOST_NAME);
   } catch (e) {
+    isConnecting = false;
     console.error("[UsageButtons] connectNative threw:", e);
     scheduleReconnect();
     return;
   }
+  port = p;
   port.onMessage.addListener(handleMessage);
   port.onDisconnect.addListener(() => {
     const err = chrome.runtime.lastError;
@@ -52,6 +77,7 @@ function connect() {
       console.warn("[UsageButtons] port disconnected:", err.message);
     }
     port = null;
+    isConnecting = false;
     scheduleReconnect();
   });
   try {
@@ -64,12 +90,30 @@ function connect() {
   } catch (e) {
     console.warn("[UsageButtons] failed to send ready:", e);
   }
+  isConnecting = false;
 }
 
 function scheduleReconnect() {
-  setTimeout(connect, reconnectDelay);
+  // Fast path while the SW is still alive — quick recovery for transient drops.
+  setTimeout(() => { if (!port) connect(); }, reconnectDelay);
   reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX);
 }
+
+// Heartbeat alarm — survives SW suspension. After a system sleep or any other
+// event that unloads the SW, pending setTimeouts are lost; this alarm wakes
+// the SW periodically so connect() runs and the native host respawns.
+// Production minimum is 30s, so 1 minute is the practical floor here.
+chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === HEARTBEAT_ALARM && !port) {
+    connect();
+  }
+});
+
+// Re-attempt on browser launch so the connection comes up before the user
+// opens the inspector for the first time after Chrome cold-starts.
+chrome.runtime.onStartup.addListener(() => { if (!port) connect(); });
+chrome.runtime.onInstalled.addListener(() => { if (!port) connect(); });
 
 function safeSend(obj) {
   try {

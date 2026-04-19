@@ -8,6 +8,7 @@ package openrouter
 import (
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
@@ -15,12 +16,26 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
-const defaultBaseURL = "https://openrouter.ai/api/v1"
+const (
+	defaultBaseURL  = "https://openrouter.ai/api/v1"
+	keyFetchTimeout = 1 * time.Second
+)
 
 type creditsResponse struct {
 	Data *struct {
 		TotalCredits *float64 `json:"total_credits"`
 		TotalUsage   *float64 `json:"total_usage"`
+	} `json:"data"`
+}
+
+type keyResponse struct {
+	Data *struct {
+		Limit     *float64 `json:"limit"`
+		Usage     *float64 `json:"usage"`
+		RateLimit *struct {
+			Requests *int    `json:"requests"`
+			Interval *string `json:"interval"`
+		} `json:"rate_limit"`
 	} `json:"data"`
 }
 
@@ -31,13 +46,29 @@ func getAPIKey() string {
 	)
 }
 
-func creditsURL() string {
-	base := settings.ResolveEndpoint(
+func baseURL() string {
+	return settings.ResolveEndpoint(
 		settings.ProviderKeysGet().OpenRouterURL,
 		defaultBaseURL,
 		"OPENROUTER_API_URL",
 	)
-	return base + "/auth/credits"
+}
+
+func creditsURL() string { return baseURL() + "/auth/credits" }
+func keyURL() string     { return baseURL() + "/auth/key" }
+
+// fetchKeyInfo calls /auth/key with a tight timeout so a slow or absent
+// endpoint can't delay the credits update. Any failure returns nil.
+func fetchKeyInfo(apiKey string) *keyResponse {
+	var resp keyResponse
+	err := httputil.GetJSON(keyURL(), map[string]string{
+		"Authorization": "Bearer " + apiKey,
+		"Accept":        "application/json",
+	}, keyFetchTimeout, &resp)
+	if err != nil || resp.Data == nil {
+		return nil
+	}
+	return &resp
 }
 
 // Provider fetches OpenRouter usage data.
@@ -48,7 +79,7 @@ func (Provider) Name() string       { return "OpenRouter" }
 func (Provider) BrandColor() string { return "#6467f2" }
 func (Provider) BrandBg() string    { return "#101028" }
 func (Provider) MetricIDs() []string {
-	return []string{"credits-balance", "credits-used"}
+	return []string{"credits-balance", "credits-used", "key-percent", "rate-limit"}
 }
 
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
@@ -64,13 +95,29 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		}, nil
 	}
 
-	var resp creditsResponse
-	err := httputil.GetJSON(creditsURL(), map[string]string{
-		"Authorization": "Bearer " + apiKey,
-		"Accept":        "application/json",
-	}, 15*time.Second, &resp)
-	if err != nil {
-		return providers.Snapshot{}, err
+	// Fire /credits (primary) and /key (enrichment) in parallel. /key has
+	// a 1s timeout so a slow secondary endpoint can't delay the update.
+	var (
+		resp    creditsResponse
+		keyInfo *keyResponse
+		credErr error
+		wg      sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		credErr = httputil.GetJSON(creditsURL(), map[string]string{
+			"Authorization": "Bearer " + apiKey,
+			"Accept":        "application/json",
+		}, 15*time.Second, &resp)
+	}()
+	go func() {
+		defer wg.Done()
+		keyInfo = fetchKeyInfo(apiKey)
+	}()
+	wg.Wait()
+	if credErr != nil {
+		return providers.Snapshot{}, credErr
 	}
 
 	totalCredits := 0.0
@@ -118,6 +165,47 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			m.Direction = "up"
 		}
 		metrics = append(metrics, m)
+	}
+
+	// Key-specific quota (per-API-key cap, distinct from account credits).
+	if keyInfo != nil && keyInfo.Data != nil &&
+		keyInfo.Data.Limit != nil && *keyInfo.Data.Limit > 0 {
+		used := 0.0
+		if keyInfo.Data.Usage != nil {
+			used = *keyInfo.Data.Usage
+		}
+		limit := *keyInfo.Data.Limit
+		usedPct := math.Min(100, used/limit*100)
+		remaining := 100 - usedPct
+		ratio := remaining / 100
+		metrics = append(metrics, providers.MetricValue{
+			ID:           "key-percent",
+			Label:        "KEY",
+			Name:         "Key quota remaining",
+			Value:        math.Round(remaining),
+			NumericValue: &remaining,
+			NumericUnit:  "percent",
+			Unit:         "%",
+			Ratio:        &ratio,
+			Direction:    "up",
+			Caption:      fmt.Sprintf("$%.2f of $%.2f", used, limit),
+			UpdatedAt:    now,
+		})
+	}
+
+	// Rate limit (informational — N requests per interval).
+	if keyInfo != nil && keyInfo.Data != nil && keyInfo.Data.RateLimit != nil &&
+		keyInfo.Data.RateLimit.Requests != nil && keyInfo.Data.RateLimit.Interval != nil {
+		reqs := *keyInfo.Data.RateLimit.Requests
+		interval := *keyInfo.Data.RateLimit.Interval
+		metrics = append(metrics, providers.MetricValue{
+			ID:        "rate-limit",
+			Label:     "RATE",
+			Name:      "OpenRouter rate limit",
+			Value:     fmt.Sprintf("%d/%s", reqs, interval),
+			Caption:   "requests",
+			UpdatedAt: now,
+		})
 	}
 
 	return providers.Snapshot{

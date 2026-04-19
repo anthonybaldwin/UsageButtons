@@ -126,7 +126,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Enter a z.ai API key in plugin settings, or set Z_AI_API_KEY.",
+			Error:        "Enter a z.ai API key in the z.ai tab, or set Z_AI_API_KEY.",
 		}, nil
 	}
 
@@ -194,6 +194,9 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		ratio := remainPct / 100
 		resetSecs := resetSecondsFromLimit(limit)
 		remaining := int(cap - used)
+		if remaining < 0 {
+			remaining = 0
+		}
 		capInt := int(cap)
 
 		id := typeName + "-percent"

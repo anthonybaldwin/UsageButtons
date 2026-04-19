@@ -70,6 +70,61 @@ func TestBridge_StatusAfterReady(t *testing.T) {
 	}
 }
 
+func TestBridge_Keepalive_SendsPingsWhileAttached(t *testing.T) {
+	b := NewBridge()
+	ext := newExtStub()
+	_ = b.Handle(context.Background(), Message{Kind: "ready"}, ext.send)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go b.StartKeepalive(ctx, 10*time.Millisecond)
+
+	select {
+	case m := <-ext.out:
+		if m.Kind != "ping" {
+			t.Fatalf("expected ping, got %+v", m)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("keepalive did not send a ping")
+	}
+}
+
+func TestBridge_Keepalive_StopsSendingAfterDisconnect(t *testing.T) {
+	b := NewBridge()
+	ext := newExtStub()
+	_ = b.Handle(context.Background(), Message{Kind: "ready"}, ext.send)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go b.StartKeepalive(ctx, 5*time.Millisecond)
+
+	// Drain at least one ping to prove we were attached.
+	select {
+	case <-ext.out:
+	case <-time.After(time.Second):
+		t.Fatal("no initial ping")
+	}
+
+	b.OnExtensionDisconnect()
+
+	// Drain anything already queued.
+	for {
+		select {
+		case <-ext.out:
+			continue
+		case <-time.After(30 * time.Millisecond):
+		}
+		break
+	}
+
+	// No further pings should arrive.
+	select {
+	case m := <-ext.out:
+		t.Fatalf("keepalive kept sending after disconnect: %+v", m)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
 func TestBridge_Fetch_ExtensionNotConnected(t *testing.T) {
 	b := NewBridge()
 	resp := roundtripPluginConn(t, b, Message{ID: "p-1", Kind: "fetch", URL: "https://claude.ai/"})

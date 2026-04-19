@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,23 +14,28 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 )
 
-// setupTestIPC spins up a unix-socket listener at a temp path and
-// points ipcAddr at it for the test's lifetime. handler runs per
-// accepted connection.
+// setupTestIPC spins up a TCP loopback listener on an ephemeral port,
+// writes the port to a temp sidecar file, and points ipcPortPath at
+// it for the test's lifetime. handler runs per accepted connection.
 func setupTestIPC(t *testing.T, handler func(net.Conn)) {
 	t.Helper()
 	tmp := t.TempDir()
-	sock := filepath.Join(tmp, "t.sock")
+	portFile := filepath.Join(tmp, "ipc.port")
 
-	prev := ipcAddr
-	t.Cleanup(func() { ipcAddr = prev })
-	ipcAddr = func() string { return sock }
-
-	ln, err := net.Listen("unix", sock)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Skipf("unix socket listen unsupported: %v", err)
+		t.Fatalf("tcp loopback listen: %v", err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
+
+	port := ln.Addr().(*net.TCPAddr).Port
+	if err := os.WriteFile(portFile, []byte(fmt.Sprintf("%d", port)), 0o600); err != nil {
+		t.Fatalf("write port file: %v", err)
+	}
+
+	prev := ipcPortPath
+	t.Cleanup(func() { ipcPortPath = prev })
+	ipcPortPath = func() string { return portFile }
 
 	go func() {
 		for {
@@ -43,10 +50,10 @@ func setupTestIPC(t *testing.T, handler func(net.Conn)) {
 
 func pointIPCAtMissing(t *testing.T) {
 	t.Helper()
-	prev := ipcAddr
-	t.Cleanup(func() { ipcAddr = prev })
+	prev := ipcPortPath
+	t.Cleanup(func() { ipcPortPath = prev })
 	tmp := t.TempDir()
-	ipcAddr = func() string { return filepath.Join(tmp, "missing.sock") }
+	ipcPortPath = func() string { return filepath.Join(tmp, "missing.port") }
 }
 
 func TestHostAvailable_NoListener(t *testing.T) {
@@ -215,20 +222,36 @@ func TestClientProbe_NotReady(t *testing.T) {
 	}
 }
 
-func TestListenIPC_RemovesStaleSocket(t *testing.T) {
+func TestListenIPC_PublishesPortAndCleansOnClose(t *testing.T) {
 	tmp := t.TempDir()
-	sock := filepath.Join(tmp, "stale.sock")
+	portFile := filepath.Join(tmp, "ipc.port")
 
-	prev := ipcAddr
-	t.Cleanup(func() { ipcAddr = prev })
-	ipcAddr = func() string { return sock }
+	prev := ipcPortPath
+	t.Cleanup(func() { ipcPortPath = prev })
+	ipcPortPath = func() string { return portFile }
 
 	ln1, err := ListenIPC()
 	if err != nil {
-		t.Skipf("unix socket unsupported: %v", err)
+		t.Fatalf("ListenIPC: %v", err)
+	}
+	data, err := os.ReadFile(portFile)
+	if err != nil {
+		t.Fatalf("port file not written: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("port file is empty")
+	}
+	addr := IPCAddress()
+	if addr == "" {
+		t.Fatal("IPCAddress returned empty after ListenIPC")
 	}
 	_ = ln1.Close()
 
+	if _, err := os.Stat(portFile); !os.IsNotExist(err) {
+		t.Fatalf("port file should be removed on Close, stat err: %v", err)
+	}
+
+	// A second listener can rebind fresh without any stale-state shenanigans.
 	ln2, err := ListenIPC()
 	if err != nil {
 		t.Fatalf("second Listen: %v", err)

@@ -7,7 +7,8 @@
 //
 //   - stdin/stdout, framed per Chrome's native-messaging protocol,
 //     talks to the extension's service worker.
-//   - A local AF_UNIX socket (per-platform path) talks to the plugin.
+//   - A TCP loopback listener (127.0.0.1:ephemeral, port published to
+//     a sidecar file the plugin reads) talks to the Stream Deck plugin.
 //
 // The cookies.Bridge glues the two together: plugin cookie queries are
 // forwarded to the extension, replies are correlated back by request
@@ -28,6 +29,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
 )
@@ -38,7 +40,7 @@ func main() {
 		defer f.Close()
 	}
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.LUTC)
-	log.Printf("native-host: start pid=%d ipc=%s", os.Getpid(), cookies.IPCAddress())
+	log.Printf("native-host: start pid=%d", os.Getpid())
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -50,7 +52,7 @@ func main() {
 		log.Printf("native-host: listen IPC: %v", err)
 		os.Exit(1)
 	}
-	log.Printf("native-host: IPC listening")
+	log.Printf("native-host: IPC listening on %s", cookies.IPCAddress())
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -59,7 +61,20 @@ func main() {
 		acceptLoop(ctx, ln, bridge)
 	}()
 
+	// Ping the extension every 20s so Chrome's SW idle timer (~30s)
+	// never expires while we're attached. Without this the SW suspends,
+	// Chrome kills us, and the plugin loses its bridge until the next
+	// chrome.alarms wake — see commit fixing ext-version="" polling storms.
+	keepaliveCtx, cancelKeepalive := context.WithCancel(ctx)
+	defer cancelKeepalive()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		bridge.StartKeepalive(keepaliveCtx, 20*time.Second)
+	}()
+
 	err = cookies.ServeNativeHost(ctx, os.Stdin, os.Stdout, bridge.Handle)
+	cancelKeepalive()
 	log.Printf("native-host: extension port closed (err=%v)", err)
 	bridge.OnExtensionDisconnect()
 	_ = ln.Close()

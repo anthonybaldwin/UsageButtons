@@ -133,7 +133,8 @@ Architecture:
   on the wire.
 - `cmd/native-host/` — Go binary Chrome spawns on `connectNative`.
   Reads/writes Chrome's stdin/stdout framing, listens on a local
-  AF_UNIX socket for the plugin, and correlates plugin requests to
+  TCP loopback port (published to a sidecar file) for the plugin,
+  and correlates plugin requests to
   extension replies by request ID.
 - `internal/cookies/` — shared Go package: frame codec, protocol
   types, `Bridge`, IPC transport, install helpers for all major

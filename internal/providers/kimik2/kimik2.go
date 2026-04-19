@@ -56,6 +56,9 @@ func dig(obj any, path []string) (float64, bool) {
 	return 0, false
 }
 
+// Short key paths applied against each context map so nested APIs that
+// return { data: { credits: { ... } } } or { result: { usage: ... } }
+// resolve without exhaustive prefix enumeration.
 var consumedPaths = [][]string{
 	{"total_credits_consumed"},
 	{"totalCreditsConsumed"},
@@ -64,10 +67,7 @@ var consumedPaths = [][]string{
 	{"consumedCredits"},
 	{"usedCredits"},
 	{"total"},
-	{"usage", "total"},
-	{"usage", "consumed"},
-	{"data", "usage", "total_credits_consumed"},
-	{"data", "total_credits_consumed"},
+	{"consumed"},
 }
 
 var remainingPaths = [][]string{
@@ -79,28 +79,69 @@ var remainingPaths = [][]string{
 	{"availableCredits"},
 	{"credits_left"},
 	{"creditsLeft"},
-	{"usage", "credits_remaining"},
-	{"usage", "remaining"},
-	{"data", "usage", "credits_remaining"},
-	{"data", "credits_remaining"},
+	{"remaining"},
 }
 
+// contexts returns every nested map worth searching. Mirrors CodexBar's
+// KimiK2UsageFetcher.contexts so either side accepts both rooted
+// ({credits_remaining: N}) and wrapped ({data: {usage: {...}}}) shapes.
+func contexts(body map[string]any) []map[string]any {
+	out := []map[string]any{body}
+	add := func(key string) {
+		if sub, ok := body[key].(map[string]any); ok {
+			out = append(out, sub)
+			if u, ok := sub["usage"].(map[string]any); ok {
+				out = append(out, u)
+			}
+			if c, ok := sub["credits"].(map[string]any); ok {
+				out = append(out, c)
+			}
+		}
+	}
+	add("data")
+	add("result")
+	if u, ok := body["usage"].(map[string]any); ok {
+		out = append(out, u)
+	}
+	if c, ok := body["credits"].(map[string]any); ok {
+		out = append(out, c)
+	}
+	return out
+}
+
+func findFirst(ctx map[string]any, paths [][]string) (float64, bool) {
+	for _, path := range paths {
+		if v, ok := dig(ctx, path); ok {
+			return v, true
+		}
+	}
+	return 0, false
+}
+
+// extractCredits prefers consumed/remaining values that come from the same
+// subtree, so generic keys like "consumed" / "remaining" can't be paired
+// across unrelated parts of the response. Falls back to the first match
+// for each, in any context, when no single subtree carries both.
 func extractCredits(body map[string]any) (consumed float64, consumedOk bool, remaining float64, remainingOk bool) {
-	for _, path := range consumedPaths {
-		if v, ok := dig(body, path); ok {
-			consumed = v
-			consumedOk = true
-			break
+	ctxs := contexts(body)
+	var cFallback, rFallback float64
+	var cFallbackOK, rFallbackOK bool
+
+	for _, ctx := range ctxs {
+		c, cOK := findFirst(ctx, consumedPaths)
+		r, rOK := findFirst(ctx, remainingPaths)
+
+		if cOK && rOK {
+			return c, true, r, true
+		}
+		if cOK && !cFallbackOK {
+			cFallback, cFallbackOK = c, true
+		}
+		if rOK && !rFallbackOK {
+			rFallback, rFallbackOK = r, true
 		}
 	}
-	for _, path := range remainingPaths {
-		if v, ok := dig(body, path); ok {
-			remaining = v
-			remainingOk = true
-			break
-		}
-	}
-	return
+	return cFallback, cFallbackOK, rFallback, rFallbackOK
 }
 
 // Provider fetches Kimi K2 usage data.
@@ -123,7 +164,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Enter a Kimi K2 API key in plugin settings, or set KIMI_K2_API_KEY.",
+			Error:        "Enter a Kimi K2 API key in the Kimi K2 tab, or set KIMI_K2_API_KEY.",
 		}, nil
 	}
 

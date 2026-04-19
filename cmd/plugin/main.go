@@ -44,11 +44,13 @@ const (
 
 // visibleKey tracks a key currently on-screen.
 type visibleKey struct {
-	context    string
-	action     string
-	settings   settings.KeySettings
-	lastPollAt time.Time
-	showTitle  bool // true when user has enabled the native SD title
+	context       string
+	action        string
+	settings      settings.KeySettings
+	lastPollAt    time.Time
+	showTitle     bool   // true when user has enabled the native SD title
+	customTitle   bool   // true when the user has overridden the native title text
+	lastAutoTitle string // last title value written by the plugin
 }
 
 var (
@@ -108,7 +110,7 @@ func displayRefreshLoop(conn *streamdeck.Connection) {
 	ticker := time.NewTicker(displayRefresh)
 	defer ticker.Stop()
 	for range ticker.C {
-		refreshAllVisible(conn)
+		redrawAllVisible(conn)
 	}
 }
 
@@ -126,7 +128,8 @@ func scheduleDueKeys(conn *streamdeck.Connection) {
 	now := time.Now()
 	var due []string
 	for ctx, key := range visibleKeys {
-		interval := time.Duration(settings.ResolveRefreshMs(key.settings)) * time.Millisecond
+		providerID := streamdeck.ProviderIDFromAction(key.action)
+		interval := time.Duration(settings.ResolveRefreshMs(key.settings, providerID)) * time.Millisecond
 		if now.Sub(key.lastPollAt) >= interval {
 			due = append(due, ctx)
 		}
@@ -148,6 +151,19 @@ func refreshAllVisible(conn *streamdeck.Connection) {
 
 	for _, ctx := range contexts {
 		refreshKey(conn, ctx, false)
+	}
+}
+
+func redrawAllVisible(conn *streamdeck.Connection) {
+	mu.Lock()
+	contexts := make([]string, 0, len(visibleKeys))
+	for ctx := range visibleKeys {
+		contexts = append(contexts, ctx)
+	}
+	mu.Unlock()
+
+	for _, ctx := range contexts {
+		redrawKeyFromCache(conn, ctx)
 	}
 }
 
@@ -191,6 +207,9 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	var tp streamdeck.WillAppearTitleParameters
 	json.Unmarshal(ev.Payload, &tp)
 	showTitle := tp.TitleParameters != nil && tp.TitleParameters.ShowTitle
+	title := deriveLabelFromMetricID(metricID)
+	customTitle := isCustomTitle(payload.Title, title)
+	lastAutoTitle := title
 
 	// Stale fillColor / bgColor migration.
 	{
@@ -258,40 +277,40 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		return
 	}
 
-	title := deriveLabelFromMetricID(metricID)
-	hasUserTitle := showTitle
+	hideLabel := showTitle
 
-	// Try to render from cache immediately (avoid loading flash).
-	cached := providers.PeekSnapshot(providerID)
+	// Try to render from cache immediately (avoid loading flash). Route
+	// through renderSnapshotForKey so cached error faces, stale markers,
+	// and reset-timer aging behave identically to the minute redraw.
+	snapshot, fetchedAt := providers.PeekSnapshotState(providerID)
 	prov := providers.Get(providerID)
-	if cached != nil && prov != nil {
-		mu.Lock()
-		visibleKeys[ev.Context] = &visibleKey{
-			context:    ev.Context,
-			action:     ev.Action,
-			settings:   ks,
-			lastPollAt: time.Now(),
-			showTitle:  showTitle,
-		}
-		mu.Unlock()
-
-		metric := findMetric(cached.Metrics, metricID)
-		if metric != nil {
+	if snapshot != nil && prov != nil {
+		if metric := findMetric(snapshot.Metrics, metricID); metric != nil {
 			metricLabel := strings.ToUpper(metric.Label)
 			if metricLabel == "" {
 				metricLabel = title
 			}
-			conn.SetImage(ev.Context, renderMetric(prov, cached.ProviderName, *metric, ks, hasUserTitle))
-			setTitleForKey(conn, ev.Context, hasUserTitle, metricLabel)
-		} else {
-			svgLabel := ""
-			if !hasUserTitle {
-				svgLabel = title
-			}
-			caption := metricCaptionForPlaceholder(metricID)
-			conn.SetImage(ev.Context, placeholderFace(prov, svgLabel, "—", caption, ks))
-			setTitleForKey(conn, ev.Context, hasUserTitle, title)
+			customTitle = isCustomTitle(payload.Title, title, metricLabel)
+			lastAutoTitle = metricLabel
 		}
+		mu.Lock()
+		visibleKeys[ev.Context] = &visibleKey{
+			context:       ev.Context,
+			action:        ev.Action,
+			settings:      ks,
+			lastPollAt:    time.Now(),
+			showTitle:     showTitle,
+			customTitle:   customTitle,
+			lastAutoTitle: lastAutoTitle,
+		}
+		keyCopy := *visibleKeys[ev.Context]
+		mu.Unlock()
+
+		age := time.Duration(0)
+		if !fetchedAt.IsZero() {
+			age = time.Since(fetchedAt)
+		}
+		renderSnapshotForKey(conn, keyCopy, prov, *snapshot, age)
 		conn.Logf("key appeared with cached data (now tracking %d visible key(s))", countVisible())
 		return
 	}
@@ -303,19 +322,21 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		action:    ev.Action,
 		settings:  ks,
 		showTitle: showTitle,
+		customTitle: customTitle,
+		lastAutoTitle: lastAutoTitle,
 	}
 	mu.Unlock()
 
 	if prov := providers.Get(providerID); prov != nil {
 		svgLabel := ""
-		if !hasUserTitle {
+		if !hideLabel {
 			svgLabel = title
 		}
 		conn.SetImage(ev.Context, placeholderFace(prov, svgLabel, "", "", ks))
 	} else {
 		conn.SetImage(ev.Context, loadingFaceFor(providerID, &ks))
 	}
-	setTitleForKey(conn, ev.Context, hasUserTitle, title)
+	setTitleForKey(conn, ev.Context, customTitle, title)
 	conn.Logf("key appeared, no cache (now tracking %d visible key(s))", countVisible())
 	go refreshKey(conn, ev.Context, false)
 }
@@ -336,6 +357,11 @@ func handleTitleParametersDidChange(conn *streamdeck.Connection, ev streamdeck.E
 	key, ok := visibleKeys[ev.Context]
 	if ok {
 		key.showTitle = payload.TitleParameters.ShowTitle
+		key.customTitle = isCustomTitle(
+			payload.Title,
+			key.lastAutoTitle,
+			deriveLabelFromMetricID(resolveMetricID(key.settings)),
+		)
 	}
 	mu.Unlock()
 
@@ -371,12 +397,32 @@ func handleDidReceiveGlobalSettings(conn *streamdeck.Connection, ev streamdeck.E
 	var gs settings.GlobalSettings
 	json.Unmarshal(payload.Settings, &gs)
 
+	// Migrate away from legacy sentinel plugin-tier colors. Earlier
+	// builds persisted the color-picker's default value on every save
+	// regardless of user intent (fixed in cccbd31), so existing
+	// installs may still carry the old sentinels in GlobalSettings.
+	// Strip them here — unset = fall through to brand bg / brand
+	// color as the natural provider-level default.
+	legacyDirty := false
+	if strings.EqualFold(gs.DefaultBgColor, "#111827") {
+		gs.DefaultBgColor = ""
+		legacyDirty = true
+	}
+	if strings.EqualFold(gs.DefaultFillColor, "#3b82f6") {
+		gs.DefaultFillColor = ""
+		legacyDirty = true
+	}
+
 	// Diff the previous snapshot against the incoming one before we
 	// overwrite it, so we can drop cache entries for providers whose
 	// credentials or endpoint overrides just changed. Without this the
 	// next poll would serve the old snapshot for up to MinTTL.
 	prevKeys := settings.ProviderKeysGet()
 	settings.Set(gs)
+	if legacyDirty {
+		raw, _ := json.Marshal(gs)
+		conn.SetGlobalSettings(raw)
+	}
 	for _, id := range settings.ChangedProviderIDs(prevKeys, gs.ProviderKeys) {
 		providers.ClearCache(id)
 		conn.Logf("provider config changed — cleared cache for %s", id)
@@ -418,6 +464,71 @@ func handleSendToPlugin(conn *streamdeck.Connection, ev streamdeck.Event) {
 		}
 		mu.Unlock()
 		go refreshAllVisible(conn)
+	case "resetPluginStyleDefaults":
+		// Cascade reset: clear every style knob at all three tiers so
+		// the deck snaps back to brand / built-in defaults everywhere.
+		// Non-style state is preserved:
+		//   - Plugin: refresh interval, skip-update-check, extension
+		//     opt-out, providerKeys (credentials / endpoints)
+		//   - Button: metricId (tile identity)
+		gs := settings.Get()
+		gs.DefaultValueSize = ""
+		gs.DefaultSubvalueSize = ""
+		gs.DefaultTextColor = ""
+		gs.DefaultFillColor = ""
+		gs.DefaultBgColor = ""
+		gs.DefaultShowBorder = nil
+		gs.DefaultFillDirection = ""
+		gs.DefaultShowResetTimer = nil
+		gs.DefaultShowRawCounts = nil
+		gs.DefaultHideSubvalue = nil
+		gs.DefaultWarnBelow = nil
+		gs.DefaultWarnColor = ""
+		gs.DefaultCriticalBelow = nil
+		gs.DefaultCriticalColor = ""
+		gs.InvertFill = false
+		gs.ShowGlyphs = nil
+		// Provider-tier overrides are all style-only (ProviderSettings
+		// holds no credentials — those live in ProviderKeys). Safe to
+		// drop the whole map.
+		gs.ProviderSettings = nil
+		settings.Set(gs)
+		raw, _ := json.Marshal(gs)
+		conn.SetGlobalSettings(raw)
+
+		// Button tier: walk every visible key, zero its style fields,
+		// persist, and redraw. MetricID stays so tiles keep showing
+		// what they're supposed to show; only the appearance resets.
+		mu.Lock()
+		for ctx, key := range visibleKeys {
+			ks := &key.settings
+			ks.RefreshMinutes = nil
+			ks.WarnBelow = nil
+			ks.CriticalBelow = nil
+			ks.WarnColor = ""
+			ks.CriticalColor = ""
+			ks.LabelOverride = ""
+			ks.HideLabel = false
+			ks.CaptionOverride = ""
+			ks.FillColor = ""
+			ks.BgColor = ""
+			ks.TextColor = ""
+			ks.FillDirection = ""
+			ks.ValueSize = ""
+			ks.SubvalueSize = ""
+			ks.ShowBorder = nil
+			ks.ShowGlyph = nil
+			ks.ShowResetTimer = nil
+			ks.ShowRawCounts = nil
+			ks.HideSubvalue = nil
+			rawKS, _ := json.Marshal(*ks)
+			conn.SetSettings(ctx, rawKS)
+		}
+		mu.Unlock()
+
+		// Style-only change — no need to re-poll providers. Redraw
+		// from cached snapshots with the fresh defaults applied.
+		go redrawAllVisible(conn)
 	case "getCookieStatus":
 		go replyCookieStatus(conn, ev.Context, ev.Action)
 	case "registerCookieHost":
@@ -434,9 +545,22 @@ func replyCookieStatus(conn *streamdeck.Connection, ctxStr, action string) {
 	pctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	status := cookies.Status(pctx)
+	status, reachable, probeErr := cookies.StatusDetail(pctx)
 	latest := update.LatestVersion()
 	updateAvailable := status.Version != "" && latest != "" && status.Version != latest
+
+	// Diagnostic line for the "Not connected" failure mode. `reachable`
+	// separates "plugin couldn't dial the native-host socket" (plugin
+	// or host side) from "native host answered but extension isn't
+	// attached" (extension side). Both show ready=false in the PI but
+	// have very different root causes.
+	probeErrStr := ""
+	if probeErr != nil {
+		probeErrStr = probeErr.Error()
+	}
+	conn.Logf("cookieStatus poll: ready=%v ext-version=%q reachable=%v probeErr=%q registered=%v",
+		status.Ready, status.Version, reachable, probeErrStr,
+		cookies.IsHostRegistered(cookies.HostName))
 
 	conn.SendToPropertyInspector(ctxStr, action, map[string]any{
 		"action":           "cookieStatus",
@@ -617,7 +741,8 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 	key.lastPollAt = time.Now()
 	action := key.action
 	ks := key.settings
-	hasUserTitle := key.showTitle
+	showTitle := key.showTitle
+	customTitle := key.customTitle
 	mu.Unlock()
 
 	providerID := streamdeck.ProviderIDFromAction(action)
@@ -640,9 +765,55 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 		return
 	}
 
-	title := deriveLabelFromMetricID(metricID)
-
 	snapshot := providers.GetSnapshot(prov, providers.GetSnapshotOptions{Force: force})
+	renderSnapshotForKey(conn, visibleKey{
+		context: context,
+		action: action,
+		settings: ks,
+		showTitle: showTitle,
+		customTitle: customTitle,
+	}, prov, snapshot, 0)
+}
+
+func redrawKeyFromCache(conn *streamdeck.Connection, context string) {
+	mu.Lock()
+	key, ok := visibleKeys[context]
+	if !ok {
+		mu.Unlock()
+		return
+	}
+	keyCopy := *key
+	mu.Unlock()
+
+	providerID := streamdeck.ProviderIDFromAction(keyCopy.action)
+	if providerID == "" {
+		return
+	}
+	prov := providers.Get(providerID)
+	if prov == nil {
+		return
+	}
+	snapshot, fetchedAt := providers.PeekSnapshotState(providerID)
+	if snapshot == nil {
+		return
+	}
+	age := time.Duration(0)
+	if !fetchedAt.IsZero() {
+		age = time.Since(fetchedAt)
+	}
+	renderSnapshotForKey(conn, keyCopy, prov, *snapshot, age)
+}
+
+func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov providers.Provider, snapshot providers.Snapshot, snapshotAge time.Duration) {
+	context := key.context
+	// Merge provider-tier overrides under the per-button settings so
+	// every downstream consumer sees a single resolved KeySettings.
+	// Button values win; provider overrides fill in the rest.
+	ks := settings.EffectiveSettings(key.settings, prov.ID())
+	hideLabel := key.showTitle
+	customTitle := key.customTitle
+	metricID := resolveMetricID(ks)
+	title := deriveLabelFromMetricID(metricID)
 
 	if snapshot.Error != "" && len(snapshot.Metrics) == 0 {
 		notConfigured := isNotConfigured(snapshot.Error)
@@ -686,12 +857,12 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 		}
 
 		svgLabel := ""
-		if !hasUserTitle {
+		if !hideLabel {
 			svgLabel = title
 		}
 		conn.SetImage(context, placeholderFace(prov,
 			svgLabel, value, subHint, ks))
-		setTitleForKey(conn, context, hasUserTitle, title)
+		setTitleForKey(conn, context, customTitle, title)
 		return
 	}
 
@@ -717,8 +888,9 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 					if m.ResetInSeconds != nil {
 						fake.ResetInSeconds = m.ResetInSeconds
 					}
-					conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, fake, ks, hasUserTitle))
-					setTitleForKey(conn, context, hasUserTitle, title)
+					fake = metricWithSnapshotAge(fake, snapshotAge)
+					conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, fake, ks, hideLabel))
+					setTitleForKey(conn, context, customTitle, title)
 					return
 				}
 			}
@@ -728,22 +900,23 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 		// so the user knows what this button is for.
 		caption := metricCaptionForPlaceholder(metricID)
 		svgLabel := ""
-		if !hasUserTitle {
+		if !hideLabel {
 			svgLabel = title
 		}
 		conn.SetImage(context, placeholderFace(prov,
 			svgLabel, "—", caption, ks))
-		setTitleForKey(conn, context, hasUserTitle, title)
+		setTitleForKey(conn, context, customTitle, title)
 		return
 	}
 
+	metricCopy := metricWithSnapshotAge(*metric, snapshotAge)
 	// Use the metric's own label for the title (uppercased).
-	metricLabel := strings.ToUpper(metric.Label)
+	metricLabel := strings.ToUpper(metricCopy.Label)
 	if metricLabel == "" {
 		metricLabel = title
 	}
-	conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, *metric, ks, hasUserTitle))
-	setTitleForKey(conn, context, hasUserTitle, metricLabel)
+	conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, metricCopy, ks, hideLabel))
+	setTitleForKey(conn, context, customTitle, metricLabel)
 }
 
 // setTitleForKey pre-populates the native title with our label so
@@ -751,7 +924,15 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 // When ShowTitle is off (default), the SD hides it anyway.
 // When ShowTitle is on, we still set it so the field stays current
 // if the user hasn't edited the text.
-func setTitleForKey(conn *streamdeck.Connection, context string, hasUserTitle bool, label string) {
+func setTitleForKey(conn *streamdeck.Connection, context string, preserveUserTitle bool, label string) {
+	if preserveUserTitle {
+		return
+	}
+	mu.Lock()
+	if key, ok := visibleKeys[context]; ok {
+		key.lastAutoTitle = label
+	}
+	mu.Unlock()
 	conn.SetTitle(context, label)
 }
 
@@ -788,49 +969,71 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 		in.Label = strings.ToUpper(label)
 	}
 
-	// Ratio
-	isReferenceCard := metric.RatioVal() < 0
-	if isReferenceCard {
-		r := 1.0
-		in.Ratio = &r
-	} else {
+	// Ratio: meter metrics get the effective ratio; reference cards
+	// (metric.Ratio == nil) leave in.Ratio nil so fillRect draws
+	// nothing. No more LightenHex "card" treatment — the user wants
+	// one consistent bg everywhere; fill is the only thing that
+	// differs between meter and reference tiles.
+	if metric.Ratio != nil {
 		in.Ratio = &effectiveRatio
 	}
 
-	// Direction
+	// Direction: button override > provider override > plugin default >
+	// metric-provided direction. ks is already merged with provider
+	// overrides via EffectiveSettings, so ks.FillDirection being set
+	// means button or provider tier chose it.
 	if ks.FillDirection != "" {
 		in.Direction = ks.FillDirection
+	} else if d := settings.DefaultFillDirectionValue(); d != "" && d != "up" {
+		// Only apply the plugin default when the user has explicitly
+		// changed it from "up"; otherwise let metric.Direction (which
+		// encodes "up for remaining, down for used") take the lead.
+		in.Direction = d
 	} else if metric.Direction != "" {
 		in.Direction = metric.Direction
 	}
 
-	// Background: user override > brand bg
+	// Background: button/provider override > plugin default > brand bg.
+	// Brand is the natural provider-level default — Claude brown, Codex
+	// black, etc. — so tiles feel at home on their provider. Reference
+	// cards simply don't fill on top (in.Ratio stays nil), so the brand
+	// bg shows through as a solid tile without the old LightenHex trick.
 	in.Bg = prov.BrandBg()
+	if v := settings.DefaultBgColorValue(); v != "" && render.IsValidHexColor(v) {
+		in.Bg = v
+	}
 	if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
 		in.Bg = ks.BgColor
 	}
+	// Text color: button/provider override > plugin default > hardcoded
 	if ks.TextColor != "" && render.IsValidHexColor(ks.TextColor) {
 		in.Fg = ks.TextColor
+	} else if v := settings.DefaultTextColorValue(); render.IsValidHexColor(v) {
+		in.Fg = v
 	}
 
-	// Fill color: threshold > user override > reference card > monetary > brand
+	// Fill color: threshold > button/provider override > plugin default
+	// > brand. Reference cards don't actually draw a fill (in.Ratio is
+	// nil above) so their computed in.Fill is cosmetic; we still pick a
+	// sensible value so the threshold-state fallback and the brand
+	// color path both work for meter metrics.
 	thState := computeThresholdState(metric, ks)
 	switch thState {
 	case "critical":
-		c := defStr(ks.CriticalColor, "#ef4444")
+		c := defStr(ks.CriticalColor, settings.DefaultCriticalColorValue())
 		if render.IsValidHexColor(c) {
 			in.Fill = c
 		}
 	case "warn":
-		c := defStr(ks.WarnColor, "#f59e0b")
+		c := defStr(ks.WarnColor, settings.DefaultWarnColorValue())
 		if render.IsValidHexColor(c) {
 			in.Fill = c
 		}
 	default:
 		if ks.FillColor != "" && render.IsValidHexColor(ks.FillColor) {
 			in.Fill = ks.FillColor
-		} else if isReferenceCard {
-			in.Fill = render.LightenHex(in.Bg, 0.09)
+		} else if v := settings.DefaultFillColorValue(); v != "" && render.IsValidHexColor(v) {
+			in.Fill = v
 		} else {
 			in.Fill = prov.BrandColor()
 		}
@@ -840,7 +1043,14 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 	in.ValueSize = string(resolveTextSize(ks.ValueSize, settings.DefaultValueSz()))
 	in.SubvalueSize = string(resolveTextSize(ks.SubvalueSize, settings.DefaultSubvalueSz()))
 
-	if ks.ShowBorder != nil && !*ks.ShowBorder {
+	// Border: button override > provider override > plugin default.
+	// Button/provider values are merged into ks by EffectiveSettings;
+	// when still unset, fall back to the plugin default.
+	borderOn := settings.DefaultShowBorderEnabled()
+	if ks.ShowBorder != nil {
+		borderOn = *ks.ShowBorder
+	}
+	if !borderOn {
 		f := false
 		in.Border = &f
 	}
@@ -859,9 +1069,20 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 	}
 
 	// Subvalue priority: hideSubvalue > countdown > captionOverride > rawCounts > caption > auto
-	if ks.HideSubvalue {
+	// hideSubvalue / showResetTimer follow the same plugin-tier
+	// fallback chain as the other toggles: button > provider > plugin.
+	// ks.* is nil when nothing at button/provider tier is set.
+	hideSub := settings.DefaultHideSubvalueEnabled()
+	if ks.HideSubvalue != nil {
+		hideSub = *ks.HideSubvalue
+	}
+	showTimer := settings.DefaultShowResetTimerEnabled()
+	if ks.ShowResetTimer != nil {
+		showTimer = *ks.ShowResetTimer
+	}
+	if hideSub {
 		// User explicitly hid the subtext.
-	} else if metric.ResetInSeconds != nil && (ks.ShowResetTimer == nil || *ks.ShowResetTimer) {
+	} else if metric.ResetInSeconds != nil && showTimer {
 		in.Subvalue = render.FormatCountdown(*metric.ResetInSeconds)
 	} else {
 		override := strings.TrimSpace(ks.CaptionOverride)
@@ -888,22 +1109,34 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 }
 
 func placeholderFace(prov providers.Provider, label, value, subvalue string, ks settings.KeySettings) string {
+	// Bg: button override > plugin default > brand bg. Consistent
+	// with the main render path.
+	bg := prov.BrandBg()
+	if v := settings.DefaultBgColorValue(); v != "" && render.IsValidHexColor(v) {
+		bg = v
+	}
+	if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
+		bg = ks.BgColor
+	}
 	in := render.ButtonInput{
 		Label: label,
 		Value: value,
 		Fill:  prov.BrandColor(),
-		Bg:    prov.BrandBg(),
+		Bg:    bg,
 	}
 	if subvalue != "" {
 		in.Subvalue = subvalue
 	}
-	if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
-		in.Bg = ks.BgColor
-	}
 	if ks.TextColor != "" && render.IsValidHexColor(ks.TextColor) {
 		in.Fg = ks.TextColor
+	} else if v := settings.DefaultTextColorValue(); render.IsValidHexColor(v) {
+		in.Fg = v
 	}
-	if ks.ShowBorder != nil && !*ks.ShowBorder {
+	borderOn := settings.DefaultShowBorderEnabled()
+	if ks.ShowBorder != nil {
+		borderOn = *ks.ShowBorder
+	}
+	if !borderOn {
 		f := false
 		in.Border = &f
 	}
@@ -928,13 +1161,23 @@ func loadingFaceFor(providerID string, ks *settings.KeySettings) string {
 	prov := providers.Get(providerID)
 	glyph := getProviderGlyph(providerID)
 	fillColor := ""
-	var bg string
 	if prov != nil {
 		fillColor = prov.BrandColor()
+	}
+	// Bg: button override > plugin default > brand bg.
+	bg := "#111827"
+	if prov != nil {
 		bg = prov.BrandBg()
 	}
-	var fg string
+	if v := settings.DefaultBgColorValue(); v != "" && render.IsValidHexColor(v) {
+		bg = v
+	}
+	fg := settings.DefaultTextColorValue()
 	var border *bool
+	if !settings.DefaultShowBorderEnabled() {
+		f := false
+		border = &f
+	}
 	if ks != nil {
 		if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
 			bg = ks.BgColor
@@ -942,7 +1185,7 @@ func loadingFaceFor(providerID string, ks *settings.KeySettings) string {
 		if ks.TextColor != "" && render.IsValidHexColor(ks.TextColor) {
 			fg = ks.TextColor
 		}
-		if ks.ShowBorder != nil && !*ks.ShowBorder {
+		if ks.ShowBorder != nil {
 			border = ks.ShowBorder
 		}
 	}
@@ -962,6 +1205,8 @@ func computeThresholdState(metric providers.MetricValue, ks settings.KeySettings
 	n := *metric.NumericValue
 	direction := defStr(metric.NumericGoodWhen, "high")
 
+	// Per-metric-type built-in defaults. These fire only when neither
+	// the button, provider, nor plugin tier has supplied a threshold.
 	var defaultWarn, defaultCritical *float64
 	if direction == "high" {
 		w, c := 10.0, 0.0
@@ -972,13 +1217,23 @@ func computeThresholdState(metric providers.MetricValue, ks settings.KeySettings
 		defaultWarn, defaultCritical = &w, &c
 	}
 
+	// Precedence: button / provider merged into ks > plugin default >
+	// per-metric-type built-in.
 	warn := ks.WarnBelow
 	if warn == nil {
-		warn = defaultWarn
+		if v, ok := settings.DefaultWarnBelowValue(); ok {
+			warn = &v
+		} else {
+			warn = defaultWarn
+		}
 	}
 	critical := ks.CriticalBelow
 	if critical == nil {
-		critical = defaultCritical
+		if v, ok := settings.DefaultCriticalBelowValue(); ok {
+			critical = &v
+		} else {
+			critical = defaultCritical
+		}
 	}
 
 	if direction == "high" {
@@ -1002,18 +1257,58 @@ func computeThresholdState(metric providers.MetricValue, ks settings.KeySettings
 // --- Utility ---
 
 func resolveShowRawCounts(metric providers.MetricValue, ks settings.KeySettings) bool {
-	if ks.ShowRawCounts != nil && !*ks.ShowRawCounts {
+	// Effective show-raw-counts value: button > provider > plugin.
+	// ks.ShowRawCounts already carries the merged button/provider
+	// value from EffectiveSettings; nil means "inherit plugin".
+	effective := settings.DefaultShowRawCountsEnabled()
+	explicit := ks.ShowRawCounts != nil
+	if explicit {
+		effective = *ks.ShowRawCounts
+	}
+	if explicit && !effective {
 		return false
 	}
 	if metric.RawCount != nil && metric.RawMax != nil {
-		return ks.ShowRawCounts == nil || *ks.ShowRawCounts
+		return effective
 	}
-	if ks.ShowRawCounts != nil && *ks.ShowRawCounts &&
+	if effective &&
 		metric.NumericValue != nil && metric.NumericMax != nil &&
 		metric.NumericUnit == "dollars" {
 		return true
 	}
 	return false
+}
+
+func resolveMetricID(ks settings.KeySettings) string {
+	if ks.MetricID != "" {
+		return ks.MetricID
+	}
+	return defaultMetric
+}
+
+func metricWithSnapshotAge(metric providers.MetricValue, snapshotAge time.Duration) providers.MetricValue {
+	if metric.ResetInSeconds == nil || snapshotAge <= 0 {
+		return metric
+	}
+	remaining := *metric.ResetInSeconds - snapshotAge.Seconds()
+	if remaining < 0 {
+		remaining = 0
+	}
+	metric.ResetInSeconds = &remaining
+	return metric
+}
+
+func isCustomTitle(title string, autoTitles ...string) bool {
+	trimmed := strings.TrimSpace(title)
+	if trimmed == "" {
+		return false
+	}
+	for _, auto := range autoTitles {
+		if auto != "" && strings.EqualFold(trimmed, strings.TrimSpace(auto)) {
+			return false
+		}
+	}
+	return true
 }
 
 func formatRawCounts(metric providers.MetricValue) string {
@@ -1095,6 +1390,12 @@ func metricCaptionForPlaceholder(metricID string) string {
 	if caption, ok := knownCaptions[metricID]; ok {
 		return caption
 	}
+	switch {
+	case strings.HasSuffix(metricID, "-percent"):
+		return "Remaining"
+	case strings.HasSuffix(metricID, "-pace"):
+		return "Pace"
+	}
 	return ""
 }
 
@@ -1102,8 +1403,14 @@ func deriveLabelFromMetricID(metricID string) string {
 	if label, ok := knownLabels[metricID]; ok {
 		return label
 	}
-	parts := strings.SplitN(metricID, "-", 2)
-	return strings.ToUpper(parts[0])
+	trimmed := strings.TrimPrefix(metricID, "weekly-")
+	for _, suffix := range []string{"-percent", "-pace"} {
+		if strings.HasSuffix(trimmed, suffix) {
+			trimmed = strings.TrimSuffix(trimmed, suffix)
+			break
+		}
+	}
+	return strings.ToUpper(strings.ReplaceAll(trimmed, "-", " "))
 }
 
 func findMetric(metrics []providers.MetricValue, id string) *providers.MetricValue {

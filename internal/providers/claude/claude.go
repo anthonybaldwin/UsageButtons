@@ -539,8 +539,8 @@ func extraUsageMetrics(extra *extraUsageSource) []providers.MetricValue {
 		providers.MetricValue{
 			ID: "extra-usage-limit", Label: "LIMIT",
 			Name: fmt.Sprintf("Extra usage monthly limit (%s)", extra.currency),
-			Value: fmt.Sprintf("$%.2f", limit), NumericValue: &spent,
-			NumericUnit: "dollars", NumericGoodWhen: "low", NumericMax: &limit,
+			Value: fmt.Sprintf("$%.2f", limit), NumericValue: &limit,
+			NumericUnit: "dollars", NumericGoodWhen: "high",
 			Caption: "Monthly",
 		},
 		spentMetric,
@@ -569,61 +569,85 @@ func (Provider) MetricIDs() []string {
 }
 
 func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
-	c, err := loadCreds()
-	if err != nil {
-		return providers.Snapshot{}, err
-	}
-
-	if !hasScope(c.scopes, "user:profile") {
-		return providers.Snapshot{}, fmt.Errorf(
-			"Claude OAuth token missing `user:profile` scope (has: %s). Run `claude setup-token` to regenerate.",
-			strings.Join(c.scopes, ", "))
-	}
-	if c.expiresAt != nil && c.expiresAt.Before(time.Now()) {
-		return providers.Snapshot{}, fmt.Errorf(
-			"Claude OAuth access token expired at %s. Run `claude` to re-authenticate.",
-			c.expiresAt.Format(time.RFC3339))
-	}
-
-	var resp usageResponse
-	err = httputil.GetJSON(usageURL, map[string]string{
-		"Authorization":  "Bearer " + c.accessToken,
-		"anthropic-beta": betaHdr,
-		"User-Agent":     userAgent,
-		"Content-Type":   "application/json",
-	}, 30*time.Second, &resp)
-
-	if err != nil {
-		var httpErr *httputil.Error
-		if errors.As(err, &httpErr) {
-			if httpErr.Status == 401 {
-				return providers.Snapshot{}, fmt.Errorf(
-					"Claude OAuth request unauthorized. Run `claude` to re-authenticate. body=%s",
-					httputil.Truncate(httpErr.Body, 200))
-			}
-			if httpErr.Status == 403 && strings.Contains(httpErr.Body, "user:profile") {
-				return providers.Snapshot{}, fmt.Errorf(
-					"Claude OAuth token missing `user:profile` scope. Run `claude setup-token` to regenerate.")
-			}
-			parts := []string{fmt.Sprintf("HTTP %d", httpErr.Status)}
-			if ra := httpErr.Header("Retry-After"); ra != "" {
-				parts = append(parts, "retry-after="+ra)
-			}
-			if rid := httpErr.Header("Request-Id"); rid != "" {
-				parts = append(parts, "req="+rid)
-			} else if rid := httpErr.Header("X-Request-Id"); rid != "" {
-				parts = append(parts, "req="+rid)
-			}
+	// Browser-first: hit claude.ai/api/organizations/{id}/usage via the
+	// extension when connected. Same JSON shape as the OAuth endpoint,
+	// so downstream metric emission is identical. Falls back to OAuth
+	// only when the extension isn't reachable or the request fails.
+	//
+	// Net win when the extension is present: no OAuth token leaves the
+	// plugin, real browser TLS fingerprint + cookies + cf_clearance,
+	// no expired-token errors for users who've never refreshed their
+	// Claude CLI session.
+	var (
+		resp          usageResponse
+		source        string
+		rateLimitTier string
+	)
+	if webResp, ok := tryFetchUsageViaExtension(); ok {
+		resp = webResp
+		source = "cookie"
+		// Optional enrichment for the plan-name display. Missing creds
+		// is fine on the browser path — we just show "Claude" generic.
+		if c, err := loadCreds(); err == nil {
+			rateLimitTier = c.rateLimitTier
+		}
+	} else {
+		c, err := loadCreds()
+		if err != nil {
+			return providers.Snapshot{}, err
+		}
+		if !hasScope(c.scopes, "user:profile") {
 			return providers.Snapshot{}, fmt.Errorf(
-				"Claude OAuth server error: %s body=%s",
-				strings.Join(parts, " "), httputil.Truncate(httpErr.Body, 200))
+				"Claude OAuth token missing `user:profile` scope (has: %s). Run `claude setup-token` to regenerate.",
+				strings.Join(c.scopes, ", "))
 		}
-		// Distinguish JSON parse errors (API returned unexpected schema)
-		// from actual network failures.
-		if strings.Contains(err.Error(), "invalid JSON") || strings.Contains(err.Error(), "cannot unmarshal") {
-			return providers.Snapshot{}, fmt.Errorf("Claude API response parse error: %v", err)
+		if c.expiresAt != nil && c.expiresAt.Before(time.Now()) {
+			return providers.Snapshot{}, fmt.Errorf(
+				"Claude OAuth access token expired at %s. Run `claude` to re-authenticate.",
+				c.expiresAt.Format(time.RFC3339))
 		}
-		return providers.Snapshot{}, fmt.Errorf("Claude OAuth network error: %v", err)
+
+		err = httputil.GetJSON(usageURL, map[string]string{
+			"Authorization":  "Bearer " + c.accessToken,
+			"anthropic-beta": betaHdr,
+			"User-Agent":     userAgent,
+			"Content-Type":   "application/json",
+		}, 30*time.Second, &resp)
+
+		if err != nil {
+			var httpErr *httputil.Error
+			if errors.As(err, &httpErr) {
+				if httpErr.Status == 401 {
+					return providers.Snapshot{}, fmt.Errorf(
+						"Claude OAuth request unauthorized. Run `claude` to re-authenticate. body=%s",
+						httputil.Truncate(httpErr.Body, 200))
+				}
+				if httpErr.Status == 403 && strings.Contains(httpErr.Body, "user:profile") {
+					return providers.Snapshot{}, fmt.Errorf(
+						"Claude OAuth token missing `user:profile` scope. Run `claude setup-token` to regenerate.")
+				}
+				parts := []string{fmt.Sprintf("HTTP %d", httpErr.Status)}
+				if ra := httpErr.Header("Retry-After"); ra != "" {
+					parts = append(parts, "retry-after="+ra)
+				}
+				if rid := httpErr.Header("Request-Id"); rid != "" {
+					parts = append(parts, "req="+rid)
+				} else if rid := httpErr.Header("X-Request-Id"); rid != "" {
+					parts = append(parts, "req="+rid)
+				}
+				return providers.Snapshot{}, fmt.Errorf(
+					"Claude OAuth server error: %s body=%s",
+					strings.Join(parts, " "), httputil.Truncate(httpErr.Body, 200))
+			}
+			// Distinguish JSON parse errors (API returned unexpected schema)
+			// from actual network failures.
+			if strings.Contains(err.Error(), "invalid JSON") || strings.Contains(err.Error(), "cannot unmarshal") {
+				return providers.Snapshot{}, fmt.Errorf("Claude API response parse error: %v", err)
+			}
+			return providers.Snapshot{}, fmt.Errorf("Claude OAuth network error: %v", err)
+		}
+		source = "oauth"
+		rateLimitTier = c.rateLimitTier
 	}
 
 	var metrics []providers.MetricValue
@@ -748,17 +772,51 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 	metrics = append(metrics, costMetrics()...)
 
 	provName := "Claude"
-	if p := planFromTier(c.rateLimitTier); p != "" {
+	if p := planFromTier(rateLimitTier); p != "" {
 		provName = p
 	}
 
 	return providers.Snapshot{
 		ProviderID:   "claude",
 		ProviderName: provName,
-		Source:       "oauth",
+		Source:       source,
 		Metrics:      metrics,
 		Status:       "operational",
 	}, nil
+}
+
+// tryFetchUsageViaExtension attempts the browser-proxied /usage fetch.
+// Returns ok=false on any failure (extension missing, org lookup
+// failed, non-2xx response, decode error) so the caller falls through
+// to the OAuth path. Silent by design — the direct path is the
+// canonical fallback and surfaces real errors if it also fails.
+func tryFetchUsageViaExtension() (usageResponse, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	if !cookies.HostAvailable(ctx) {
+		return usageResponse{}, false
+	}
+	orgID, err := fetchOrgID(ctx, "extension")
+	if err != nil {
+		logf("extension /usage skipped: org lookup failed: %v", err)
+		return usageResponse{}, false
+	}
+	var resp usageResponse
+	url := fmt.Sprintf("%s/organizations/%s/usage", baseWebURL, orgID)
+	if err := cookies.FetchJSON(ctx, url, nil, &resp); err != nil {
+		var httpErr *httputil.Error
+		if errors.As(err, &httpErr) && httpErr.Status == 401 {
+			// Cached orgID may still be valid but the session cookie
+			// expired. Drop the cache so the next attempt retries from
+			// scratch (in case the user logs back into claude.ai).
+			orgMu.Lock()
+			delete(orgCache, "extension")
+			orgMu.Unlock()
+		}
+		logf("extension /usage failed: %v — falling through to OAuth", err)
+		return usageResponse{}, false
+	}
+	return resp, true
 }
 
 func oauthToSource(raw *extraUsageRaw) *extraUsageSource {

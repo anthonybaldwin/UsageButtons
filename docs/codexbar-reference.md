@@ -8,6 +8,12 @@ porting CodexBar's provider concepts into the Stream Deck plugin. It is
 running `./scripts/sync-codexbar.sh` and re-reviewing before implementing a
 new provider.
 
+**Last reviewed against CodexBar HEAD `c317e89`** (2026-04-19). Prior
+anchor was `69a715f` (2026-04-12); this refresh folds in ~53 upstream
+commits including a new Abacus AI provider, Synthetic quota-shape
+rewrite, Copilot/Gemini/Claude-CLI/Codex-Pro-Lite fixes, and an Alibaba
+China endpoint change.
+
 > **Don't vendor CodexBar code.** Everything here is design guidance.
 > Every provider fetcher in `src/providers/` is to be written from
 > scratch in TypeScript against public endpoints / local files.
@@ -17,29 +23,31 @@ new provider.
 | Provider | Primary data path | Cross-platform | Notes |
 |---|---|---|---|
 | **OpenRouter** | API token → `GET https://openrouter.ai/api/v1/credits`, `/key` | ✅ | easiest first provider; no macOS deps |
-| **Copilot** | GitHub device flow → `GET https://api.github.com/copilot_internal/user` | ✅ | `quotaSnapshots.premiumInteractions.remainingFraction`, `quotaSnapshots.chat.remainingFraction` |
+| **Copilot** | GitHub device flow → `GET https://api.github.com/copilot_internal/user` | ✅ | `quotaSnapshots.premiumInteractions.remainingFraction`, `quotaSnapshots.chat.remainingFraction`. Use `verification_uri_complete` (with prefilled `user_code`) when returned, falling back to `verification_uri` — CodexBar cad7f83. |
+| **Synthetic** | `SYNTHETIC_API_KEY` → `GET https://api.synthetic.new/v2/quotas` | ✅ | three-lane response: `[rolling-5h, weekly, search-hourly]` — slot-map these to `primary/secondary/tertiary` so a missing lane stays `null` instead of shifting the next one into the wrong UI slot. Parse `tickPercent` for rolling regen detail. |
+| **Abacus AI** | browser cookies → `GET https://apps.abacus.ai/api/_getOrganizationComputePoints` + `/api/_getBillingInfo` | ⚠️ | cookie-only; no API-key path. Uses `CookieHeaderCache` with browser-import fallback on macOS. On Windows we start with manual cookie header; dashboard at `apps.abacus.ai/chatllm/admin/compute-points-usage`. |
 | **z.ai** | API key → `GET https://api.z.ai/api/monitor/usage/quota/limit` | ✅ | region-aware host (`Z_AI_API_HOST`) |
 | **Kimi K2** | API key → `GET https://kimi-k2.ai/api/user/credits` | ✅ | |
 | **Warp** | API key → `POST https://app.warp.dev/graphql/v2?op=GetRequestLimitInfo` | ✅ | |
 | **Kilo** | API key → `POST https://app.kilo.ai/api/trpc` + CLI fallback | ✅ | CLI fallback reads `~/.local/share/kilo/auth.json` |
-| **Gemini** | `~/.gemini/oauth_creds.json` + `POST https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota` | ✅ | depends on Gemini CLI being logged in |
+| **Gemini** | `~/.gemini/oauth_creds.json` + `POST https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota` | ✅ | depends on Gemini CLI being logged in. CLI may live under fnm-managed Node paths; discovery must probe fnm shims in addition to `~/.gemini/` (CodexBar 390a8b9). |
 | **Vertex AI** | gcloud ADC → Cloud Monitoring API | ✅ | needs `gcloud` on PATH |
 | **Claude (OAuth API)** | token from `%USERPROFILE%/.claude/.credentials.json` → `GET https://api.anthropic.com/api/oauth/usage` (header `anthropic-beta: oauth-2025-04-20`) | ✅ | macOS reads the token from Keychain first; on Windows the file fallback **is** our primary source |
-| **Codex (OAuth API)** | token from `%USERPROFILE%/.codex/auth.json` → `GET https://chatgpt.com/backend-api/wham/usage` | ✅ | |
+| **Codex (OAuth API)** | token from `%USERPROFILE%/.codex/auth.json` → `GET https://chatgpt.com/backend-api/wham/usage` | ✅ | Handle **Codex Pro Lite** plan responses and OAuth-fallback edge cases — plan-shape JSON differs from Pro/Plus (CodexBar a181370). |
 | **Kimi** | `KIMI_AUTH_TOKEN` env (manual) → `POST https://www.kimi.com/apiv2/.../GetUsages` | ✅ | auto-import of `kimi-auth` cookie is macOS-only for now |
-| **Alibaba Coding Plan** | `ALIBABA_CODING_PLAN_API_KEY` (manual) → remains API | ✅ | |
+| **Alibaba Coding Plan** | `ALIBABA_CODING_PLAN_API_KEY` (manual) → remains API | ✅ | China mainland RPC host is **`bailian-cs.console.aliyun.com`** (CodexBar ce27570). International host unchanged. |
 | **MiniMax** | API / manual `MINIMAX_COOKIE` env → remains API | ✅ | |
 | **JetBrains AI** | local XML `%APPDATA%/JetBrains/*/options/AIAssistantQuotaManager2.xml` | ⚠️ | path differs from macOS; detection logic is portable |
 | **Codex (CLI RPC)** | `codex ... app-server` JSON-RPC | ⚠️ | requires `codex` CLI on PATH and ConPTY for the PTY fallback |
-| **Claude (CLI PTY)** | `claude /usage` in a PTY | ⚠️ | needs a Windows-capable PTY (node-pty/ConPTY); low priority while OAuth API works |
+| **Claude (CLI PTY)** | `claude /usage` in a PTY | ⚠️ | needs a Windows-capable PTY (node-pty/ConPTY); low priority while OAuth API works. **CLI binary lookup must cover native-installer paths** (`%LOCALAPPDATA%\AnthropicClaude\`, `~/.local/bin/claude`, `~/.claude/local/`) in addition to PATH — CodexBar b5f7e73. |
 | **Cursor** | browser cookies → `cursor.com/api/usage-summary` | ⚠️ | Windows Chrome cookie DB parse is doable but out of scope; manual cookie header first |
-| **OpenCode** | browser cookies → `opencode.ai/_server` RPC | ⚠️ | manual cookie header first |
+| **OpenCode** | browser cookies → `opencode.ai/_server` RPC | ⚠️ | manual cookie header first. Pace visualization is now enabled upstream (8892757) — compute `delta = used% - elapsed%` same as Claude/Codex weekly. |
 | **Droid/Factory** | WorkOS cookies / tokens | ⚠️ | manual header first |
 | **Augment** | `auggie account status` CLI | ⚠️ | works if `auggie` installed |
 | **Amp** | browser cookies → settings HTML scrape | ⚠️ | manual only |
-| **Ollama** | browser cookies → settings HTML scrape | ⚠️ | manual only |
+| **Ollama** | browser cookies → settings HTML scrape | ⚠️ | manual only. CodexBar 583f319 taught its cookie-jar parser to recognize `__Secure-session` — **not applicable to us**: our extension uses `credentials:"include"` and Chrome applies cookies itself, so we never look up cookie names. |
 | **Perplexity** | browser cookies | ⚠️ | manual only |
-| **Antigravity** | LSP port detection via `lsof`/`ps` — probes `language_server_macos` process | ❌ | **macOS-only.** Hardcodes process name `language_server_macos`, uses `ps`/`lsof` for port detection + localhost TLS probe. No Windows equivalent exists. CodexBar's 2026-04-12 commit (69a715f) added TLS certificate handling but didn't change the macOS-only architecture. |
+| **Antigravity** | LSP port detection via `lsof`/`ps` — probes `language_server_macos` process | ❌ | **macOS-only.** Hardcodes process name `language_server_macos`, uses `ps`/`lsof` for port detection + localhost TLS probe. No Windows equivalent exists. Recent upstream work (59d22ab URLSession delegate fix, 8e63643 TLS delegate, 367bf9b routing, 07a6591 retry, 1068d3f plan-name) continues to refine the macOS path — none of it unlocks Windows. |
 
 **Shipping order:** the ✅ rows first, in roughly the order listed
 above (start with OpenRouter — cleanest contract — then Claude and
@@ -194,6 +202,11 @@ OpenAI green, Gemini blue. Keep it configurable via action settings.
   plugin restarts so the button isn't blank for the first poll cycle.
 - **Stale detection:** if `updatedAt` is > 12h old or the last fetch
   errored, mark `stale: true` and render dimmed.
+- **Unavailable-provider cleanup:** when a provider transitions to
+  "not runnable" (disabled, missing token, cookie rejected), clear
+  its cached snapshot on the spot instead of leaving the last good
+  render on the button. Mirrors CodexBar `441d1a4` / `64f9ac1` —
+  otherwise a revoked key silently displays stale numbers forever.
 
 ## 7. Status polling — keep it cheap
 
@@ -230,6 +243,21 @@ its own row.
 10. **Perplexity has three credit pools** — recurring, bonus,
     purchased — sum them for the top-line but expose each as its own
     metric id so buttons can target individually.
+11. **Synthetic response is slot-positional** — the three quota
+    entries in order are `[rolling-5h, weekly, search-hourly]`. Map by
+    slot index into `primary/secondary/tertiary`; if a slot is
+    missing, keep it `null` rather than promoting the next lane, or
+    labels end up wrong (CodexBar ea02e5f + f67bfda).
+12. **Codex Pro Lite plan shape differs from Pro/Plus** — the OAuth
+    API returns a different JSON shape for Pro Lite, and there's an
+    extra OAuth fallback path that fires when the primary plan lookup
+    fails. Our parser must tolerate both shapes and not crash on
+    missing fields (CodexBar a181370).
+13. **Clear stale snapshots when a provider goes unavailable** — if a
+    provider flips from enabled → disabled (or its token becomes
+    invalid), zero out its cached snapshot instead of showing the old
+    one, or the button lies. CodexBar 441d1a4 + 64f9ac1 landed this
+    upstream; we should apply the same pattern in our refresh loop.
 
 ## 9. What we deliberately do NOT copy
 

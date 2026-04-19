@@ -1,20 +1,27 @@
 // Package zai implements the z.ai usage provider.
 //
-// Auth: ZAI_API_TOKEN (or ZAI_API_KEY) environment variable.
-// Endpoint: GET https://api.z.ai/api/monitor/usage/quota/limit
+// Auth: Property Inspector settings field or Z_AI_API_KEY / ZAI_API_TOKEN
+// / ZAI_API_KEY environment variable.
+// Endpoint: {host}/api/monitor/usage/quota/limit where host is selected
+// by the region picker (Global / BigModel CN) unless overridden via
+// settings or Z_AI_API_HOST / Z_AI_QUOTA_URL.
 package zai
 
 import (
 	"math"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
-const quotaURL = "https://api.z.ai/api/monitor/usage/quota/limit"
+const (
+	defaultGlobalHost    = "https://api.z.ai"
+	defaultBigModelCNHost = "https://open.bigmodel.cn"
+	quotaPath             = "/api/monitor/usage/quota/limit"
+)
 
 // --- API response types ---
 
@@ -43,10 +50,38 @@ type quotaResponse struct {
 }
 
 func getAPIToken() string {
-	if t := strings.TrimSpace(os.Getenv("ZAI_API_TOKEN")); t != "" {
-		return t
+	// CodexBar uses Z_AI_API_KEY (with underscores); accept it and our
+	// legacy ZAI_* names too.
+	return settings.ResolveAPIKey(
+		settings.ProviderKeysGet().ZaiKey,
+		"Z_AI_API_KEY", "ZAI_API_TOKEN", "ZAI_API_KEY",
+	)
+}
+
+// quotaURL resolves the endpoint to call. Settings-supplied Z_AI_QUOTA_URL
+// (full URL) wins outright. Otherwise build {host}{quotaPath} where host
+// comes from settings > Z_AI_API_HOST env > region picker > default.
+func quotaURL() string {
+	pk := settings.ProviderKeysGet()
+	// Full URL override: settings > env > none
+	if full := settings.ResolveEndpoint(pk.ZaiQuotaURL, "", "Z_AI_QUOTA_URL"); full != "" {
+		return full
 	}
-	return strings.TrimSpace(os.Getenv("ZAI_API_KEY"))
+	// Host override: settings > env > region > default
+	host := settings.ResolveEndpoint(pk.ZaiHost, "", "Z_AI_API_HOST")
+	if host == "" {
+		host = regionHost(pk.ZaiRegion)
+	}
+	return host + quotaPath
+}
+
+func regionHost(region string) string {
+	switch strings.ToLower(strings.TrimSpace(region)) {
+	case "bigmodel-cn", "bigmodel", "cn", "china":
+		return defaultBigModelCNHost
+	default:
+		return defaultGlobalHost
+	}
 }
 
 func resetSecondsFromLimit(limit quotaLimit) *float64 {
@@ -91,12 +126,12 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Set ZAI_API_TOKEN environment variable.",
+			Error:        "Enter a z.ai API key in plugin settings, or set Z_AI_API_KEY.",
 		}, nil
 	}
 
 	var resp quotaResponse
-	err := httputil.GetJSON(quotaURL, map[string]string{
+	err := httputil.GetJSON(quotaURL(), map[string]string{
 		"Authorization": "Bearer " + apiToken,
 		"Accept":        "application/json",
 	}, 15*time.Second, &resp)

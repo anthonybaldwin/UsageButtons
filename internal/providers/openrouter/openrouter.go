@@ -1,21 +1,21 @@
 // Package openrouter implements the OpenRouter API usage provider.
 //
-// Auth: OPENROUTER_API_KEY environment variable.
-// Endpoint: GET https://openrouter.ai/api/v1/auth/credits
+// Auth: Property Inspector settings field or OPENROUTER_API_KEY env var.
+// Endpoint: {base}/auth/credits where base comes from the PI settings
+// override, the OPENROUTER_API_URL env var, or the default public URL.
 package openrouter
 
 import (
 	"fmt"
 	"math"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
-const creditsURL = "https://openrouter.ai/api/v1/auth/credits"
+const defaultBaseURL = "https://openrouter.ai/api/v1"
 
 type creditsResponse struct {
 	Data *struct {
@@ -25,7 +25,19 @@ type creditsResponse struct {
 }
 
 func getAPIKey() string {
-	return strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
+	return settings.ResolveAPIKey(
+		settings.ProviderKeysGet().OpenRouterKey,
+		"OPENROUTER_API_KEY",
+	)
+}
+
+func creditsURL() string {
+	base := settings.ResolveEndpoint(
+		settings.ProviderKeysGet().OpenRouterURL,
+		defaultBaseURL,
+		"OPENROUTER_API_URL",
+	)
+	return base + "/auth/credits"
 }
 
 // Provider fetches OpenRouter usage data.
@@ -53,7 +65,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	}
 
 	var resp creditsResponse
-	err := httputil.GetJSON(creditsURL, map[string]string{
+	err := httputil.GetJSON(creditsURL(), map[string]string{
 		"Authorization": "Bearer " + apiKey,
 		"Accept":        "application/json",
 	}, 15*time.Second, &resp)

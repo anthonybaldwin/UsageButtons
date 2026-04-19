@@ -1,7 +1,10 @@
 // Package copilot implements the GitHub Copilot usage provider.
 //
-// Auth: GitHub OAuth token from ~/.config/github-copilot/hosts.json,
-// apps.json, or $GITHUB_TOKEN env var.
+// Auth, in priority order:
+//   1. Property Inspector settings field
+//   2. $GITHUB_TOKEN env var
+//   3. ~/.config/github-copilot/hosts.json
+//   4. ~/.config/github-copilot/apps.json
 // Endpoint: GET https://api.github.com/copilot_internal/user
 package copilot
 
@@ -16,6 +19,7 @@ import (
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
 const usageURL = "https://api.github.com/copilot_internal/user"
@@ -51,8 +55,11 @@ func copilotAppsPath() string {
 }
 
 func loadGitHubToken() string {
-	// Try env var first
-	if t := strings.TrimSpace(os.Getenv("GITHUB_TOKEN")); t != "" {
+	// Settings first, then env var
+	if t := settings.ResolveAPIKey(
+		settings.ProviderKeysGet().CopilotToken,
+		"GITHUB_TOKEN",
+	); t != "" {
 		return t
 	}
 
@@ -112,7 +119,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "No GitHub token found. Run `gh auth login` or set GITHUB_TOKEN.",
+			Error:        "Enter a GitHub token in plugin settings, or run `gh auth login`, or set GITHUB_TOKEN.",
 		}, nil
 	}
 

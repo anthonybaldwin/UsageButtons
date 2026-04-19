@@ -1,6 +1,7 @@
 // Package kimik2 implements the Kimi K2 credits provider.
 //
-// Auth: KIMI_K2_API_KEY (or KIMI_API_KEY / KIMI_KEY) environment variable.
+// Auth: Property Inspector settings field or KIMI_K2_API_KEY /
+// KIMI_API_KEY / KIMI_KEY environment variable.
 // Endpoint: GET https://kimi-k2.ai/api/user/credits
 package kimik2
 
@@ -9,23 +10,20 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
 const creditsURL = "https://kimi-k2.ai/api/user/credits"
 
 func getAPIKey() string {
-	for _, env := range []string{"KIMI_K2_API_KEY", "KIMI_API_KEY", "KIMI_KEY"} {
-		if t := strings.TrimSpace(os.Getenv(env)); t != "" {
-			return t
-		}
-	}
-	return ""
+	return settings.ResolveAPIKey(
+		settings.ProviderKeysGet().KimiK2Key,
+		"KIMI_K2_API_KEY", "KIMI_API_KEY", "KIMI_KEY",
+	)
 }
 
 // --- Flexible response parsing ---
@@ -125,7 +123,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Set KIMI_K2_API_KEY environment variable.",
+			Error:        "Enter a Kimi K2 API key in plugin settings, or set KIMI_K2_API_KEY.",
 		}, nil
 	}
 

@@ -1,17 +1,17 @@
 // Package warp implements the Warp AI usage provider.
 //
-// Auth: WARP_API_KEY environment variable.
+// Auth: Property Inspector settings field or WARP_API_KEY / WARP_TOKEN
+// environment variable.
 // Endpoint: POST https://app.warp.dev/graphql/v2?op=GetRequestLimitInfo
 package warp
 
 import (
 	"math"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
 const graphqlURL = "https://app.warp.dev/graphql/v2?op=GetRequestLimitInfo"
@@ -80,7 +80,10 @@ type graphqlRequest struct {
 }
 
 func getAPIKey() string {
-	return strings.TrimSpace(os.Getenv("WARP_API_KEY"))
+	return settings.ResolveAPIKey(
+		settings.ProviderKeysGet().WarpKey,
+		"WARP_API_KEY", "WARP_TOKEN",
+	)
 }
 
 // Provider fetches Warp usage data.
@@ -103,7 +106,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Set WARP_API_KEY environment variable.",
+			Error:        "Enter a Warp API key in plugin settings, or set WARP_API_KEY / WARP_TOKEN.",
 		}, nil
 	}
 

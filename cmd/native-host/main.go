@@ -7,7 +7,8 @@
 //
 //   - stdin/stdout, framed per Chrome's native-messaging protocol,
 //     talks to the extension's service worker.
-//   - A local AF_UNIX socket (per-platform path) talks to the plugin.
+//   - A TCP loopback listener (127.0.0.1:ephemeral, port published to
+//     a sidecar file the plugin reads) talks to the Stream Deck plugin.
 //
 // The cookies.Bridge glues the two together: plugin cookie queries are
 // forwarded to the extension, replies are correlated back by request
@@ -39,7 +40,7 @@ func main() {
 		defer f.Close()
 	}
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.LUTC)
-	log.Printf("native-host: start pid=%d ipc=%s", os.Getpid(), cookies.IPCAddress())
+	log.Printf("native-host: start pid=%d", os.Getpid())
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -51,7 +52,7 @@ func main() {
 		log.Printf("native-host: listen IPC: %v", err)
 		os.Exit(1)
 	}
-	log.Printf("native-host: IPC listening")
+	log.Printf("native-host: IPC listening on %s", cookies.IPCAddress())
 
 	var wg sync.WaitGroup
 	wg.Add(1)

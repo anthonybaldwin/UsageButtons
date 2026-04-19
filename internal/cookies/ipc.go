@@ -8,16 +8,26 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"time"
 )
 
-// ipcAddr returns the local IPC socket path shared by the native host
-// (listener) and the plugin (dialer). It's a var so tests can swap in
-// a temp path.
-var ipcAddr = defaultIPCAddr
+// IPC between the plugin and the native host runs over TCP loopback
+// (127.0.0.1:<ephemeral>) with the listener's port recorded in a
+// sidecar file the plugin reads at dial time. This replaced an
+// AF_UNIX implementation that, on Windows, would eventually park the
+// plugin process in a state where every dial failed with WSAEINVAL
+// ("an invalid argument was supplied") until the plugin restarted —
+// a known Go/Windows AF_UNIX quirk. TCP loopback has no such state,
+// is cross-platform, and stays in the stdlib.
 
-func defaultIPCAddr() string {
+// ipcPortPath returns the filesystem path of the sidecar file that
+// holds the listener's port. It's a var so tests can swap in a temp
+// path.
+var ipcPortPath = defaultIPCPortPath
+
+func defaultIPCPortPath() string {
 	switch runtime.GOOS {
 	case "windows":
 		base := os.Getenv("LOCALAPPDATA")
@@ -26,27 +36,77 @@ func defaultIPCAddr() string {
 		}
 		dir := filepath.Join(base, "UsageButtons")
 		_ = os.MkdirAll(dir, 0o755)
-		return filepath.Join(dir, "ipc.sock")
+		return filepath.Join(dir, "ipc.port")
 	case "darwin":
-		return fmt.Sprintf("/tmp/usagebuttons-%d.sock", os.Getuid())
+		return fmt.Sprintf("/tmp/usagebuttons-%d.port", os.Getuid())
 	default:
 		return ""
 	}
 }
 
-// IPCAddress returns the platform-specific IPC socket path. Mostly
-// useful for diagnostic logging.
-func IPCAddress() string { return ipcAddr() }
+// IPCAddress reports the current TCP listener address ("127.0.0.1:<port>")
+// by reading the port file the native host wrote. Returns "" when no
+// listener is published. Used for diagnostic logging from the PI.
+func IPCAddress() string {
+	path := ipcPortPath()
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	port := strings.TrimSpace(string(data))
+	if port == "" {
+		return ""
+	}
+	return "127.0.0.1:" + port
+}
 
 // ListenIPC opens the listener the native host uses to serve the
-// plugin. Removes any stale socket file from a crashed prior run.
+// plugin. Binds 127.0.0.1 on an OS-assigned port and atomically
+// publishes that port to ipcPortPath so dialers can discover it.
+// The returned listener removes the port file on Close.
 func ListenIPC() (net.Listener, error) {
-	addr := ipcAddr()
-	if addr == "" {
+	path := ipcPortPath()
+	if path == "" {
 		return nil, errors.New("cookies: IPC not supported on this platform")
 	}
-	_ = os.Remove(addr)
-	return net.Listen("unix", addr)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, fmt.Errorf("cookies: listen tcp loopback: %w", err)
+	}
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		ln.Close()
+		return nil, fmt.Errorf("cookies: listener returned non-TCP address %T", ln.Addr())
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(fmt.Sprintf("%d", addr.Port)), 0o600); err != nil {
+		ln.Close()
+		return nil, fmt.Errorf("cookies: write port file: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		ln.Close()
+		_ = os.Remove(tmp)
+		return nil, fmt.Errorf("cookies: publish port file: %w", err)
+	}
+	return &portFileListener{Listener: ln, portPath: path}, nil
+}
+
+// portFileListener removes the port file when the listener closes so
+// stale ports don't linger after the native host exits.
+type portFileListener struct {
+	net.Listener
+	portPath string
+}
+
+func (l *portFileListener) Close() error {
+	err := l.Listener.Close()
+	if l.portPath != "" {
+		_ = os.Remove(l.portPath)
+	}
+	return err
 }
 
 var requestID atomic.Uint64
@@ -56,14 +116,14 @@ func nextRequestID() string {
 }
 
 func dialIPC(ctx context.Context) (net.Conn, error) {
-	addr := ipcAddr()
+	addr := IPCAddress()
 	if addr == "" {
 		return nil, ErrHostUnavailable
 	}
 	dCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
 	var d net.Dialer
-	conn, err := d.DialContext(dCtx, "unix", addr)
+	conn, err := d.DialContext(dCtx, "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrHostUnavailable, err)
 	}

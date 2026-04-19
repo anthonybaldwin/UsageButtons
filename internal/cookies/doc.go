@@ -7,7 +7,7 @@
 // "fetch(url) for a narrow allowlist of domains, with credentials".
 // When the plugin wants, say, Claude's overage-spend-limit endpoint,
 // it sends a fetch request to a tiny native host (cmd/native-host)
-// via a local AF_UNIX socket; the host relays the request to the
+// via a local TCP loopback connection; the host relays the request to the
 // extension over Chrome's native-messaging stdin/stdout protocol;
 // the extension issues the fetch — with Chrome's real TLS
 // fingerprint, real User-Agent, and the browser's own cookie jar —

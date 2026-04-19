@@ -44,11 +44,13 @@ const (
 
 // visibleKey tracks a key currently on-screen.
 type visibleKey struct {
-	context    string
-	action     string
-	settings   settings.KeySettings
-	lastPollAt time.Time
-	showTitle  bool // true when user has enabled the native SD title
+	context       string
+	action        string
+	settings      settings.KeySettings
+	lastPollAt    time.Time
+	showTitle     bool   // true when user has enabled the native SD title
+	customTitle   bool   // true when the user has overridden the native title text
+	lastAutoTitle string // last title value written by the plugin
 }
 
 var (
@@ -108,7 +110,7 @@ func displayRefreshLoop(conn *streamdeck.Connection) {
 	ticker := time.NewTicker(displayRefresh)
 	defer ticker.Stop()
 	for range ticker.C {
-		refreshAllVisible(conn)
+		redrawAllVisible(conn)
 	}
 }
 
@@ -148,6 +150,19 @@ func refreshAllVisible(conn *streamdeck.Connection) {
 
 	for _, ctx := range contexts {
 		refreshKey(conn, ctx, false)
+	}
+}
+
+func redrawAllVisible(conn *streamdeck.Connection) {
+	mu.Lock()
+	contexts := make([]string, 0, len(visibleKeys))
+	for ctx := range visibleKeys {
+		contexts = append(contexts, ctx)
+	}
+	mu.Unlock()
+
+	for _, ctx := range contexts {
+		redrawKeyFromCache(conn, ctx)
 	}
 }
 
@@ -191,6 +206,9 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	var tp streamdeck.WillAppearTitleParameters
 	json.Unmarshal(ev.Payload, &tp)
 	showTitle := tp.TitleParameters != nil && tp.TitleParameters.ShowTitle
+	title := deriveLabelFromMetricID(metricID)
+	customTitle := isCustomTitle(payload.Title, title)
+	lastAutoTitle := title
 
 	// Stale fillColor / bgColor migration.
 	{
@@ -258,40 +276,40 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		return
 	}
 
-	title := deriveLabelFromMetricID(metricID)
-	hasUserTitle := showTitle
+	hideLabel := showTitle
 
-	// Try to render from cache immediately (avoid loading flash).
-	cached := providers.PeekSnapshot(providerID)
+	// Try to render from cache immediately (avoid loading flash). Route
+	// through renderSnapshotForKey so cached error faces, stale markers,
+	// and reset-timer aging behave identically to the minute redraw.
+	snapshot, fetchedAt := providers.PeekSnapshotState(providerID)
 	prov := providers.Get(providerID)
-	if cached != nil && prov != nil {
-		mu.Lock()
-		visibleKeys[ev.Context] = &visibleKey{
-			context:    ev.Context,
-			action:     ev.Action,
-			settings:   ks,
-			lastPollAt: time.Now(),
-			showTitle:  showTitle,
-		}
-		mu.Unlock()
-
-		metric := findMetric(cached.Metrics, metricID)
-		if metric != nil {
+	if snapshot != nil && prov != nil {
+		if metric := findMetric(snapshot.Metrics, metricID); metric != nil {
 			metricLabel := strings.ToUpper(metric.Label)
 			if metricLabel == "" {
 				metricLabel = title
 			}
-			conn.SetImage(ev.Context, renderMetric(prov, cached.ProviderName, *metric, ks, hasUserTitle))
-			setTitleForKey(conn, ev.Context, hasUserTitle, metricLabel)
-		} else {
-			svgLabel := ""
-			if !hasUserTitle {
-				svgLabel = title
-			}
-			caption := metricCaptionForPlaceholder(metricID)
-			conn.SetImage(ev.Context, placeholderFace(prov, svgLabel, "—", caption, ks))
-			setTitleForKey(conn, ev.Context, hasUserTitle, title)
+			customTitle = isCustomTitle(payload.Title, title, metricLabel)
+			lastAutoTitle = metricLabel
 		}
+		mu.Lock()
+		visibleKeys[ev.Context] = &visibleKey{
+			context:       ev.Context,
+			action:        ev.Action,
+			settings:      ks,
+			lastPollAt:    time.Now(),
+			showTitle:     showTitle,
+			customTitle:   customTitle,
+			lastAutoTitle: lastAutoTitle,
+		}
+		keyCopy := *visibleKeys[ev.Context]
+		mu.Unlock()
+
+		age := time.Duration(0)
+		if !fetchedAt.IsZero() {
+			age = time.Since(fetchedAt)
+		}
+		renderSnapshotForKey(conn, keyCopy, prov, *snapshot, age)
 		conn.Logf("key appeared with cached data (now tracking %d visible key(s))", countVisible())
 		return
 	}
@@ -303,19 +321,21 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		action:    ev.Action,
 		settings:  ks,
 		showTitle: showTitle,
+		customTitle: customTitle,
+		lastAutoTitle: lastAutoTitle,
 	}
 	mu.Unlock()
 
 	if prov := providers.Get(providerID); prov != nil {
 		svgLabel := ""
-		if !hasUserTitle {
+		if !hideLabel {
 			svgLabel = title
 		}
 		conn.SetImage(ev.Context, placeholderFace(prov, svgLabel, "", "", ks))
 	} else {
 		conn.SetImage(ev.Context, loadingFaceFor(providerID, &ks))
 	}
-	setTitleForKey(conn, ev.Context, hasUserTitle, title)
+	setTitleForKey(conn, ev.Context, customTitle, title)
 	conn.Logf("key appeared, no cache (now tracking %d visible key(s))", countVisible())
 	go refreshKey(conn, ev.Context, false)
 }
@@ -336,6 +356,11 @@ func handleTitleParametersDidChange(conn *streamdeck.Connection, ev streamdeck.E
 	key, ok := visibleKeys[ev.Context]
 	if ok {
 		key.showTitle = payload.TitleParameters.ShowTitle
+		key.customTitle = isCustomTitle(
+			payload.Title,
+			key.lastAutoTitle,
+			deriveLabelFromMetricID(resolveMetricID(key.settings)),
+		)
 	}
 	mu.Unlock()
 
@@ -617,7 +642,8 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 	key.lastPollAt = time.Now()
 	action := key.action
 	ks := key.settings
-	hasUserTitle := key.showTitle
+	showTitle := key.showTitle
+	customTitle := key.customTitle
 	mu.Unlock()
 
 	providerID := streamdeck.ProviderIDFromAction(action)
@@ -640,9 +666,52 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 		return
 	}
 
-	title := deriveLabelFromMetricID(metricID)
-
 	snapshot := providers.GetSnapshot(prov, providers.GetSnapshotOptions{Force: force})
+	renderSnapshotForKey(conn, visibleKey{
+		context: context,
+		action: action,
+		settings: ks,
+		showTitle: showTitle,
+		customTitle: customTitle,
+	}, prov, snapshot, 0)
+}
+
+func redrawKeyFromCache(conn *streamdeck.Connection, context string) {
+	mu.Lock()
+	key, ok := visibleKeys[context]
+	if !ok {
+		mu.Unlock()
+		return
+	}
+	keyCopy := *key
+	mu.Unlock()
+
+	providerID := streamdeck.ProviderIDFromAction(keyCopy.action)
+	if providerID == "" {
+		return
+	}
+	prov := providers.Get(providerID)
+	if prov == nil {
+		return
+	}
+	snapshot, fetchedAt := providers.PeekSnapshotState(providerID)
+	if snapshot == nil {
+		return
+	}
+	age := time.Duration(0)
+	if !fetchedAt.IsZero() {
+		age = time.Since(fetchedAt)
+	}
+	renderSnapshotForKey(conn, keyCopy, prov, *snapshot, age)
+}
+
+func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov providers.Provider, snapshot providers.Snapshot, snapshotAge time.Duration) {
+	context := key.context
+	ks := key.settings
+	hideLabel := key.showTitle
+	customTitle := key.customTitle
+	metricID := resolveMetricID(ks)
+	title := deriveLabelFromMetricID(metricID)
 
 	if snapshot.Error != "" && len(snapshot.Metrics) == 0 {
 		notConfigured := isNotConfigured(snapshot.Error)
@@ -686,12 +755,12 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 		}
 
 		svgLabel := ""
-		if !hasUserTitle {
+		if !hideLabel {
 			svgLabel = title
 		}
 		conn.SetImage(context, placeholderFace(prov,
 			svgLabel, value, subHint, ks))
-		setTitleForKey(conn, context, hasUserTitle, title)
+		setTitleForKey(conn, context, customTitle, title)
 		return
 	}
 
@@ -717,8 +786,9 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 					if m.ResetInSeconds != nil {
 						fake.ResetInSeconds = m.ResetInSeconds
 					}
-					conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, fake, ks, hasUserTitle))
-					setTitleForKey(conn, context, hasUserTitle, title)
+					fake = metricWithSnapshotAge(fake, snapshotAge)
+					conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, fake, ks, hideLabel))
+					setTitleForKey(conn, context, customTitle, title)
 					return
 				}
 			}
@@ -728,22 +798,23 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 		// so the user knows what this button is for.
 		caption := metricCaptionForPlaceholder(metricID)
 		svgLabel := ""
-		if !hasUserTitle {
+		if !hideLabel {
 			svgLabel = title
 		}
 		conn.SetImage(context, placeholderFace(prov,
 			svgLabel, "—", caption, ks))
-		setTitleForKey(conn, context, hasUserTitle, title)
+		setTitleForKey(conn, context, customTitle, title)
 		return
 	}
 
+	metricCopy := metricWithSnapshotAge(*metric, snapshotAge)
 	// Use the metric's own label for the title (uppercased).
-	metricLabel := strings.ToUpper(metric.Label)
+	metricLabel := strings.ToUpper(metricCopy.Label)
 	if metricLabel == "" {
 		metricLabel = title
 	}
-	conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, *metric, ks, hasUserTitle))
-	setTitleForKey(conn, context, hasUserTitle, metricLabel)
+	conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, metricCopy, ks, hideLabel))
+	setTitleForKey(conn, context, customTitle, metricLabel)
 }
 
 // setTitleForKey pre-populates the native title with our label so
@@ -751,7 +822,15 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 // When ShowTitle is off (default), the SD hides it anyway.
 // When ShowTitle is on, we still set it so the field stays current
 // if the user hasn't edited the text.
-func setTitleForKey(conn *streamdeck.Connection, context string, hasUserTitle bool, label string) {
+func setTitleForKey(conn *streamdeck.Connection, context string, preserveUserTitle bool, label string) {
+	if preserveUserTitle {
+		return
+	}
+	mu.Lock()
+	if key, ok := visibleKeys[context]; ok {
+		key.lastAutoTitle = label
+	}
+	mu.Unlock()
 	conn.SetTitle(context, label)
 }
 
@@ -1016,6 +1095,38 @@ func resolveShowRawCounts(metric providers.MetricValue, ks settings.KeySettings)
 	return false
 }
 
+func resolveMetricID(ks settings.KeySettings) string {
+	if ks.MetricID != "" {
+		return ks.MetricID
+	}
+	return defaultMetric
+}
+
+func metricWithSnapshotAge(metric providers.MetricValue, snapshotAge time.Duration) providers.MetricValue {
+	if metric.ResetInSeconds == nil || snapshotAge <= 0 {
+		return metric
+	}
+	remaining := *metric.ResetInSeconds - snapshotAge.Seconds()
+	if remaining < 0 {
+		remaining = 0
+	}
+	metric.ResetInSeconds = &remaining
+	return metric
+}
+
+func isCustomTitle(title string, autoTitles ...string) bool {
+	trimmed := strings.TrimSpace(title)
+	if trimmed == "" {
+		return false
+	}
+	for _, auto := range autoTitles {
+		if auto != "" && strings.EqualFold(trimmed, strings.TrimSpace(auto)) {
+			return false
+		}
+	}
+	return true
+}
+
 func formatRawCounts(metric providers.MetricValue) string {
 	if metric.RawCount != nil && metric.RawMax != nil {
 		return fmt.Sprintf("%d/%d", *metric.RawCount, *metric.RawMax)
@@ -1095,6 +1206,12 @@ func metricCaptionForPlaceholder(metricID string) string {
 	if caption, ok := knownCaptions[metricID]; ok {
 		return caption
 	}
+	switch {
+	case strings.HasSuffix(metricID, "-percent"):
+		return "Remaining"
+	case strings.HasSuffix(metricID, "-pace"):
+		return "Pace"
+	}
 	return ""
 }
 
@@ -1102,8 +1219,14 @@ func deriveLabelFromMetricID(metricID string) string {
 	if label, ok := knownLabels[metricID]; ok {
 		return label
 	}
-	parts := strings.SplitN(metricID, "-", 2)
-	return strings.ToUpper(parts[0])
+	trimmed := strings.TrimPrefix(metricID, "weekly-")
+	for _, suffix := range []string{"-percent", "-pace"} {
+		if strings.HasSuffix(trimmed, suffix) {
+			trimmed = strings.TrimSuffix(trimmed, suffix)
+			break
+		}
+	}
+	return strings.ToUpper(strings.ReplaceAll(trimmed, "-", " "))
 }
 
 func findMetric(metrics []providers.MetricValue, id string) *providers.MetricValue {

@@ -257,6 +257,25 @@ func PeekSnapshot(providerID string) *Snapshot {
 	return e.snapshot
 }
 
+// PeekSnapshotState returns the last rendered snapshot and its
+// fetch time without triggering a new fetch. Prefers e.result so
+// stale/error faces produced on the last fetch are preserved across
+// minute redraws; falls back to e.snapshot when no fetch has run.
+func PeekSnapshotState(providerID string) (*Snapshot, time.Time) {
+	cacheMu.Lock()
+	e, ok := entries[providerID]
+	cacheMu.Unlock()
+	if !ok {
+		return nil, time.Time{}
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.result != nil {
+		return e.result, e.fetchedAt
+	}
+	return e.snapshot, e.fetchedAt
+}
+
 // ClearCache removes cached data for a provider (or all if id is "").
 func ClearCache(providerID string) {
 	cacheMu.Lock()

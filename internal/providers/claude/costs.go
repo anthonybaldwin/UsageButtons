@@ -26,12 +26,13 @@ const costCacheTTL = 5 * time.Minute
 // Per-million-token pricing (USD). Matches Anthropic's published API rates.
 // Cache creation is 1.25x input; cache reads are 0.1x input.
 var modelPricing = map[string]struct{ input, output float64 }{
-	"claude-opus-4-6":              {15.0, 75.0},
-	"claude-opus-4-5-20250414":     {15.0, 75.0},
+	"claude-opus-4-7":              {5.0, 25.0},
+	"claude-opus-4-6":              {5.0, 25.0},
+	"claude-opus-4-5-20250414":     {5.0, 25.0},
 	"claude-sonnet-4-6":            {3.0, 15.0},
 	"claude-sonnet-4-5-20250514":   {3.0, 15.0},
 	"claude-sonnet-4-0-20250514":   {3.0, 15.0},
-	"claude-haiku-4-5-20251001":    {0.80, 4.0},
+	"claude-haiku-4-5-20251001":    {1.0, 5.0},
 	"claude-3-5-sonnet-20241022":   {3.0, 15.0},
 	"claude-3-5-haiku-20241022":    {0.80, 4.0},
 }

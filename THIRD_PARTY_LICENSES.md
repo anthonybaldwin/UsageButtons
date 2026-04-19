@@ -39,3 +39,15 @@ notice be included in all copies or substantial portions of the
 Software. The Software is provided "AS IS", without warranty of any
 kind.
 
+## lobehub/lobe-icons — MIT
+
+<https://github.com/lobehub/lobe-icons>
+
+The `"codex"` entry in `internal/icons/icons.go` embeds the `d`
+attribute of the Codex monochrome glyph from lobe-icons, distributed
+under the MIT license. The path data is unmodified from upstream;
+only the surrounding Go map structure is ours.
+
+Authoritative license text:
+<https://github.com/lobehub/lobe-icons/blob/master/LICENSE>
+

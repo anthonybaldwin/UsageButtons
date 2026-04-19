@@ -119,7 +119,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Enter a GitHub token in plugin settings, or run `gh auth login`, or set GITHUB_TOKEN.",
+			Error:        "Enter a GitHub token in plugin settings, set GITHUB_TOKEN, or provide ~/.config/github-copilot/hosts.json or apps.json.",
 		}, nil
 	}
 
@@ -142,7 +142,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 				Source:       "token",
 				Metrics:      []providers.MetricValue{},
 				Status:       "unknown",
-				Error:        "GitHub token unauthorized for Copilot. Run `gh auth login`.",
+				Error:        "GitHub token unauthorized for Copilot. Update the token in plugin settings, GITHUB_TOKEN, or the github-copilot config files.",
 			}, nil
 		}
 		return providers.Snapshot{}, err

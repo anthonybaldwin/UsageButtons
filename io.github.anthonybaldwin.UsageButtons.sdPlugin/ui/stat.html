@@ -169,8 +169,9 @@
         <p class="hint">
           Stored in plugin settings. Falls back to <code>GITHUB_TOKEN</code>,
           then <code>~/.config/github-copilot/hosts.json</code> /
-          <code>apps.json</code> (written by <code>gh auth login</code>).
-          Leave blank if <code>gh</code> is signed in.
+          <code>apps.json</code> when those files contain a GitHub token.
+          Leave blank if you already provide one through an environment
+          variable or the Copilot config files.
         </p>
       </div>
 

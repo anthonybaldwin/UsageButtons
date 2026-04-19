@@ -31,12 +31,15 @@ const (
 // LogSink is called for cache observability. Set by the plugin at init.
 var LogSink func(msg string)
 
+// cacheLog emits a formatted log line via LogSink when one is configured.
 func cacheLog(format string, args ...any) {
 	if LogSink != nil {
 		LogSink(fmt.Sprintf(format, args...))
 	}
 }
 
+// cacheError records the last upstream failure for a provider and the
+// earliest time at which fresh fetches should be attempted again.
 type cacheError struct {
 	message string
 	at      time.Time
@@ -74,6 +77,8 @@ func (e *cacheError) cooldownUntil() time.Time {
 	return e.at.Add(CooldownDuration)
 }
 
+// cacheEntry is the per-provider cache slot tracking the last snapshot,
+// the last error, and the in-flight fetch promise used for coalescing.
 type cacheEntry struct {
 	snapshot  *Snapshot
 	fetchedAt time.Time
@@ -88,10 +93,13 @@ type cacheEntry struct {
 }
 
 var (
+	// cacheMu guards entries against concurrent map access.
 	cacheMu sync.Mutex
+	// entries is the provider-ID-keyed cache map.
 	entries = map[string]*cacheEntry{}
 )
 
+// getEntry returns (and lazily allocates) the cache entry for providerID.
 func getEntry(providerID string) *cacheEntry {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
@@ -287,6 +295,8 @@ func ClearCache(providerID string) {
 	}
 }
 
+// markStale returns a deep-enough copy of s with every metric marked
+// stale and the given error message attached.
 func markStale(s Snapshot, errMsg string) Snapshot {
 	out := s
 	out.Error = errMsg
@@ -299,6 +309,8 @@ func markStale(s Snapshot, errMsg string) Snapshot {
 	return out
 }
 
+// errorSnapshot builds a placeholder Snapshot for a provider that has no
+// prior successful fetch to fall back on.
 func errorSnapshot(p Provider, errMsg string) Snapshot {
 	return Snapshot{
 		ProviderID:   p.ID(),
@@ -328,6 +340,7 @@ func preserveMissing(prev, next Snapshot) Snapshot {
 	return next
 }
 
+// metricIDs returns a comma-joined list of the metric IDs in s for logging.
 func metricIDs(s Snapshot) string {
 	if len(s.Metrics) == 0 {
 		return "(none)"
@@ -343,6 +356,8 @@ func metricIDs(s Snapshot) string {
 	return result
 }
 
+// boolStr picks t when cond is true and f otherwise; a tiny helper used
+// by log formatting.
 func boolStr(cond bool, t, f string) string {
 	if cond {
 		return t

@@ -1,3 +1,6 @@
+// Package icons holds the SVG glyph data used to render provider logos on
+// button faces. Entries are ported from CodexBar's
+// src/providers/provider-icons.generated.ts.
 package icons
 
 import "github.com/anthonybaldwin/UsageButtons/internal/render"

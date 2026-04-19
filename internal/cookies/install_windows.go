@@ -28,6 +28,8 @@ var windowsBrowserKeys = []struct {
 	{"Firefox", `Software\Mozilla\NativeMessagingHosts`},
 }
 
+// manifestFilePath returns the on-disk location of the host manifest file
+// for the given host name under %LOCALAPPDATA%\UsageButtons\.
 func manifestFilePath(hostName string) (string, error) {
 	base := os.Getenv("LOCALAPPDATA")
 	if base == "" {

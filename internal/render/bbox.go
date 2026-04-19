@@ -21,6 +21,7 @@ func (b BBox) Width() float64 { return b.MaxX - b.MinX }
 // Height returns the bounding box height.
 func (b BBox) Height() float64 { return b.MaxY - b.MinY }
 
+// tokenRe splits an SVG path d attribute into command letters and numbers.
 var tokenRe = regexp.MustCompile(`[a-zA-Z]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?`)
 
 // PathBBox computes the approximate bounding box of an SVG path's d
@@ -162,6 +163,8 @@ func ContentFitTransform(d string, tx, ty, tw, th float64) string {
 	return fmt.Sprintf("translate(%g,%g) scale(%g)", ox, oy, scale)
 }
 
+// isLetter reports whether b is a Unicode letter (used to detect SVG path
+// commands like M/L/C).
 func isLetter(b byte) bool {
 	return unicode.IsLetter(rune(b))
 }

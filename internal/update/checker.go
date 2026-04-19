@@ -15,21 +15,27 @@ import (
 )
 
 const (
-	repo          = "anthonybaldwin/UsageButtons"
+	// repo is the owner/name slug of the GitHub repository polled for releases.
+	repo = "anthonybaldwin/UsageButtons"
+	// checkInterval is the minimum time between release polls.
 	checkInterval = 6 * time.Hour
-	websiteURL    = "https://anthonybaldwin.github.io/UsageButtons/"
-	repoURL       = "https://github.com/" + repo
+	// websiteURL is the landing page shown to users on release builds.
+	websiteURL = "https://anthonybaldwin.github.io/UsageButtons/"
+	// repoURL is the GitHub repository page shown to users on dev builds.
+	repoURL = "https://github.com/" + repo
 )
 
 // LogSink is wired by the plugin for observability.
 var LogSink func(string)
 
+// logf emits a tagged log line via LogSink when one is configured.
 func logf(format string, args ...any) {
 	if LogSink != nil {
 		LogSink(fmt.Sprintf("[update-checker] "+format, args...))
 	}
 }
 
+// state captures the last-known update status guarded by mu.
 type state struct {
 	current         string
 	latest          string
@@ -38,7 +44,9 @@ type state struct {
 }
 
 var (
+	// mu guards st against concurrent reads and writes.
 	mu sync.Mutex
+	// st is the package-wide update state seeded with the current version.
 	st = state{current: readCurrentVersion()}
 )
 
@@ -62,6 +70,8 @@ func readCurrentVersion() string {
 	return "0.0.0"
 }
 
+// readVersionFrom reads the Version field from a Stream Deck manifest.json
+// at path, returning only its first three dotted components.
 func readVersionFrom(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -80,6 +90,7 @@ func readVersionFrom(path string) string {
 	return m.Version
 }
 
+// compareSemver returns 1 if b is newer than a, -1 if older, 0 if equal.
 func compareSemver(a, b string) int {
 	pa := parseSemver(a)
 	pb := parseSemver(b)
@@ -94,6 +105,8 @@ func compareSemver(a, b string) int {
 	return 0
 }
 
+// parseSemver parses the first three dotted integer components of s; missing
+// or non-numeric components default to 0.
 func parseSemver(s string) [3]int {
 	parts := strings.SplitN(s, ".", 4)
 	var v [3]int
@@ -103,10 +116,13 @@ func parseSemver(s string) [3]int {
 	return v
 }
 
+// ghRelease is the subset of the GitHub release API payload we consume.
 type ghRelease struct {
 	TagName string `json:"tag_name"`
 }
 
+// fetchLatestVersion returns the latest release tag (without a leading v)
+// or "" on failure.
 func fetchLatestVersion() string {
 	var rel ghRelease
 	err := httputil.GetJSON(

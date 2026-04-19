@@ -8,14 +8,24 @@ import (
 // MockProvider generates deterministic sine-wave data for development.
 type MockProvider struct{}
 
-func (MockProvider) ID() string         { return "mock" }
-func (MockProvider) Name() string       { return "Mock" }
+// ID returns the provider identifier used by the registry.
+func (MockProvider) ID() string { return "mock" }
+
+// Name returns the human-readable provider name.
+func (MockProvider) Name() string { return "Mock" }
+
+// BrandColor returns the accent color used on button faces.
 func (MockProvider) BrandColor() string { return "#3b82f6" }
-func (MockProvider) BrandBg() string    { return "#111827" }
+
+// BrandBg returns the background color used on button faces.
+func (MockProvider) BrandBg() string { return "#111827" }
+
+// MetricIDs enumerates the metrics this provider emits.
 func (MockProvider) MetricIDs() []string {
 	return []string{"session-percent", "weekly-percent", "credits"}
 }
 
+// Fetch returns a synthetic Snapshot driven by time-based sine waves.
 func (MockProvider) Fetch(_ FetchContext) (Snapshot, error) {
 	t := float64(time.Now().UnixMilli()) / 1000.0
 
@@ -72,6 +82,7 @@ func (MockProvider) Fetch(_ FetchContext) (Snapshot, error) {
 	}, nil
 }
 
+// init registers MockProvider with the package-wide registry on import.
 func init() {
 	Register(MockProvider{})
 }

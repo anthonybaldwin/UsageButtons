@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// Canvas is the edge length (in SVG user units) of a Stream Deck button face.
 const Canvas = 144
 
 // ProviderGlyph holds an SVG path for a provider logo.
@@ -35,8 +36,10 @@ type ButtonInput struct {
 	ShowGlyph    *bool  // nil = true
 }
 
-// Font size tables matching the TS renderer exactly.
+// valueFontSizes maps a ButtonInput.ValueSize to a starting pixel size.
 var valueFontSizes = map[string]int{"small": 26, "medium": 34, "large": 40}
+
+// subvalueFontSizes maps a ButtonInput.SubvalueSize to a starting pixel size.
 var subvalueFontSizes = map[string]int{"small": 14, "medium": 18, "large": 22}
 
 const (
@@ -47,8 +50,8 @@ const (
 	subvalueMin   = 10
 )
 
-// fitFontSize picks a font size that fits text within maxWidth,
-// starting from preferredSize and shrinking to minSize if needed.
+// fitFontSize picks the largest font size at or below preferredSize that
+// keeps text within maxWidth, clamped to minSize as a floor.
 func fitFontSize(text string, maxWidth float64, preferredSize, minSize int) int {
 	if text == "" {
 		return preferredSize
@@ -338,10 +341,13 @@ func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, sho
 
 // --- Helpers ---
 
+// fillRectResult is the geometry of the ratio-filled rectangle drawn behind
+// the button content.
 type fillRectResult struct {
 	X, Y, W, H float64
 }
 
+// fillRect computes the fill rectangle for the given direction and ratio.
 func fillRect(direction string, ratio float64) fillRectResult {
 	c := float64(Canvas)
 	switch direction {
@@ -360,6 +366,7 @@ func fillRect(direction string, ratio float64) fillRectResult {
 	}
 }
 
+// def returns val if non-empty, otherwise fallback.
 func def(val, fallback string) string {
 	if val == "" {
 		return fallback
@@ -367,6 +374,7 @@ func def(val, fallback string) string {
 	return val
 }
 
+// hexColorRe matches a #RGB / #RGBA / #RRGGBB / #RRGGBBAA hex color literal.
 var hexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{3,8}$`)
 
 // IsValidHexColor checks if a string is a valid hex color.
@@ -374,6 +382,8 @@ func IsValidHexColor(s string) bool {
 	return hexColorRe.MatchString(s)
 }
 
+// hexLuminance returns the perceived luminance (0..1) of a hex color using
+// the Rec. 709 weighted RGB formula.
 func hexLuminance(hex string) float64 {
 	hex = strings.TrimPrefix(hex, "#")
 	if len(hex) < 6 {
@@ -400,6 +410,8 @@ func LightenHex(hex string, amount float64) string {
 	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
 }
 
+// xmlEscape escapes characters in s that are unsafe inside SVG text nodes
+// or attribute values.
 func xmlEscape(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
 	s = strings.ReplaceAll(s, "<", "&lt;")

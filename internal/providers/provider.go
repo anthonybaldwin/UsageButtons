@@ -67,6 +67,7 @@ type Provider interface {
 
 // --- Registry ---
 
+// registry holds the process-wide set of providers keyed by ID().
 var registry = map[string]Provider{}
 
 // Register adds a provider to the global registry.

@@ -27,6 +27,8 @@ import (
 // path.
 var ipcPortPath = defaultIPCPortPath
 
+// defaultIPCPortPath returns the platform-appropriate sidecar port file
+// location, or "" on platforms that don't support the IPC path.
 func defaultIPCPortPath() string {
 	switch runtime.GOOS {
 	case "windows":
@@ -101,6 +103,7 @@ type portFileListener struct {
 	portPath string
 }
 
+// Close closes the wrapped listener and removes the sidecar port file.
 func (l *portFileListener) Close() error {
 	err := l.Listener.Close()
 	if l.portPath != "" {
@@ -109,12 +112,16 @@ func (l *portFileListener) Close() error {
 	return err
 }
 
+// requestID is an atomic counter used to mint unique plugin-side
+// message IDs for the native-messaging correlation layer.
 var requestID atomic.Uint64
 
+// nextRequestID returns a process-unique request correlation string.
 func nextRequestID() string {
 	return fmt.Sprintf("plug-%d", requestID.Add(1))
 }
 
+// dialIPC opens a short-lived TCP loopback connection to the native host.
 func dialIPC(ctx context.Context) (net.Conn, error) {
 	addr := IPCAddress()
 	if addr == "" {
@@ -156,6 +163,8 @@ func roundtrip(ctx context.Context, req Message, timeout time.Duration) (Message
 	return DecodeMessage(raw)
 }
 
+// clientFetch issues a "fetch" message over the IPC socket and decodes
+// the extension's reply into a Response.
 func clientFetch(ctx context.Context, r Request) (Response, error) {
 	method := r.Method
 	if method == "" {
@@ -204,11 +213,15 @@ func clientFetch(ctx context.Context, r Request) (Response, error) {
 	}, nil
 }
 
+// clientStatus returns the current StatusInfo, discarding reachability
+// details. Used as probeStatus in this package.
 func clientStatus(ctx context.Context) StatusInfo {
 	info, _, _ := clientStatusDetail(ctx)
 	return info
 }
 
+// clientStatusDetail probes the host and returns StatusInfo plus whether
+// the socket was reachable and any underlying error.
 func clientStatusDetail(ctx context.Context) (StatusInfo, bool, error) {
 	resp, err := roundtrip(ctx, Message{ID: nextRequestID(), Kind: "status"}, 750*time.Millisecond)
 	if err != nil {
@@ -222,6 +235,8 @@ func clientStatusDetail(ctx context.Context) (StatusInfo, bool, error) {
 	return StatusInfo{Ready: resp.Ready, UserAgent: resp.UserAgent, Version: resp.Version}, true, nil
 }
 
+// init wires the package-level transport closures to the TCP-loopback
+// implementations once ipc.go is linked in.
 func init() {
 	dispatchFetch = clientFetch
 	probeStatus = clientStatus

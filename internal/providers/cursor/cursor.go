@@ -19,13 +19,17 @@ import (
 )
 
 const (
+	// usageSummaryURL is the primary Cursor usage-summary endpoint.
 	usageSummaryURL = "https://cursor.com/api/usage-summary"
-	authMeURL       = "https://cursor.com/api/auth/me"
-	legacyUsageURL  = "https://cursor.com/api/usage"
+	// authMeURL identifies the signed-in user for legacy-plan lookups.
+	authMeURL = "https://cursor.com/api/auth/me"
+	// legacyUsageURL returns request-based usage for grandfathered plans.
+	legacyUsageURL = "https://cursor.com/api/usage"
 )
 
 // --- API response types ---
 
+// planUsage captures the plan-level usage block of a usage-summary response.
 type planUsage struct {
 	Enabled          *bool    `json:"enabled"`
 	Used             *float64 `json:"used"`     // cents
@@ -36,19 +40,23 @@ type planUsage struct {
 	APIPercentUsed   *float64 `json:"apiPercentUsed"`
 }
 
+// authMeResponse carries the subscriber ID required for the legacy endpoint.
 type authMeResponse struct {
 	Sub *string `json:"sub"`
 }
 
+// legacyModelUsage is one model's quota in the legacy usage response.
 type legacyModelUsage struct {
 	NumRequests     *int `json:"numRequests"`
 	MaxRequestUsage *int `json:"maxRequestUsage"`
 }
 
+// legacyUsageResponse is the wrapper returned by /api/usage.
 type legacyUsageResponse struct {
 	GPT4 *legacyModelUsage `json:"gpt-4"`
 }
 
+// onDemandUsage tracks overage spend for on-demand models.
 type onDemandUsage struct {
 	Enabled   *bool    `json:"enabled"`
 	Used      *float64 `json:"used"`      // cents
@@ -56,6 +64,7 @@ type onDemandUsage struct {
 	Remaining *float64 `json:"remaining"` // cents
 }
 
+// usageSummaryResponse is the top-level shape of /api/usage-summary.
 type usageSummaryResponse struct {
 	BillingCycleStart *string `json:"billingCycleStart"`
 	BillingCycleEnd   *string `json:"billingCycleEnd"`
@@ -66,6 +75,8 @@ type usageSummaryResponse struct {
 	} `json:"individualUsage"`
 }
 
+// resetFromCycleEnd parses a billing-cycle-end string into a delta in
+// seconds from now, or returns nil when the input can't be parsed.
 func resetFromCycleEnd(cycleEnd *string) *float64 {
 	if cycleEnd == nil || *cycleEnd == "" {
 		return nil
@@ -93,14 +104,24 @@ func resetFromCycleEnd(cycleEnd *string) *float64 {
 // Provider fetches Cursor usage data.
 type Provider struct{}
 
-func (Provider) ID() string         { return "cursor" }
-func (Provider) Name() string       { return "Cursor" }
+// ID returns the provider identifier used by the registry.
+func (Provider) ID() string { return "cursor" }
+
+// Name returns the human-readable provider name.
+func (Provider) Name() string { return "Cursor" }
+
+// BrandColor returns the accent color used on button faces.
 func (Provider) BrandColor() string { return "#F54E00" }
-func (Provider) BrandBg() string    { return "#1a0e06" }
+
+// BrandBg returns the background color used on button faces.
+func (Provider) BrandBg() string { return "#1a0e06" }
+
+// MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
 	return []string{"total-percent", "auto-percent", "api-percent", "ondemand-spent"}
 }
 
+// Fetch returns the latest Cursor usage snapshot.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -326,6 +347,7 @@ func fetchLegacyUsage(ctx context.Context) *legacyModelUsage {
 	return usage.GPT4
 }
 
+// upperFirst returns s with the first ASCII letter upper-cased.
 func upperFirst(s string) string {
 	if len(s) == 0 {
 		return s
@@ -337,6 +359,7 @@ func upperFirst(s string) string {
 	return string(r)
 }
 
+// init registers the Cursor provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

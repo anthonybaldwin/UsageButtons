@@ -19,14 +19,19 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/providers/cookieaux"
 )
 
+// settingsURL is the HTML settings page scraped for cloud usage.
 const settingsURL = "https://ollama.com/settings"
 
 // Regex patterns ported from CodexBar's OllamaUsageFetcher.
 var (
-	planRe       = regexp.MustCompile(`(?i)Cloud Usage\s*</span>\s*<span[^>]*>([^<]+)</span>`)
-	percentRe    = regexp.MustCompile(`(?i)([0-9]+(?:\.[0-9]+)?)\s*%\s*used`)
+	// planRe extracts the cloud plan label from the settings HTML.
+	planRe = regexp.MustCompile(`(?i)Cloud Usage\s*</span>\s*<span[^>]*>([^<]+)</span>`)
+	// percentRe extracts an "N% used" token from a window of HTML.
+	percentRe = regexp.MustCompile(`(?i)([0-9]+(?:\.[0-9]+)?)\s*%\s*used`)
+	// percentCSSRe extracts a percentage from an inline width style.
 	percentCSSRe = regexp.MustCompile(`(?i)width:\s*([0-9]+(?:\.[0-9]+)?)%`)
-	resetTimeRe  = regexp.MustCompile(`data-time="([^"]+)"`)
+	// resetTimeRe extracts the RFC3339 reset timestamp from a data-time attr.
+	resetTimeRe = regexp.MustCompile(`data-time="([^"]+)"`)
 )
 
 // --- Provider implementation ---
@@ -34,14 +39,25 @@ var (
 // Provider fetches Ollama cloud usage data.
 type Provider struct{}
 
-func (Provider) ID() string         { return "ollama" }
-func (Provider) Name() string       { return "Ollama" }
+// ID returns the provider identifier used by the registry.
+func (Provider) ID() string { return "ollama" }
+
+// Name returns the human-readable provider name.
+func (Provider) Name() string { return "Ollama" }
+
+// BrandColor returns the accent color used on button faces.
 func (Provider) BrandColor() string { return "#f7f7f7" }
-func (Provider) BrandBg() string    { return "#141414" }
+
+// BrandBg returns the background color used on button faces.
+func (Provider) BrandBg() string { return "#141414" }
+
+// MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
 	return []string{"session-percent", "session-pace", "weekly-percent", "weekly-pace"}
 }
 
+// Fetch returns the latest Ollama cloud usage snapshot by scraping
+// the settings HTML.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -264,6 +280,7 @@ func isSignedOut(html string) bool {
 	return false
 }
 
+// init registers the Ollama provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

@@ -22,10 +22,12 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
+// usageURL is the internal GitHub endpoint we poll for Copilot quotas.
 const usageURL = "https://api.github.com/copilot_internal/user"
 
 // --- API response types ---
 
+// quotaSnapshot captures one lane's entitlement and remaining allowance.
 type quotaSnapshot struct {
 	Entitlement      *int     `json:"entitlement"`
 	Remaining        *int     `json:"remaining"`
@@ -33,6 +35,7 @@ type quotaSnapshot struct {
 	QuotaID          string   `json:"quota_id"`
 }
 
+// copilotUsageResponse is the top-level shape returned by the Copilot API.
 type copilotUsageResponse struct {
 	CopilotPlan    *string `json:"copilot_plan"`
 	QuotaResetDate *string `json:"quota_reset_date"`
@@ -44,16 +47,20 @@ type copilotUsageResponse struct {
 
 // --- Credential loading ---
 
+// copilotHostsPath returns the path to github-copilot/hosts.json.
 func copilotHostsPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "github-copilot", "hosts.json")
 }
 
+// copilotAppsPath returns the path to github-copilot/apps.json.
 func copilotAppsPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "github-copilot", "apps.json")
 }
 
+// loadGitHubToken resolves a usable GitHub token, preferring the user
+// setting, then GITHUB_TOKEN, then the Copilot CLI config files.
 func loadGitHubToken() string {
 	// Settings first, then env var
 	if t := settings.ResolveAPIKey(
@@ -102,14 +109,24 @@ func loadGitHubToken() string {
 // Provider fetches Copilot usage data.
 type Provider struct{}
 
-func (Provider) ID() string         { return "copilot" }
-func (Provider) Name() string       { return "Copilot" }
+// ID returns the provider identifier used by the registry.
+func (Provider) ID() string { return "copilot" }
+
+// Name returns the human-readable provider name.
+func (Provider) Name() string { return "Copilot" }
+
+// BrandColor returns the accent color used on button faces.
 func (Provider) BrandColor() string { return "#8534F3" }
-func (Provider) BrandBg() string    { return "#150d2e" }
+
+// BrandBg returns the background color used on button faces.
+func (Provider) BrandBg() string { return "#150d2e" }
+
+// MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
 	return []string{"premium-percent", "chat-percent"}
 }
 
+// Fetch returns the latest Copilot quota snapshot.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	token := loadGitHubToken()
 	if token == "" {
@@ -179,6 +196,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	}, nil
 }
 
+// quotaMetric turns a quotaSnapshot into a "remaining %" MetricValue.
 func quotaMetric(id, label, name string, q *quotaSnapshot, now string) *providers.MetricValue {
 	if q == nil || q.PercentRemaining == nil {
 		return nil
@@ -208,6 +226,7 @@ func quotaMetric(id, label, name string, q *quotaSnapshot, now string) *provider
 	return &m
 }
 
+// init registers the Copilot provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

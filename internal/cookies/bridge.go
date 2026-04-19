@@ -92,6 +92,8 @@ func (b *Bridge) StartKeepalive(ctx context.Context, interval time.Duration) {
 	}
 }
 
+// deliverInflight routes a reply message to the plugin connection that
+// is waiting on it, keyed by request ID. Silently drops unknown IDs.
 func (b *Bridge) deliverInflight(m Message) {
 	b.mu.Lock()
 	ch, ok := b.inflight[m.ID]
@@ -139,6 +141,8 @@ func (b *Bridge) HandlePluginConn(ctx context.Context, conn net.Conn) {
 	}
 }
 
+// relayFetch forwards a plugin fetch request to the extension and writes
+// the extension's reply (or a timeout/error) back on conn.
 func (b *Bridge) relayFetch(ctx context.Context, conn net.Conn, req Message) {
 	b.mu.Lock()
 	if !b.ready || b.toExt == nil {
@@ -183,6 +187,7 @@ func (b *Bridge) relayFetch(ctx context.Context, conn net.Conn, req Message) {
 	}
 }
 
+// writeMsg encodes and writes m as a single native-messaging frame on conn.
 func writeMsg(conn net.Conn, m Message) error {
 	payload, err := EncodeMessage(m)
 	if err != nil {

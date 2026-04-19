@@ -25,6 +25,7 @@ var darwinBrowserDirs = []struct {
 	{"Firefox", "Mozilla"},
 }
 
+// appSupportDir returns the macOS ~/Library/Application Support path.
 func appSupportDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

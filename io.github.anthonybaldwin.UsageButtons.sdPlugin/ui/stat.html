@@ -139,70 +139,32 @@
     <label for="metric">What this button shows</label>
     <select id="metric"></select>
 
-    <!-- ================== Per-button customization ==================
-         Tiered settings (refresh, sizes, colors, border, glyph,
-         thresholds) are checkbox-gated and tucked behind a <details>
-         so the most common case (inheriting provider/plugin defaults)
-         stays clean. Expand to customize any field for this one
-         button. Each checkbox's grey hint shows the inherited value
-         so users know what they'd fall back to. -->
     <details id="buttonCustomize" style="margin-top: 18px;">
       <summary style="cursor: pointer; font-weight: 600; padding: 6px 0; opacity: 0.85; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;">
-        Customize this button's appearance
-        <span class="override-inherit" style="text-transform: none; letter-spacing: 0;">(currently inheriting provider / plugin defaults)</span>
+        Customize this button
       </summary>
 
     <div class="override-row" data-button-override="captionOverride">
       <label class="override-label">
         <input type="checkbox" id="bo-captionOverride-enabled">
-        Subtext override
-        <span class="override-inherit">replaces "Remaining" / "Used" / metric default</span>
+        Subtext
       </label>
       <div class="override-control">
         <input id="captionOverride" type="text" placeholder="e.g. Work, Monthly, Prepaid">
       </div>
     </div>
 
-    <div class="override-row" data-button-override="hideSubvalue">
-      <label class="override-label">
-        <input type="checkbox" id="bo-hideSubvalue-enabled">
-        Hide subtext
-        <span class="override-inherit" id="bo-hideSubvalue-inherit"></span>
-      </label>
-      <div class="override-control">
-        <div class="checkbox-row">
-          <input id="hideSubvalue" type="checkbox">
-          <label for="hideSubvalue">Hide subtext on this button</label>
-        </div>
-      </div>
+    <div class="checkbox-row" data-button-inverse="hideSubvalue">
+      <input type="checkbox" id="bo-inv-hideSubvalue">
+      <label for="bo-inv-hideSubvalue">Hide subtext on this button</label>
     </div>
-
-    <div class="override-row feature-timer" data-button-override="showResetTimer">
-      <label class="override-label">
-        <input type="checkbox" id="bo-showResetTimer-enabled">
-        Show reset countdown
-        <span class="override-inherit" id="bo-showResetTimer-inherit"></span>
-      </label>
-      <div class="override-control">
-        <div class="checkbox-row">
-          <input id="showResetTimer" type="checkbox" checked>
-          <label for="showResetTimer">Show countdown under the number</label>
-        </div>
-      </div>
+    <div class="checkbox-row feature-timer" data-button-inverse="showResetTimer">
+      <input type="checkbox" id="bo-inv-showResetTimer">
+      <label for="bo-inv-showResetTimer">Hide reset countdown on this button</label>
     </div>
-
-    <div class="override-row feature-rawCounts" data-button-override="showRawCounts">
-      <label class="override-label">
-        <input type="checkbox" id="bo-showRawCounts-enabled">
-        Show raw counts
-        <span class="override-inherit" id="bo-showRawCounts-inherit"></span>
-      </label>
-      <div class="override-control">
-        <div class="checkbox-row">
-          <input id="showRawCounts" type="checkbox">
-          <label for="showRawCounts">Show raw counts (e.g. 42/56)</label>
-        </div>
-      </div>
+    <div class="checkbox-row feature-rawCounts" data-button-inverse="showRawCounts">
+      <input type="checkbox" id="bo-inv-showRawCounts">
+      <label for="bo-inv-showRawCounts">Show raw counts on this button</label>
     </div>
 
     <div class="override-row" data-button-override="refreshMinutes">
@@ -301,32 +263,13 @@
       </div>
     </div>
 
-    <div class="override-row" data-button-override="showBorder">
-      <label class="override-label">
-        <input type="checkbox" id="bo-showBorder-enabled">
-        Draw border around tile
-        <span class="override-inherit" id="bo-showBorder-inherit"></span>
-      </label>
-      <div class="override-control">
-        <div class="checkbox-row">
-          <input id="showBorder" type="checkbox" checked>
-          <label for="showBorder">Show border</label>
-        </div>
-      </div>
+    <div class="checkbox-row" data-button-inverse="showBorder">
+      <input type="checkbox" id="bo-inv-showBorder">
+      <label for="bo-inv-showBorder">Hide border on this button</label>
     </div>
-
-    <div class="override-row" data-button-override="showGlyph">
-      <label class="override-label">
-        <input type="checkbox" id="bo-showGlyph-enabled">
-        Show provider logo
-        <span class="override-inherit" id="bo-showGlyph-inherit"></span>
-      </label>
-      <div class="override-control">
-        <div class="checkbox-row">
-          <input id="showGlyph" type="checkbox" checked>
-          <label for="showGlyph">Show logo on this button</label>
-        </div>
-      </div>
+    <div class="checkbox-row" data-button-inverse="showGlyph">
+      <input type="checkbox" id="bo-inv-showGlyph">
+      <label for="bo-inv-showGlyph">Hide provider logo on this button</label>
     </div>
 
     <div class="feature-thresholds">
@@ -357,16 +300,8 @@
           </div>
         </div>
       </div>
-      <p class="hint" style="margin-top: 6px;">
-        Units are raw dollars. Defaults are per-metric-type — $10 warn
-        / $0 critical for balances, 80% / 100% of cap for spend meters.
-      </p>
     </div>
     </details>
-
-    <p class="hint" style="margin-top: 14px;">
-      Click the key on your Stream Deck to force an immediate refresh.
-    </p>
   </div>
 
   <!-- ================== Provider tab (per-provider auth) =================== -->
@@ -374,68 +309,32 @@
 
     <!-- Claude auth -->
     <div id="authConfig-claude" class="auth-config" style="display:none">
-      <p class="hint">
-        <strong>Session / Weekly / Sonnet / Opus</strong> metrics come
-        from <code>~/.claude/.credentials.json</code> via
-        <code>api.anthropic.com</code>. <strong>Extras</strong>
-        (balance, overage) come from <code>claude.ai</code> via the
-        <strong>Usage Buttons Helper</strong> extension. Each metric
-        uses the source that can actually supply it — no toggle
-        needed.
-      </p>
+      <p class="hint"><code>~/.claude/.credentials.json</code> + extension for extras.</p>
     </div>
 
     <!-- Cursor auth -->
     <div id="authConfig-cursor" class="auth-config" style="display:none">
-      <p class="hint">
-        Cursor usage comes from your cursor.com session via the
-        <strong>Usage Buttons Helper</strong> extension. Install it from
-        the <em>Plugin settings</em> tab → <em>Browser extension</em>.
-      </p>
+      <p class="hint">Via extension.</p>
     </div>
 
     <!-- Ollama auth -->
     <div id="authConfig-ollama" class="auth-config" style="display:none">
-      <p class="hint">
-        Ollama cloud usage comes from your ollama.com session via the
-        <strong>Usage Buttons Helper</strong> extension. Install it from
-        the <em>Plugin settings</em> tab → <em>Browser extension</em>.
-      </p>
+      <p class="hint">Via extension.</p>
     </div>
 
     <!-- Copilot auth -->
     <div id="authConfig-copilot" class="auth-config" style="display:none">
-      <label for="copilotToken">GitHub token (optional)</label>
+      <label for="copilotToken">GitHub token</label>
       <div class="key-row">
         <input id="copilotToken" type="password" autocomplete="off" placeholder="ghp_… / gho_…" data-provider-key="copilotToken">
         <button type="button" class="reveal-btn" data-reveal-target="copilotToken">Show</button>
       </div>
-      <p class="hint">
-        Shared across all Copilot buttons. Falls back to
-        <code>GITHUB_TOKEN</code>, then
-        <code>~/.config/github-copilot/hosts.json</code> /
-        <code>apps.json</code> when those files contain a GitHub token.
-        Leave blank if you already provide one through an environment
-        variable or the Copilot config files.
-      </p>
+      <p class="hint">Fallback: <code>GITHUB_TOKEN</code>, <code>~/.config/github-copilot/</code>.</p>
     </div>
 
     <!-- Codex auth -->
     <div id="authConfig-codex" class="auth-config" style="display:none">
-      <p class="hint">
-        <strong>Preferred:</strong> usage comes from
-        <code>chatgpt.com</code> via your logged-in browser session
-        when the <strong>Usage Buttons Helper</strong> extension is
-        connected — keeps your OAuth token out of the plugin entirely.
-        <strong>Fallback:</strong> the plugin reads the OAuth token
-        from <code>~/.codex/auth.json</code> (written by
-        <code>codex auth login</code>) and calls
-        <code>chatgpt.com</code> directly. No manual configuration
-        either way. Cost-today / cost-30d metrics are estimated
-        locally from <code>~/.codex/sessions/**/*.jsonl</code>.
-        Self-hosted Codex (<code>chatgpt_base_url</code> override)
-        always uses the OAuth path.
-      </p>
+      <p class="hint">Extension when connected, else OAuth from <code>~/.codex/auth.json</code>.</p>
     </div>
 
     <!-- OpenRouter auth -->
@@ -445,15 +344,9 @@
         <input id="openrouterKey" type="password" autocomplete="off" placeholder="sk-or-…" data-provider-key="openRouterKey">
         <button type="button" class="reveal-btn" data-reveal-target="openrouterKey">Show</button>
       </div>
-      <label for="openrouterURL">API base URL (optional)</label>
+      <label for="openrouterURL">API base URL</label>
       <input id="openrouterURL" type="text" placeholder="https://openrouter.ai/api/v1" data-provider-key="openRouterURL">
-      <p class="hint">
-        Shared across all OpenRouter buttons. Key falls back to
-        <code>OPENROUTER_API_KEY</code>; base URL falls back to
-        <code>OPENROUTER_API_URL</code>, then the public endpoint.
-        Get your key at
-        <a href="https://openrouter.ai/settings/keys" style="color:#6467f2">openrouter.ai/settings/keys</a>.
-      </p>
+      <p class="hint">Fallback: <code>OPENROUTER_API_KEY</code>.</p>
     </div>
 
     <!-- Warp auth -->
@@ -463,11 +356,7 @@
         <input id="warpKey" type="password" autocomplete="off" placeholder="Settings → Platform → API Keys" data-provider-key="warpKey">
         <button type="button" class="reveal-btn" data-reveal-target="warpKey">Show</button>
       </div>
-      <p class="hint">
-        Shared across all Warp buttons. Falls back to
-        <code>WARP_API_KEY</code> or <code>WARP_TOKEN</code>. See
-        <a href="https://docs.warp.dev/reference/cli/api-keys" style="color:#938bb4">Warp docs</a>.
-      </p>
+      <p class="hint">Fallback: <code>WARP_API_KEY</code> / <code>WARP_TOKEN</code>.</p>
     </div>
 
     <!-- z.ai auth -->
@@ -482,15 +371,9 @@
         <option value="">Global (api.z.ai)</option>
         <option value="bigmodel-cn">BigModel CN (open.bigmodel.cn)</option>
       </select>
-      <label for="zaiHost">Host override (optional)</label>
+      <label for="zaiHost">Host override</label>
       <input id="zaiHost" type="text" placeholder="https://api.z.ai" data-provider-key="zaiHost">
-      <p class="hint">
-        Shared across all z.ai buttons. Key falls back to
-        <code>Z_AI_API_KEY</code> / <code>ZAI_API_TOKEN</code> /
-        <code>ZAI_API_KEY</code>; host falls back to
-        <code>Z_AI_API_HOST</code> then the region selection. Set
-        <code>Z_AI_QUOTA_URL</code> to override the full quota endpoint.
-      </p>
+      <p class="hint">Fallback: <code>Z_AI_API_KEY</code>.</p>
     </div>
 
     <!-- Kimi K2 auth -->
@@ -500,28 +383,12 @@
         <input id="kimik2Key" type="password" autocomplete="off" placeholder="sk-…" data-provider-key="kimiK2Key">
         <button type="button" class="reveal-btn" data-reveal-target="kimik2Key">Show</button>
       </div>
-      <p class="hint">
-        Shared across all Kimi K2 buttons. Falls back to
-        <code>KIMI_K2_API_KEY</code>, <code>KIMI_API_KEY</code>, or
-        <code>KIMI_KEY</code>.
-      </p>
+      <p class="hint">Fallback: <code>KIMI_K2_API_KEY</code>.</p>
     </div>
 
-    <!-- ================== Per-provider defaults ==================
-         Set defaults that apply to every button of this provider.
-         Unchecked = use the plugin / smart default (shown in grey).
-         Checking a row saves that value as the provider-wide default;
-         individual buttons can still customize from "This button". -->
     <div class="group-heading" style="margin-top: 24px;">
       Defaults for <span id="providerOverrideNameInline">this provider</span>'s buttons
     </div>
-    <p class="hint" style="margin: 0 0 4px">
-      Check a row to set a default for every
-      <span id="providerOverrideNameInline2">this provider</span>
-      button. Unchecked rows fall back to the plugin-wide default
-      (or a smart default where applicable). Any button can still
-      customize from the <em>This button</em> tab.
-    </p>
 
     <div class="override-row" data-provider-override="refreshMinutes">
       <label class="override-label">
@@ -619,74 +486,39 @@
       </div>
     </div>
 
-    <div class="override-row" data-provider-override="showBorder">
-      <label class="override-label">
-        <input type="checkbox" id="po-showBorder-enabled">
-        Draw border around tile
-        <span class="override-inherit" id="po-showBorder-inherit"></span>
+    <!-- Boolean tier overrides are single "inverse" checkboxes — ticking
+         saves the flip from the inherited value. Avoids the outer/inner
+         ambiguity of the override-row pattern where the label looked
+         like a state but was really an action toggle. -->
+    <div class="checkbox-row" data-provider-inverse="showBorder">
+      <input type="checkbox" id="po-inv-showBorder">
+      <label for="po-inv-showBorder">
+        Hide border on <span class="provider-name-inline">this provider</span>'s buttons
       </label>
-      <div class="override-control">
-        <div class="checkbox-row">
-          <input id="po-showBorder" type="checkbox" checked>
-          <label for="po-showBorder">Show border</label>
-        </div>
-      </div>
     </div>
-
-    <div class="override-row" data-provider-override="showGlyph">
-      <label class="override-label">
-        <input type="checkbox" id="po-showGlyph-enabled">
-        Show provider logo
-        <span class="override-inherit" id="po-showGlyph-inherit"></span>
+    <div class="checkbox-row" data-provider-inverse="showGlyph">
+      <input type="checkbox" id="po-inv-showGlyph">
+      <label for="po-inv-showGlyph">
+        Hide provider logo on <span class="provider-name-inline">this provider</span>'s buttons
       </label>
-      <div class="override-control">
-        <div class="checkbox-row">
-          <input id="po-showGlyph" type="checkbox" checked>
-          <label for="po-showGlyph">Show logo on every button</label>
-        </div>
-      </div>
     </div>
-
-    <div class="override-row" data-provider-override="showResetTimer">
-      <label class="override-label">
-        <input type="checkbox" id="po-showResetTimer-enabled">
-        Show reset countdown
-        <span class="override-inherit" id="po-showResetTimer-inherit"></span>
+    <div class="checkbox-row" data-provider-inverse="showResetTimer">
+      <input type="checkbox" id="po-inv-showResetTimer">
+      <label for="po-inv-showResetTimer">
+        Hide reset countdown on <span class="provider-name-inline">this provider</span>'s buttons
       </label>
-      <div class="override-control">
-        <div class="checkbox-row">
-          <input id="po-showResetTimer" type="checkbox" checked>
-          <label for="po-showResetTimer">Show countdown under the number</label>
-        </div>
-      </div>
     </div>
-
-    <div class="override-row" data-provider-override="showRawCounts">
-      <label class="override-label">
-        <input type="checkbox" id="po-showRawCounts-enabled">
-        Show raw counts
-        <span class="override-inherit" id="po-showRawCounts-inherit"></span>
+    <div class="checkbox-row" data-provider-inverse="showRawCounts">
+      <input type="checkbox" id="po-inv-showRawCounts">
+      <label for="po-inv-showRawCounts">
+        Show raw counts on <span class="provider-name-inline">this provider</span>'s buttons
       </label>
-      <div class="override-control">
-        <div class="checkbox-row">
-          <input id="po-showRawCounts" type="checkbox">
-          <label for="po-showRawCounts">Show raw counts (e.g. 42/56)</label>
-        </div>
-      </div>
     </div>
-
-    <div class="override-row" data-provider-override="hideSubvalue">
-      <label class="override-label">
-        <input type="checkbox" id="po-hideSubvalue-enabled">
-        Hide subtext
-        <span class="override-inherit" id="po-hideSubvalue-inherit"></span>
+    <div class="checkbox-row" data-provider-inverse="hideSubvalue">
+      <input type="checkbox" id="po-inv-hideSubvalue">
+      <label for="po-inv-hideSubvalue">
+        Hide subtext on <span class="provider-name-inline">this provider</span>'s buttons
       </label>
-      <div class="override-control">
-        <div class="checkbox-row">
-          <input id="po-hideSubvalue" type="checkbox">
-          <label for="po-hideSubvalue">Hide subtext on every button</label>
-        </div>
-      </div>
     </div>
 
     <div class="override-row" data-provider-override="warnBelow">
@@ -721,8 +553,17 @@
   <!-- ================== Plugin tab (shared) =================== -->
   <div id="pluginPanel" class="panel">
 
-    <div class="group-heading">Refresh</div>
+    <div class="group-heading">Browser extension</div>
+    <div id="cookieHostStatus" class="hint" style="padding: 6px 8px; border-radius: 4px; background: #1f2937; border: 1px solid #374151;">
+      <div>
+        <span id="cookieHostStatusDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; background:#6b7280;"></span>
+        <span id="cookieHostStatusText">Checking extension status…</span>
+      </div>
+      <div id="cookieHostVersionLine" style="margin-top: 4px; font-size: 11px; opacity: 0.85; display: none;"></div>
+    </div>
+    <p class="hint">Load unpacked from <code>chrome-extension/</code> in <code>chrome://extensions</code>.</p>
 
+    <div class="group-heading">Refresh</div>
     <label for="defaultRefresh">Default refresh interval</label>
     <select id="defaultRefresh">
       <option value="5">5 minutes</option>
@@ -731,50 +572,38 @@
       <option value="30">30 minutes</option>
       <option value="60">1 hour</option>
     </select>
-    <p class="hint">Each button can override this from the "This button" tab.</p>
 
     <div class="group-heading">Display</div>
     <div class="checkbox-row">
       <input id="invertFill" type="checkbox">
-      <label for="invertFill">Invert fill — show "% used" instead of "% remaining"</label>
+      <label for="invertFill">Show "% used" instead of "% remaining"</label>
     </div>
-    <p class="hint" style="margin: 4px 0 0;">
-      Plugin-wide only. CodexBar's menu bar shows "N% used" but the
-      plugin default is "N% remaining" (classic fuel-gauge style).
-      Flip this to match your mental model — half your buttons
-      reading one way and half the other is confusing.
-    </p>
-
-    <div class="checkbox-row" style="margin-top: 14px;">
+    <div class="checkbox-row">
       <input id="showGlyphs" type="checkbox" checked>
       <label for="showGlyphs">Show provider logo watermark</label>
     </div>
     <div class="checkbox-row">
       <input id="defaultShowBorder" type="checkbox" checked>
-      <label for="defaultShowBorder">Draw border around every tile</label>
+      <label for="defaultShowBorder">Draw border around tiles</label>
     </div>
     <div class="checkbox-row">
       <input id="defaultShowResetTimer" type="checkbox" checked>
-      <label for="defaultShowResetTimer">Show reset countdown under the number (metrics that have one)</label>
+      <label for="defaultShowResetTimer">Show reset countdown</label>
     </div>
     <div class="checkbox-row">
       <input id="defaultShowRawCounts" type="checkbox">
-      <label for="defaultShowRawCounts">Show raw counts (e.g. 42/56) when available</label>
+      <label for="defaultShowRawCounts">Show raw counts (e.g. 42/56)</label>
     </div>
     <div class="checkbox-row">
       <input id="defaultHideSubvalue" type="checkbox">
-      <label for="defaultHideSubvalue">Hide subtext on every button</label>
+      <label for="defaultHideSubvalue">Hide subtext</label>
     </div>
 
-    <!-- Fill color has a smart per-provider default (brand color),
-         so the plugin-wide value is an opt-in override — not a base
-         everyone starts with. Same story for background. Text color
-         has no brand equivalent, so it stays always-set. -->
     <div class="override-row" data-plugin-override="fillColor" style="margin-top: 10px;">
       <label class="override-label">
         <input type="checkbox" id="pd-fillColor-enabled">
-        Override fill color (meter metrics)
-        <span class="override-inherit">default: each provider's brand color</span>
+        Override fill color (meters)
+        <span class="override-inherit">default: brand</span>
       </label>
       <div class="override-control">
         <input id="defaultFillColor" type="color" value="#3b82f6">
@@ -784,8 +613,8 @@
     <div class="override-row" data-plugin-override="bgColor">
       <label class="override-label">
         <input type="checkbox" id="pd-bgColor-enabled">
-        Override background color
-        <span class="override-inherit">default: each provider's brand background</span>
+        Override background
+        <span class="override-inherit">default: brand</span>
       </label>
       <div class="override-control">
         <input id="defaultBgColor" type="color" value="#111827">
@@ -797,89 +626,55 @@
 
     <label for="defaultFillDirection" style="margin-top: 10px;">Fill direction</label>
     <select id="defaultFillDirection">
-      <option value="up">Up (default — fills from bottom)</option>
+      <option value="up">Up</option>
       <option value="down">Down</option>
       <option value="right">Right</option>
       <option value="left">Left</option>
     </select>
 
-    <div class="group-heading">Warn / critical thresholds</div>
-    <p class="hint" style="margin: 0 0 8px">
-      Plugin-wide warn / critical thresholds. Apply to dollar-unit
-      metrics unless a provider or button customizes them. Leave the
-      number blank to fall through to per-metric-type smart defaults
-      ($10 warn / $0 critical for balances, 80% / 100% of cap for
-      spend meters).
-    </p>
+    <div class="group-heading">Thresholds (dollar metrics)</div>
     <div class="row">
       <label for="defaultWarnBelow">Warn below</label>
-      <input id="defaultWarnBelow" type="text" placeholder="(per-metric default)" style="flex: 1">
+      <input id="defaultWarnBelow" type="text" placeholder="(smart default)" style="flex: 1">
       <input id="defaultWarnColor" type="color" value="#f59e0b">
     </div>
     <div class="row">
       <label for="defaultCriticalBelow">Critical below</label>
-      <input id="defaultCriticalBelow" type="text" placeholder="(per-metric default)" style="flex: 1">
+      <input id="defaultCriticalBelow" type="text" placeholder="(smart default)" style="flex: 1">
       <input id="defaultCriticalColor" type="color" value="#ef4444">
     </div>
 
-    <p class="hint">
-      These are the base values every button uses unless a provider or
-      individual button customizes them from its own tab.
-    </p>
-
-    <div class="group-heading">Default text sizes</div>
-    <label for="defaultValueSize">Big-number size (default for all buttons)</label>
+    <div class="group-heading">Text sizes</div>
+    <label for="defaultValueSize">Big-number size</label>
     <select id="defaultValueSize">
       <option value="small">Small</option>
       <option value="medium">Medium</option>
       <option value="large" selected>Large</option>
     </select>
-    <label for="defaultSubvalueSize">Subtext size (default for all buttons)</label>
+    <label for="defaultSubvalueSize">Subtext size</label>
     <select id="defaultSubvalueSize">
       <option value="small">Small</option>
       <option value="medium">Medium</option>
       <option value="large" selected>Large</option>
     </select>
-    <p class="hint">
-      Any button in the "This button" tab can override these. Blank /
-      "Use default" on the button sticks with the plugin-wide value.
-    </p>
     <button type="button" id="resetTextSizes" class="action">
-      Reset text-size overrides on every button
+      Reset text sizes on every button
     </button>
-    <p class="hint">
-      Clears <code>valueSize</code> / <code>subvalueSize</code> from
-      every visible button so the plugin-wide defaults above take
-      over everywhere. Buttons on inactive profiles pick up the reset
-      the next time they appear.
-    </p>
 
-    <div class="group-heading">Browser extension</div>
-    <p class="hint">
-      The <strong>Usage Buttons Helper</strong> Chrome extension reads
-      usage data from your logged-in sessions on <code>claude.ai</code>,
-      <code>cursor.com</code>, and <code>ollama.com</code>. Your cookies
-      never leave the browser — the extension proxies requests using
-      <code>credentials: "include"</code>, and the plugin only sees API
-      response bodies.
-    </p>
-    <div id="cookieHostStatus" class="hint" style="margin-top: 10px; padding: 6px 8px; border-radius: 4px; background: #1f2937; border: 1px solid #374151;">
-      <div>
-        <span id="cookieHostStatusDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; background:#6b7280;"></span>
-        <span id="cookieHostStatusText">Checking extension status…</span>
-      </div>
-      <div id="cookieHostVersionLine" style="margin-top: 4px; font-size: 11px; opacity: 0.85; display: none;"></div>
+    <div class="group-heading">Reset</div>
+    <button type="button" id="resetPluginStyleDefaults" class="action">
+      Reset all style defaults
+    </button>
+    <p class="hint">Clears every style at every tier. Keeps keys, endpoints, refresh, metrics.</p>
+
+    <div class="group-heading">Updates</div>
+    <div class="checkbox-row">
+      <input id="skipUpdateCheck" type="checkbox">
+      <label for="skipUpdateCheck">Skip update check</label>
     </div>
 
-    <p class="hint" style="margin-top: 10px;">
-      <strong>Setup:</strong> Open <code>chrome://extensions</code>,
-      enable <strong>Developer mode</strong>, click <strong>Load
-      unpacked</strong>, and pick the <code>chrome-extension/</code>
-      folder inside this repo. The plugin auto-registers the
-      native-messaging bridge on launch — no ID paste, no admin
-      prompts.
-    </p>
-
+    <div class="group-heading">Native host (troubleshooting)</div>
+    <p class="hint">Auto-registered on plugin launch. Only touch these if the extension can't connect.</p>
     <button type="button" id="registerCookieHost" class="action" style="display:none;">
       Register native host
     </button>
@@ -887,25 +682,6 @@
       Unregister native host
     </button>
     <div id="cookieHostActionResult" class="hint" style="display:none; margin-top: 6px;"></div>
-    <p class="hint">
-      <strong>Register</strong> writes the native-messaging manifest
-      so browsers can talk to the plugin.
-      <strong>Unregister</strong> cleanly removes every registry key
-      and manifest file. Tip: unregister before removing the plugin
-      from Stream Deck.
-    </p>
-
-    <div class="group-heading">Updates</div>
-    <div class="checkbox-row">
-      <input id="skipUpdateCheck" type="checkbox">
-      <label for="skipUpdateCheck">Skip update check</label>
-    </div>
-    <p class="hint">
-      The plugin checks GitHub Releases every 6 hours for a newer
-      version. When an update is found, all buttons show an "UPDATE"
-      notice until you install the new version. Enable this to
-      suppress the check entirely.
-    </p>
   </div>
 
   <script>
@@ -1327,23 +1103,10 @@
       const defShowRaw = lastGlobalSettings.defaultShowRawCounts === true;
       const defHideSub = lastGlobalSettings.defaultHideSubvalue === true;
 
-      mark(bindButtonOverrideCheck("hideSubvalue", settings.hideSubvalue,
-        pi.hideSubvalue !== undefined ? !!pi.hideSubvalue : defHideSub,
-        pi.hideSubvalue !== undefined
-          ? "provider default: " + (pi.hideSubvalue ? "hidden" : "shown")
-          : "plugin default: " + (defHideSub ? "hidden" : "shown")));
-
-      mark(bindButtonOverrideCheck("showResetTimer", settings.showResetTimer,
-        pi.showResetTimer !== undefined ? !!pi.showResetTimer : defShowTimer,
-        pi.showResetTimer !== undefined
-          ? "provider default: " + (pi.showResetTimer ? "on" : "off")
-          : "plugin default: " + (defShowTimer ? "on" : "off")));
-
-      mark(bindButtonOverrideCheck("showRawCounts", settings.showRawCounts,
-        pi.showRawCounts !== undefined ? !!pi.showRawCounts : defShowRaw,
-        pi.showRawCounts !== undefined
-          ? "provider default: " + (pi.showRawCounts ? "on" : "off")
-          : "plugin default: " + (defShowRaw ? "on" : "off")));
+      // Inverse booleans for this tier. Any ticked → treat as override.
+      ["hideSubvalue", "showResetTimer", "showRawCounts"].forEach((name) => {
+        if (applyInverseCheckbox("bo", name, settings[name])) anyOverride = true;
+      });
 
       const inheritRefresh = pi.refreshMinutes != null ? String(pi.refreshMinutes) : defRefresh;
       const inheritRefreshLbl = pi.refreshMinutes != null
@@ -1380,17 +1143,9 @@
         pi.textColor || defTextColor,
         pi.textColor ? "provider default" : "plugin default: " + defTextColor));
 
-      mark(bindButtonOverrideCheck("showBorder", settings.showBorder,
-        pi.showBorder !== undefined ? !!pi.showBorder : defBorder,
-        pi.showBorder !== undefined
-          ? "provider default: " + (pi.showBorder ? "on" : "off")
-          : "plugin default: " + (defBorder ? "on" : "off")));
-
-      mark(bindButtonOverrideCheck("showGlyph", settings.showGlyph,
-        pi.showGlyph !== undefined ? !!pi.showGlyph : defGlyph,
-        pi.showGlyph !== undefined
-          ? "provider default: " + (pi.showGlyph ? "on" : "off")
-          : "plugin default: " + (defGlyph ? "on" : "off")));
+      ["showBorder", "showGlyph"].forEach((name) => {
+        if (applyInverseCheckbox("bo", name, settings[name])) anyOverride = true;
+      });
 
       mark(bindButtonOverrideValue("warnBelow",
         settings.warnBelow != null ? String(settings.warnBelow) : null,
@@ -1479,11 +1234,7 @@
       setText("po-fillDirection-inherit", "inherits plugin default: " + defFillDir);
       setText("po-valueSize-inherit", "inherits plugin default: " + defVal);
       setText("po-subvalueSize-inherit", "inherits plugin default: " + defSub);
-      setText("po-fillColor-inherit", "inherits brand color");
-      setText("po-bgColor-inherit", "inherits brand background");
       setText("po-textColor-inherit", "inherits plugin default");
-      setText("po-showBorder-inherit", "inherits plugin default: " + (defBorder ? "on" : "off"));
-      setText("po-showGlyph-inherit", "inherits plugin default: " + (defGlyph ? "on" : "off"));
 
       bindOverrideValue("refreshMinutes",
         ps.refreshMinutes != null ? String(ps.refreshMinutes) : defRefresh,
@@ -1491,31 +1242,38 @@
       bindOverrideValue("fillDirection", ps.fillDirection || defFillDir, !!ps.fillDirection);
       bindOverrideValue("valueSize", ps.valueSize || defVal, !!ps.valueSize);
       bindOverrideValue("subvalueSize", ps.subvalueSize || defSub, !!ps.subvalueSize);
-      bindOverrideValue("fillColor", ps.fillColor || brandFill, !!ps.fillColor);
-      bindOverrideValue("bgColor", ps.bgColor || brandBg, !!ps.bgColor);
-      bindOverrideValue("textColor", ps.textColor || defTextColor, !!ps.textColor);
-      bindOverrideCheck("showBorder",
-        ps.showBorder !== undefined ? !!ps.showBorder : defBorder,
-        ps.showBorder !== undefined);
-      bindOverrideCheck("showGlyph",
-        ps.showGlyph !== undefined ? !!ps.showGlyph : defGlyph,
-        ps.showGlyph !== undefined);
 
-      const defShowTimer = lastGlobalSettings.defaultShowResetTimer !== false;
-      const defShowRaw = lastGlobalSettings.defaultShowRawCounts === true;
-      const defHideSub = lastGlobalSettings.defaultHideSubvalue === true;
-      setText("po-showResetTimer-inherit", "inherits plugin default: " + (defShowTimer ? "on" : "off"));
-      setText("po-showRawCounts-inherit", "inherits plugin default: " + (defShowRaw ? "on" : "off"));
-      setText("po-hideSubvalue-inherit", "inherits plugin default: " + (defHideSub ? "hidden" : "shown"));
-      bindOverrideCheck("showResetTimer",
-        ps.showResetTimer !== undefined ? !!ps.showResetTimer : defShowTimer,
-        ps.showResetTimer !== undefined);
-      bindOverrideCheck("showRawCounts",
-        ps.showRawCounts !== undefined ? !!ps.showRawCounts : defShowRaw,
-        ps.showRawCounts !== undefined);
-      bindOverrideCheck("hideSubvalue",
-        ps.hideSubvalue !== undefined ? !!ps.hideSubvalue : defHideSub,
-        ps.hideSubvalue !== undefined);
+      // Fill / bg colors: the provider is the active source unless the
+      // plugin tier has its own override. "Using brand" and "using
+      // custom provider override" both count as provider-is-source —
+      // show the checkbox as checked in either case so the user
+      // sees that provider is supplying the color.
+      const plugFillSet = !!lastGlobalSettings.defaultFillColor;
+      const plugBgSet = !!lastGlobalSettings.defaultBgColor;
+      const fillVal = ps.fillColor || (plugFillSet ? lastGlobalSettings.defaultFillColor : brandFill);
+      const bgVal = ps.bgColor || (plugBgSet ? lastGlobalSettings.defaultBgColor : brandBg);
+      const fillProviderIsSource = !!ps.fillColor || !plugFillSet;
+      const bgProviderIsSource = !!ps.bgColor || !plugBgSet;
+      setText("po-fillColor-inherit",
+        ps.fillColor ? "custom" :
+        plugFillSet ? "inherits plugin default" :
+        "brand color");
+      setText("po-bgColor-inherit",
+        ps.bgColor ? "custom" :
+        plugBgSet ? "inherits plugin default" :
+        "brand background");
+      bindOverrideValue("fillColor", fillVal, fillProviderIsSource);
+      bindOverrideValue("bgColor", bgVal, bgProviderIsSource);
+
+      bindOverrideValue("textColor", ps.textColor || defTextColor, !!ps.textColor);
+
+      // Inverse boolean overrides — one checkbox each, ticking saves
+      // the "flipped from default" value for this provider tier.
+      applyInverseCheckbox("po", "showBorder", ps.showBorder);
+      applyInverseCheckbox("po", "showGlyph", ps.showGlyph);
+      applyInverseCheckbox("po", "showResetTimer", ps.showResetTimer);
+      applyInverseCheckbox("po", "showRawCounts", ps.showRawCounts);
+      applyInverseCheckbox("po", "hideSubvalue", ps.hideSubvalue);
       bindOverrideValue("warnBelow",
         ps.warnBelow != null ? String(ps.warnBelow) : "",
         ps.warnBelow != null);
@@ -1525,11 +1283,13 @@
         ps.criticalBelow != null);
       document.getElementById("po-criticalColor").value = ps.criticalColor || "#ef4444";
 
-      // Reflect provider name in the two inline spans at the top of
-      // the defaults section.
+      // Reflect provider name everywhere we mention it.
       const name = PROVIDER_DISPLAY_NAMES[currentProviderId] || "this provider";
       setText("providerOverrideNameInline", name);
       setText("providerOverrideNameInline2", name);
+      document.querySelectorAll(".provider-name-inline").forEach((el) => {
+        el.textContent = name;
+      });
     }
 
     function setText(id, s) {
@@ -1555,6 +1315,36 @@
       if (row) row.classList.toggle("override-active", !!enabled);
     }
 
+    // Inverse-checkbox model for tiered booleans. Each field has a
+    // single "flipped" value that gets saved when the user ticks its
+    // inverse checkbox (e.g. showGlyph → false for "Hide provider
+    // logo"). Unchecked = omit from payload = inherit from parent.
+    const INVERSE_OVERRIDE_VALUE = {
+      showBorder: false,      // "Hide border"
+      showGlyph: false,       // "Hide provider logo"
+      showResetTimer: false,  // "Hide reset countdown"
+      showRawCounts: true,    // "Show raw counts"
+      hideSubvalue: true,     // "Hide subtext"
+    };
+
+    function applyInverseCheckbox(prefix, name, savedValue) {
+      const el = document.getElementById(prefix + "-inv-" + name);
+      if (!el) return false;
+      const wanted = INVERSE_OVERRIDE_VALUE[name];
+      const active = savedValue === wanted;
+      el.checked = active;
+      return active;
+    }
+
+    // readInverseCheckbox returns the persisted value (true/false) when
+    // the inverse checkbox is ticked, or undefined to signal "omit from
+    // payload so it inherits from the parent tier".
+    function readInverseCheckbox(prefix, name) {
+      const el = document.getElementById(prefix + "-inv-" + name);
+      if (!el || !el.checked) return undefined;
+      return INVERSE_OVERRIDE_VALUE[name];
+    }
+
     function collectProviderSettings() {
       // Clone the persisted map so providers we aren't editing right
       // now keep their overrides intact.
@@ -1577,11 +1367,10 @@
       if (enabled("fillColor")) ps.fillColor = val("fillColor");
       if (enabled("bgColor")) ps.bgColor = val("bgColor");
       if (enabled("textColor")) ps.textColor = val("textColor");
-      if (enabled("showBorder")) ps.showBorder = document.getElementById("po-showBorder").checked;
-      if (enabled("showGlyph")) ps.showGlyph = document.getElementById("po-showGlyph").checked;
-      if (enabled("showResetTimer")) ps.showResetTimer = document.getElementById("po-showResetTimer").checked;
-      if (enabled("showRawCounts")) ps.showRawCounts = document.getElementById("po-showRawCounts").checked;
-      if (enabled("hideSubvalue")) ps.hideSubvalue = document.getElementById("po-hideSubvalue").checked;
+      ["showBorder", "showGlyph", "showResetTimer", "showRawCounts", "hideSubvalue"].forEach((name) => {
+        const v = readInverseCheckbox("po", name);
+        if (v !== undefined) ps[name] = v;
+      });
       if (enabled("warnBelow")) {
         const n = parseNum(val("warnBelow"));
         if (n !== undefined) ps.warnBelow = n;
@@ -1690,9 +1479,10 @@
       // Tiered fields — only emit when the per-button override checkbox
       // is on. Omit otherwise so the field falls through to the provider
       // tier, then the plugin default, at render time.
-      if (boEnabled("hideSubvalue")) payload.hideSubvalue = document.getElementById("hideSubvalue").checked;
-      if (boEnabled("showResetTimer")) payload.showResetTimer = document.getElementById("showResetTimer").checked;
-      if (boEnabled("showRawCounts")) payload.showRawCounts = document.getElementById("showRawCounts").checked;
+      ["hideSubvalue", "showResetTimer", "showRawCounts"].forEach((name) => {
+        const v = readInverseCheckbox("bo", name);
+        if (v !== undefined) payload[name] = v;
+      });
       if (boEnabled("refreshMinutes")) {
         const raw = document.getElementById("refreshMinutes").value;
         if (raw !== "") payload.refreshMinutes = Number(raw);
@@ -1703,8 +1493,10 @@
       if (boEnabled("fillColor")) payload.fillColor = document.getElementById("fillColor").value;
       if (boEnabled("bgColor")) payload.bgColor = document.getElementById("bgColor").value;
       if (boEnabled("textColor")) payload.textColor = document.getElementById("textColor").value;
-      if (boEnabled("showBorder")) payload.showBorder = document.getElementById("showBorder").checked;
-      if (boEnabled("showGlyph")) payload.showGlyph = document.getElementById("showGlyph").checked;
+      ["showBorder", "showGlyph"].forEach((name) => {
+        const v = readInverseCheckbox("bo", name);
+        if (v !== undefined) payload[name] = v;
+      });
       if (boEnabled("warnBelow")) {
         const n = parseNum(document.getElementById("warnBelow").value.trim());
         if (n !== undefined) payload.warnBelow = n;
@@ -1983,13 +1775,18 @@
         });
       }
     });
+    // Inverse single-checkbox overrides (button tab) — no row/visibility
+    // toggling; ticking just persists the flip.
+    document.querySelectorAll("[data-button-inverse]").forEach((row) => {
+      const name = row.getAttribute("data-button-inverse");
+      const chk = document.getElementById("bo-inv-" + name);
+      if (chk) chk.addEventListener("change", pushSettings);
+    });
     [
-      "captionOverride", "hideSubvalue",
-      "showResetTimer", "showRawCounts",
+      "captionOverride",
       "refreshMinutes", "fillDirection",
       "valueSize", "subvalueSize",
       "fillColor", "bgColor", "textColor",
-      "showBorder", "showGlyph",
       "warnBelow", "warnColor",
       "criticalBelow", "criticalColor",
     ].forEach((id) => {
@@ -2051,12 +1848,16 @@
         });
       }
     });
+    // Provider-tab inverse single checkboxes.
+    document.querySelectorAll("[data-provider-inverse]").forEach((row) => {
+      const name = row.getAttribute("data-provider-inverse");
+      const chk = document.getElementById("po-inv-" + name);
+      if (chk) chk.addEventListener("change", pushGlobalSettings);
+    });
     [
       "po-refreshMinutes", "po-fillDirection",
       "po-valueSize", "po-subvalueSize",
       "po-fillColor", "po-bgColor", "po-textColor",
-      "po-showBorder", "po-showGlyph",
-      "po-showResetTimer", "po-showRawCounts", "po-hideSubvalue",
       "po-warnBelow", "po-warnColor",
       "po-criticalBelow", "po-criticalColor",
     ].forEach((id) => {
@@ -2108,6 +1909,16 @@
         event: "sendToPlugin",
         context: uuid,
         payload: { action: "resetTextSizeOverrides" },
+      }));
+    });
+
+    document.getElementById("resetPluginStyleDefaults").addEventListener("click", () => {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      if (!confirm("Reset every style setting across the plugin, every provider, and every button?\n\nAPI keys, OAuth, provider endpoints, refresh interval, the extension opt-out, and each button's metric are kept.")) return;
+      websocket.send(JSON.stringify({
+        event: "sendToPlugin",
+        context: uuid,
+        payload: { action: "resetPluginStyleDefaults" },
       }));
     });
 

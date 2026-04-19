@@ -397,12 +397,32 @@ func handleDidReceiveGlobalSettings(conn *streamdeck.Connection, ev streamdeck.E
 	var gs settings.GlobalSettings
 	json.Unmarshal(payload.Settings, &gs)
 
+	// Migrate away from legacy sentinel plugin-tier colors. Earlier
+	// builds persisted the color-picker's default value on every save
+	// regardless of user intent (fixed in cccbd31), so existing
+	// installs may still carry the old sentinels in GlobalSettings.
+	// Strip them here — unset = fall through to brand bg / brand
+	// color as the natural provider-level default.
+	legacyDirty := false
+	if strings.EqualFold(gs.DefaultBgColor, "#111827") {
+		gs.DefaultBgColor = ""
+		legacyDirty = true
+	}
+	if strings.EqualFold(gs.DefaultFillColor, "#3b82f6") {
+		gs.DefaultFillColor = ""
+		legacyDirty = true
+	}
+
 	// Diff the previous snapshot against the incoming one before we
 	// overwrite it, so we can drop cache entries for providers whose
 	// credentials or endpoint overrides just changed. Without this the
 	// next poll would serve the old snapshot for up to MinTTL.
 	prevKeys := settings.ProviderKeysGet()
 	settings.Set(gs)
+	if legacyDirty {
+		raw, _ := json.Marshal(gs)
+		conn.SetGlobalSettings(raw)
+	}
 	for _, id := range settings.ChangedProviderIDs(prevKeys, gs.ProviderKeys) {
 		providers.ClearCache(id)
 		conn.Logf("provider config changed — cleared cache for %s", id)
@@ -444,6 +464,71 @@ func handleSendToPlugin(conn *streamdeck.Connection, ev streamdeck.Event) {
 		}
 		mu.Unlock()
 		go refreshAllVisible(conn)
+	case "resetPluginStyleDefaults":
+		// Cascade reset: clear every style knob at all three tiers so
+		// the deck snaps back to brand / built-in defaults everywhere.
+		// Non-style state is preserved:
+		//   - Plugin: refresh interval, skip-update-check, extension
+		//     opt-out, providerKeys (credentials / endpoints)
+		//   - Button: metricId (tile identity)
+		gs := settings.Get()
+		gs.DefaultValueSize = ""
+		gs.DefaultSubvalueSize = ""
+		gs.DefaultTextColor = ""
+		gs.DefaultFillColor = ""
+		gs.DefaultBgColor = ""
+		gs.DefaultShowBorder = nil
+		gs.DefaultFillDirection = ""
+		gs.DefaultShowResetTimer = nil
+		gs.DefaultShowRawCounts = nil
+		gs.DefaultHideSubvalue = nil
+		gs.DefaultWarnBelow = nil
+		gs.DefaultWarnColor = ""
+		gs.DefaultCriticalBelow = nil
+		gs.DefaultCriticalColor = ""
+		gs.InvertFill = false
+		gs.ShowGlyphs = nil
+		// Provider-tier overrides are all style-only (ProviderSettings
+		// holds no credentials — those live in ProviderKeys). Safe to
+		// drop the whole map.
+		gs.ProviderSettings = nil
+		settings.Set(gs)
+		raw, _ := json.Marshal(gs)
+		conn.SetGlobalSettings(raw)
+
+		// Button tier: walk every visible key, zero its style fields,
+		// persist, and redraw. MetricID stays so tiles keep showing
+		// what they're supposed to show; only the appearance resets.
+		mu.Lock()
+		for ctx, key := range visibleKeys {
+			ks := &key.settings
+			ks.RefreshMinutes = nil
+			ks.WarnBelow = nil
+			ks.CriticalBelow = nil
+			ks.WarnColor = ""
+			ks.CriticalColor = ""
+			ks.LabelOverride = ""
+			ks.HideLabel = false
+			ks.CaptionOverride = ""
+			ks.FillColor = ""
+			ks.BgColor = ""
+			ks.TextColor = ""
+			ks.FillDirection = ""
+			ks.ValueSize = ""
+			ks.SubvalueSize = ""
+			ks.ShowBorder = nil
+			ks.ShowGlyph = nil
+			ks.ShowResetTimer = nil
+			ks.ShowRawCounts = nil
+			ks.HideSubvalue = nil
+			rawKS, _ := json.Marshal(*ks)
+			conn.SetSettings(ctx, rawKS)
+		}
+		mu.Unlock()
+
+		// Style-only change — no need to re-poll providers. Redraw
+		// from cached snapshots with the fresh defaults applied.
+		go redrawAllVisible(conn)
 	case "getCookieStatus":
 		go replyCookieStatus(conn, ev.Context, ev.Action)
 	case "registerCookieHost":
@@ -884,12 +969,12 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 		in.Label = strings.ToUpper(label)
 	}
 
-	// Ratio
-	isReferenceCard := metric.RatioVal() < 0
-	if isReferenceCard {
-		r := 1.0
-		in.Ratio = &r
-	} else {
+	// Ratio: meter metrics get the effective ratio; reference cards
+	// (metric.Ratio == nil) leave in.Ratio nil so fillRect draws
+	// nothing. No more LightenHex "card" treatment — the user wants
+	// one consistent bg everywhere; fill is the only thing that
+	// differs between meter and reference tiles.
+	if metric.Ratio != nil {
 		in.Ratio = &effectiveRatio
 	}
 
@@ -908,7 +993,11 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 		in.Direction = metric.Direction
 	}
 
-	// Background: button/provider override > plugin default > brand bg
+	// Background: button/provider override > plugin default > brand bg.
+	// Brand is the natural provider-level default — Claude brown, Codex
+	// black, etc. — so tiles feel at home on their provider. Reference
+	// cards simply don't fill on top (in.Ratio stays nil), so the brand
+	// bg shows through as a solid tile without the old LightenHex trick.
 	in.Bg = prov.BrandBg()
 	if v := settings.DefaultBgColorValue(); v != "" && render.IsValidHexColor(v) {
 		in.Bg = v
@@ -923,9 +1012,11 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 		in.Fg = v
 	}
 
-	// Fill color: threshold > user override > plugin default > reference
-	// card / monetary / brand. Threshold-state colors also walk the
-	// button -> provider -> plugin chain via settings helpers.
+	// Fill color: threshold > button/provider override > plugin default
+	// > brand. Reference cards don't actually draw a fill (in.Ratio is
+	// nil above) so their computed in.Fill is cosmetic; we still pick a
+	// sensible value so the threshold-state fallback and the brand
+	// color path both work for meter metrics.
 	thState := computeThresholdState(metric, ks)
 	switch thState {
 	case "critical":
@@ -941,13 +1032,8 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 	default:
 		if ks.FillColor != "" && render.IsValidHexColor(ks.FillColor) {
 			in.Fill = ks.FillColor
-		} else if v := settings.DefaultFillColorValue(); v != "" && render.IsValidHexColor(v) && !isReferenceCard {
-			// Plugin-wide default wins over brand for meter metrics.
-			// Reference cards keep their lightened-bg trick since it's
-			// a visual differentiation, not a user-picked color.
+		} else if v := settings.DefaultFillColorValue(); v != "" && render.IsValidHexColor(v) {
 			in.Fill = v
-		} else if isReferenceCard {
-			in.Fill = render.LightenHex(in.Bg, 0.09)
 		} else {
 			in.Fill = prov.BrandColor()
 		}
@@ -1023,17 +1109,23 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 }
 
 func placeholderFace(prov providers.Provider, label, value, subvalue string, ks settings.KeySettings) string {
+	// Bg: button override > plugin default > brand bg. Consistent
+	// with the main render path.
+	bg := prov.BrandBg()
+	if v := settings.DefaultBgColorValue(); v != "" && render.IsValidHexColor(v) {
+		bg = v
+	}
+	if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
+		bg = ks.BgColor
+	}
 	in := render.ButtonInput{
 		Label: label,
 		Value: value,
 		Fill:  prov.BrandColor(),
-		Bg:    prov.BrandBg(),
+		Bg:    bg,
 	}
 	if subvalue != "" {
 		in.Subvalue = subvalue
-	}
-	if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
-		in.Bg = ks.BgColor
 	}
 	if ks.TextColor != "" && render.IsValidHexColor(ks.TextColor) {
 		in.Fg = ks.TextColor
@@ -1069,15 +1161,17 @@ func loadingFaceFor(providerID string, ks *settings.KeySettings) string {
 	prov := providers.Get(providerID)
 	glyph := getProviderGlyph(providerID)
 	fillColor := ""
-	var bg string
 	if prov != nil {
 		fillColor = prov.BrandColor()
+	}
+	// Bg: button override > plugin default > brand bg.
+	bg := "#111827"
+	if prov != nil {
 		bg = prov.BrandBg()
 	}
-	// Start with plugin-tier defaults; button/provider overrides layer
-	// on top via EffectiveSettings (already applied before this is called
-	// from renderSnapshotForKey, but ks may also come in raw from other
-	// call sites, so keep the defaults as a base).
+	if v := settings.DefaultBgColorValue(); v != "" && render.IsValidHexColor(v) {
+		bg = v
+	}
 	fg := settings.DefaultTextColorValue()
 	var border *bool
 	if !settings.DefaultShowBorderEnabled() {

@@ -1038,7 +1038,6 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 			in.Fill = v
 		} else {
 			in.Fill = prov.BrandColor()
-			in.Fill2 = brandColor2(prov)
 		}
 	}
 
@@ -1125,7 +1124,6 @@ func placeholderFace(prov providers.Provider, label, value, subvalue string, ks 
 		Label: label,
 		Value: value,
 		Fill:  prov.BrandColor(),
-		Fill2: brandColor2(prov),
 		Bg:    bg,
 	}
 	if subvalue != "" {
@@ -1165,10 +1163,8 @@ func loadingFaceFor(providerID string, ks *settings.KeySettings) string {
 	prov := providers.Get(providerID)
 	glyph := getProviderGlyph(providerID)
 	fillColor := ""
-	fillColor2 := ""
 	if prov != nil {
 		fillColor = prov.BrandColor()
-		fillColor2 = brandColor2(prov)
 	}
 	// Bg: button override > plugin default > brand bg.
 	bg := "#111827"
@@ -1195,7 +1191,7 @@ func loadingFaceFor(providerID string, ks *settings.KeySettings) string {
 			border = ks.ShowBorder
 		}
 	}
-	return render.RenderLoading(glyph, fillColor, fillColor2, bg, fg, border)
+	return render.RenderLoading(glyph, fillColor, bg, fg, border)
 }
 
 // --- Threshold logic ---
@@ -1468,21 +1464,4 @@ func resolveTextSize(perKey settings.TextSize, global settings.TextSize) setting
 
 func getProviderGlyph(providerID string) *render.ProviderGlyph {
 	return icons.ProviderIcons[providerID]
-}
-
-// gradientBrand is an optional provider capability: when implemented,
-// the provider's brand paint is a vertical linear gradient from
-// BrandColor() (top) to BrandColor2() (bottom). Providers that don't
-// implement it render as a solid BrandColor() fill as before.
-type gradientBrand interface {
-	BrandColor2() string
-}
-
-// brandColor2 returns the provider's secondary gradient stop, or ""
-// when the provider does not implement gradientBrand.
-func brandColor2(prov providers.Provider) string {
-	if gb, ok := prov.(gradientBrand); ok {
-		return gb.BrandColor2()
-	}
-	return ""
 }

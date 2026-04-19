@@ -6,7 +6,7 @@
       <stop offset="1" stop-color="#3941FF"/>
     </linearGradient>
   </defs>
-  <rect width="144" height="144" rx="16" fill="#000"/>
+  <rect width="144" height="144" rx="16" fill="#111827"/>
   <!-- Path bbox is ~24.2 x 24 (cloud fills its 24x24 viewBox). Scale
        72/24.2 ≈ 2.975 renders it at the same ~72 canvas units as the
        runtime watermark's ContentFitTransform fit, and the same visible

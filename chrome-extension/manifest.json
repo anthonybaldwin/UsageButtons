@@ -17,7 +17,8 @@
     "type": "module"
   },
   "permissions": [
-    "nativeMessaging"
+    "nativeMessaging",
+    "alarms"
   ],
   "host_permissions": [
     "*://*.claude.ai/*",

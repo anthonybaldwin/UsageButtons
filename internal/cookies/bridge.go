@@ -60,9 +60,35 @@ func (b *Bridge) OnExtensionDisconnect() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.ready = false
+	b.toExt = nil
 	for id, ch := range b.inflight {
 		close(ch)
 		delete(b.inflight, id)
+	}
+}
+
+// StartKeepalive pings the extension on a fixed interval so Chrome's
+// service worker idle timer (~30s) keeps resetting. Without this the
+// SW suspends, closes the native port, and the host exits — leaving
+// the plugin with no bridge until the next chrome.alarms heartbeat
+// (up to a minute away). Sends are best-effort; missing toExt / write
+// errors are ignored so the ticker keeps running across disconnects.
+func (b *Bridge) StartKeepalive(ctx context.Context, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			b.mu.Lock()
+			send := b.toExt
+			b.mu.Unlock()
+			if send == nil {
+				continue
+			}
+			_ = send(Message{Kind: "ping"})
+		}
 	}
 }
 

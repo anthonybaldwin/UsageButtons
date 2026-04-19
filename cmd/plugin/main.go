@@ -459,9 +459,22 @@ func replyCookieStatus(conn *streamdeck.Connection, ctxStr, action string) {
 	pctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	status := cookies.Status(pctx)
+	status, reachable, probeErr := cookies.StatusDetail(pctx)
 	latest := update.LatestVersion()
 	updateAvailable := status.Version != "" && latest != "" && status.Version != latest
+
+	// Diagnostic line for the "Not connected" failure mode. `reachable`
+	// separates "plugin couldn't dial the native-host socket" (plugin
+	// or host side) from "native host answered but extension isn't
+	// attached" (extension side). Both show ready=false in the PI but
+	// have very different root causes.
+	probeErrStr := ""
+	if probeErr != nil {
+		probeErrStr = probeErr.Error()
+	}
+	conn.Logf("cookieStatus poll: ready=%v ext-version=%q reachable=%v probeErr=%q registered=%v",
+		status.Ready, status.Version, reachable, probeErrStr,
+		cookies.IsHostRegistered(cookies.HostName))
 
 	conn.SendToPropertyInspector(ctxStr, action, map[string]any{
 		"action":           "cookieStatus",

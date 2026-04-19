@@ -145,14 +145,25 @@ func clientFetch(ctx context.Context, r Request) (Response, error) {
 }
 
 func clientStatus(ctx context.Context) StatusInfo {
+	info, _, _ := clientStatusDetail(ctx)
+	return info
+}
+
+func clientStatusDetail(ctx context.Context) (StatusInfo, bool, error) {
 	resp, err := roundtrip(ctx, Message{ID: nextRequestID(), Kind: "status"}, 750*time.Millisecond)
-	if err != nil || resp.Kind != "status" {
-		return StatusInfo{}
+	if err != nil {
+		return StatusInfo{}, false, err
 	}
-	return StatusInfo{Ready: resp.Ready, UserAgent: resp.UserAgent, Version: resp.Version}
+	if resp.Kind != "status" {
+		// Reached the host but got an unexpected frame — count as reachable
+		// so callers don't blame the socket for a protocol mismatch.
+		return StatusInfo{}, true, fmt.Errorf("cookies: unexpected response kind %q", resp.Kind)
+	}
+	return StatusInfo{Ready: resp.Ready, UserAgent: resp.UserAgent, Version: resp.Version}, true, nil
 }
 
 func init() {
 	dispatchFetch = clientFetch
 	probeStatus = clientStatus
+	probeStatusDetail = clientStatusDetail
 }

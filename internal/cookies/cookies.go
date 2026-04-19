@@ -136,6 +136,15 @@ func Status(ctx context.Context) StatusInfo {
 	return probeStatus(ctx)
 }
 
+// StatusDetail is like Status but also surfaces whether the native host
+// IPC socket was reachable at all, and the underlying dial/read error
+// when it wasn't. Callers that log diagnostics use this to distinguish
+// "host unreachable / plugin stuck" from "host up, extension not
+// attached" — two failure modes that both produce a zero StatusInfo.
+func StatusDetail(ctx context.Context) (StatusInfo, bool, error) {
+	return probeStatusDetail(ctx)
+}
+
 func validateRequest(r Request) error {
 	if strings.TrimSpace(r.URL) == "" {
 		return fmt.Errorf("cookies: request URL is required")
@@ -176,8 +185,13 @@ var dispatchFetch = func(ctx context.Context, r Request) (Response, error) {
 }
 
 var probeStatus = func(ctx context.Context) StatusInfo {
+	info, _, _ := probeStatusDetail(ctx)
+	return info
+}
+
+var probeStatusDetail = func(ctx context.Context) (StatusInfo, bool, error) {
 	_ = ctx
-	return StatusInfo{}
+	return StatusInfo{}, false, ErrHostUnavailable
 }
 
 // b64 helpers are exported so tests in sibling packages can build

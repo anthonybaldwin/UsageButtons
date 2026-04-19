@@ -890,6 +890,12 @@
           handlePluginMessage(msg.payload);
         }
       };
+      // If the plugin process dies, the SD-side websocket closes and every
+      // requestCookieStatus / requestProviderStatus call silently no-ops
+      // (they bail on readyState !== OPEN). Without surfacing this the PI
+      // freezes on its last reply ("Not connected") with no clue why.
+      websocket.onclose = surfacePluginDisconnected;
+      websocket.onerror = surfacePluginDisconnected;
       applyKeySettings(actionInfo.payload.settings || {});
       // Poll cookie-host status every few seconds while the PI is
       // open so the user sees the extension connect without
@@ -997,6 +1003,18 @@
         context: uuid,
         payload: { action: "getCookieStatus" },
       }));
+    }
+
+    // Called from websocket.onclose/onerror. The PI keeps polling on
+    // intervals but every send no-ops once the socket is closed, leaving
+    // the user staring at the last reply forever; surface that explicitly.
+    function surfacePluginDisconnected() {
+      const dot = document.getElementById("cookieHostStatusDot");
+      const text = document.getElementById("cookieHostStatusText");
+      if (!dot || !text) return;
+      dot.style.background = "#ef4444";
+      text.replaceChildren();
+      text.append("Stream Deck plugin disconnected — restart Stream Deck or reopen this inspector.");
     }
 
     function setCookieStatus(payload) {

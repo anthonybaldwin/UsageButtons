@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
 )
@@ -59,7 +60,20 @@ func main() {
 		acceptLoop(ctx, ln, bridge)
 	}()
 
+	// Ping the extension every 20s so Chrome's SW idle timer (~30s)
+	// never expires while we're attached. Without this the SW suspends,
+	// Chrome kills us, and the plugin loses its bridge until the next
+	// chrome.alarms wake — see commit fixing ext-version="" polling storms.
+	keepaliveCtx, cancelKeepalive := context.WithCancel(ctx)
+	defer cancelKeepalive()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		bridge.StartKeepalive(keepaliveCtx, 20*time.Second)
+	}()
+
 	err = cookies.ServeNativeHost(ctx, os.Stdin, os.Stdout, bridge.Handle)
+	cancelKeepalive()
 	log.Printf("native-host: extension port closed (err=%v)", err)
 	bridge.OnExtensionDisconnect()
 	_ = ln.Close()

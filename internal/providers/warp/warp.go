@@ -125,7 +125,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Enter a Warp API key in plugin settings, or set WARP_API_KEY / WARP_TOKEN.",
+			Error:        "Enter a Warp API key in the Warp tab, or set WARP_API_KEY / WARP_TOKEN.",
 		}, nil
 	}
 

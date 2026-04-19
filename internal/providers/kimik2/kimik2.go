@@ -164,7 +164,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Enter a Kimi K2 API key in plugin settings, or set KIMI_K2_API_KEY.",
+			Error:        "Enter a Kimi K2 API key in the Kimi K2 tab, or set KIMI_K2_API_KEY.",
 		}, nil
 	}
 

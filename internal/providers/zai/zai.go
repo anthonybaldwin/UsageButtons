@@ -126,7 +126,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Enter a z.ai API key in plugin settings, or set Z_AI_API_KEY.",
+			Error:        "Enter a z.ai API key in the z.ai tab, or set Z_AI_API_KEY.",
 		}, nil
 	}
 

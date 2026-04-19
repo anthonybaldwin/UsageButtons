@@ -97,6 +97,7 @@
 
   <nav class="tabs">
     <button class="tab active" data-tab="button" type="button">This button</button>
+    <button class="tab" data-tab="provider" type="button" id="providerTab" style="display:none"></button>
     <button class="tab" data-tab="plugin" type="button">Plugin settings</button>
   </nav>
 
@@ -123,139 +124,6 @@
       <option value="30">30 minutes</option>
       <option value="60">1 hour</option>
     </select>
-
-    <!-- Provider-specific auth config (shown inline for this button's provider) -->
-    <div id="providerAuth" style="display:none">
-      <div class="group-heading">Authentication</div>
-
-      <!-- Claude auth -->
-      <div id="authConfig-claude" class="auth-config" style="display:none">
-        <p class="hint">
-          <strong>Session / Weekly / Sonnet / Opus</strong> metrics come
-          from <code>~/.claude/.credentials.json</code> via
-          <code>api.anthropic.com</code>. <strong>Extras</strong>
-          (balance, overage) come from <code>claude.ai</code> via the
-          <strong>Usage Buttons Helper</strong> extension. Each metric
-          uses the source that can actually supply it — no toggle
-          needed.
-        </p>
-      </div>
-
-      <!-- Cursor auth -->
-      <div id="authConfig-cursor" class="auth-config" style="display:none">
-        <p class="hint">
-          Cursor usage comes from your cursor.com session via the
-          <strong>Usage Buttons Helper</strong> extension. Install it from
-          the <em>Plugin settings</em> tab → <em>Browser extension</em>.
-        </p>
-      </div>
-
-      <!-- Ollama auth -->
-      <div id="authConfig-ollama" class="auth-config" style="display:none">
-        <p class="hint">
-          Ollama cloud usage comes from your ollama.com session via the
-          <strong>Usage Buttons Helper</strong> extension. Install it from
-          the <em>Plugin settings</em> tab → <em>Browser extension</em>.
-        </p>
-      </div>
-
-      <!-- Copilot auth -->
-      <div id="authConfig-copilot" class="auth-config" style="display:none">
-        <label for="copilotToken">GitHub token (optional)</label>
-        <div class="key-row">
-          <input id="copilotToken" type="password" autocomplete="off" placeholder="ghp_… / gho_…" data-provider-key="copilotToken">
-          <button type="button" class="reveal-btn" data-reveal-target="copilotToken">Show</button>
-        </div>
-        <p class="hint">
-          Stored in plugin settings. Falls back to <code>GITHUB_TOKEN</code>,
-          then <code>~/.config/github-copilot/hosts.json</code> /
-          <code>apps.json</code> when those files contain a GitHub token.
-          Leave blank if you already provide one through an environment
-          variable or the Copilot config files.
-        </p>
-      </div>
-
-      <!-- Codex auth -->
-      <div id="authConfig-codex" class="auth-config" style="display:none">
-        <p class="hint">
-          Codex reads your OAuth token automatically from
-          <code>~/.codex/auth.json</code> (written by
-          <code>codex auth login</code>). No manual configuration.
-          Cost-today / cost-30d metrics are estimated locally from
-          <code>~/.codex/sessions/**/*.jsonl</code> — same pattern
-          Claude uses.
-        </p>
-      </div>
-
-      <!-- OpenRouter auth -->
-      <div id="authConfig-openrouter" class="auth-config" style="display:none">
-        <label for="openrouterKey">OpenRouter API key</label>
-        <div class="key-row">
-          <input id="openrouterKey" type="password" autocomplete="off" placeholder="sk-or-…" data-provider-key="openRouterKey">
-          <button type="button" class="reveal-btn" data-reveal-target="openrouterKey">Show</button>
-        </div>
-        <label for="openrouterURL">API base URL (optional)</label>
-        <input id="openrouterURL" type="text" placeholder="https://openrouter.ai/api/v1" data-provider-key="openRouterURL">
-        <p class="hint">
-          Stored in plugin settings. Key falls back to
-          <code>OPENROUTER_API_KEY</code>; base URL falls back to
-          <code>OPENROUTER_API_URL</code>, then the public endpoint.
-          Get your key at
-          <a href="https://openrouter.ai/settings/keys" style="color:#6467f2">openrouter.ai/settings/keys</a>.
-        </p>
-      </div>
-
-      <!-- Warp auth -->
-      <div id="authConfig-warp" class="auth-config" style="display:none">
-        <label for="warpKey">Warp API key</label>
-        <div class="key-row">
-          <input id="warpKey" type="password" autocomplete="off" placeholder="Settings → Platform → API Keys" data-provider-key="warpKey">
-          <button type="button" class="reveal-btn" data-reveal-target="warpKey">Show</button>
-        </div>
-        <p class="hint">
-          Stored in plugin settings. Falls back to <code>WARP_API_KEY</code>
-          or <code>WARP_TOKEN</code>. See
-          <a href="https://docs.warp.dev/reference/cli/api-keys" style="color:#938bb4">Warp docs</a>.
-        </p>
-      </div>
-
-      <!-- z.ai auth -->
-      <div id="authConfig-zai" class="auth-config" style="display:none">
-        <label for="zaiKey">z.ai API key</label>
-        <div class="key-row">
-          <input id="zaiKey" type="password" autocomplete="off" placeholder="z-…" data-provider-key="zaiKey">
-          <button type="button" class="reveal-btn" data-reveal-target="zaiKey">Show</button>
-        </div>
-        <label for="zaiRegion">API region</label>
-        <select id="zaiRegion" data-provider-key="zaiRegion">
-          <option value="">Global (api.z.ai)</option>
-          <option value="bigmodel-cn">BigModel CN (open.bigmodel.cn)</option>
-        </select>
-        <label for="zaiHost">Host override (optional)</label>
-        <input id="zaiHost" type="text" placeholder="https://api.z.ai" data-provider-key="zaiHost">
-        <p class="hint">
-          Stored in plugin settings. Key falls back to
-          <code>Z_AI_API_KEY</code> / <code>ZAI_API_TOKEN</code> /
-          <code>ZAI_API_KEY</code>; host falls back to
-          <code>Z_AI_API_HOST</code> then the region selection. Set
-          <code>Z_AI_QUOTA_URL</code> to override the full quota endpoint.
-        </p>
-      </div>
-
-      <!-- Kimi K2 auth -->
-      <div id="authConfig-kimi-k2" class="auth-config" style="display:none">
-        <label for="kimik2Key">Kimi K2 API key</label>
-        <div class="key-row">
-          <input id="kimik2Key" type="password" autocomplete="off" placeholder="sk-…" data-provider-key="kimiK2Key">
-          <button type="button" class="reveal-btn" data-reveal-target="kimik2Key">Show</button>
-        </div>
-        <p class="hint">
-          Stored in plugin settings. Falls back to
-          <code>KIMI_K2_API_KEY</code>, <code>KIMI_API_KEY</code>, or
-          <code>KIMI_KEY</code>.
-        </p>
-      </div>
-    </div>
 
     <div class="group-heading">Text</div>
 
@@ -371,6 +239,139 @@
     <p class="hint">
       Click the key on your Stream Deck to force an immediate refresh.
     </p>
+  </div>
+
+  <!-- ================== Provider tab (per-provider auth) =================== -->
+  <div id="providerPanel" class="panel">
+
+    <!-- Claude auth -->
+    <div id="authConfig-claude" class="auth-config" style="display:none">
+      <p class="hint">
+        <strong>Session / Weekly / Sonnet / Opus</strong> metrics come
+        from <code>~/.claude/.credentials.json</code> via
+        <code>api.anthropic.com</code>. <strong>Extras</strong>
+        (balance, overage) come from <code>claude.ai</code> via the
+        <strong>Usage Buttons Helper</strong> extension. Each metric
+        uses the source that can actually supply it — no toggle
+        needed.
+      </p>
+    </div>
+
+    <!-- Cursor auth -->
+    <div id="authConfig-cursor" class="auth-config" style="display:none">
+      <p class="hint">
+        Cursor usage comes from your cursor.com session via the
+        <strong>Usage Buttons Helper</strong> extension. Install it from
+        the <em>Plugin settings</em> tab → <em>Browser extension</em>.
+      </p>
+    </div>
+
+    <!-- Ollama auth -->
+    <div id="authConfig-ollama" class="auth-config" style="display:none">
+      <p class="hint">
+        Ollama cloud usage comes from your ollama.com session via the
+        <strong>Usage Buttons Helper</strong> extension. Install it from
+        the <em>Plugin settings</em> tab → <em>Browser extension</em>.
+      </p>
+    </div>
+
+    <!-- Copilot auth -->
+    <div id="authConfig-copilot" class="auth-config" style="display:none">
+      <label for="copilotToken">GitHub token (optional)</label>
+      <div class="key-row">
+        <input id="copilotToken" type="password" autocomplete="off" placeholder="ghp_… / gho_…" data-provider-key="copilotToken">
+        <button type="button" class="reveal-btn" data-reveal-target="copilotToken">Show</button>
+      </div>
+      <p class="hint">
+        Shared across all Copilot buttons. Falls back to
+        <code>GITHUB_TOKEN</code>, then
+        <code>~/.config/github-copilot/hosts.json</code> /
+        <code>apps.json</code> when those files contain a GitHub token.
+        Leave blank if you already provide one through an environment
+        variable or the Copilot config files.
+      </p>
+    </div>
+
+    <!-- Codex auth -->
+    <div id="authConfig-codex" class="auth-config" style="display:none">
+      <p class="hint">
+        Codex reads your OAuth token automatically from
+        <code>~/.codex/auth.json</code> (written by
+        <code>codex auth login</code>). No manual configuration.
+        Cost-today / cost-30d metrics are estimated locally from
+        <code>~/.codex/sessions/**/*.jsonl</code> — same pattern
+        Claude uses.
+      </p>
+    </div>
+
+    <!-- OpenRouter auth -->
+    <div id="authConfig-openrouter" class="auth-config" style="display:none">
+      <label for="openrouterKey">OpenRouter API key</label>
+      <div class="key-row">
+        <input id="openrouterKey" type="password" autocomplete="off" placeholder="sk-or-…" data-provider-key="openRouterKey">
+        <button type="button" class="reveal-btn" data-reveal-target="openrouterKey">Show</button>
+      </div>
+      <label for="openrouterURL">API base URL (optional)</label>
+      <input id="openrouterURL" type="text" placeholder="https://openrouter.ai/api/v1" data-provider-key="openRouterURL">
+      <p class="hint">
+        Shared across all OpenRouter buttons. Key falls back to
+        <code>OPENROUTER_API_KEY</code>; base URL falls back to
+        <code>OPENROUTER_API_URL</code>, then the public endpoint.
+        Get your key at
+        <a href="https://openrouter.ai/settings/keys" style="color:#6467f2">openrouter.ai/settings/keys</a>.
+      </p>
+    </div>
+
+    <!-- Warp auth -->
+    <div id="authConfig-warp" class="auth-config" style="display:none">
+      <label for="warpKey">Warp API key</label>
+      <div class="key-row">
+        <input id="warpKey" type="password" autocomplete="off" placeholder="Settings → Platform → API Keys" data-provider-key="warpKey">
+        <button type="button" class="reveal-btn" data-reveal-target="warpKey">Show</button>
+      </div>
+      <p class="hint">
+        Shared across all Warp buttons. Falls back to
+        <code>WARP_API_KEY</code> or <code>WARP_TOKEN</code>. See
+        <a href="https://docs.warp.dev/reference/cli/api-keys" style="color:#938bb4">Warp docs</a>.
+      </p>
+    </div>
+
+    <!-- z.ai auth -->
+    <div id="authConfig-zai" class="auth-config" style="display:none">
+      <label for="zaiKey">z.ai API key</label>
+      <div class="key-row">
+        <input id="zaiKey" type="password" autocomplete="off" placeholder="z-…" data-provider-key="zaiKey">
+        <button type="button" class="reveal-btn" data-reveal-target="zaiKey">Show</button>
+      </div>
+      <label for="zaiRegion">API region</label>
+      <select id="zaiRegion" data-provider-key="zaiRegion">
+        <option value="">Global (api.z.ai)</option>
+        <option value="bigmodel-cn">BigModel CN (open.bigmodel.cn)</option>
+      </select>
+      <label for="zaiHost">Host override (optional)</label>
+      <input id="zaiHost" type="text" placeholder="https://api.z.ai" data-provider-key="zaiHost">
+      <p class="hint">
+        Shared across all z.ai buttons. Key falls back to
+        <code>Z_AI_API_KEY</code> / <code>ZAI_API_TOKEN</code> /
+        <code>ZAI_API_KEY</code>; host falls back to
+        <code>Z_AI_API_HOST</code> then the region selection. Set
+        <code>Z_AI_QUOTA_URL</code> to override the full quota endpoint.
+      </p>
+    </div>
+
+    <!-- Kimi K2 auth -->
+    <div id="authConfig-kimi-k2" class="auth-config" style="display:none">
+      <label for="kimik2Key">Kimi K2 API key</label>
+      <div class="key-row">
+        <input id="kimik2Key" type="password" autocomplete="off" placeholder="sk-…" data-provider-key="kimiK2Key">
+        <button type="button" class="reveal-btn" data-reveal-target="kimik2Key">Show</button>
+      </div>
+      <p class="hint">
+        Shared across all Kimi K2 buttons. Falls back to
+        <code>KIMI_K2_API_KEY</code>, <code>KIMI_API_KEY</code>, or
+        <code>KIMI_KEY</code>.
+      </p>
+    </div>
   </div>
 
   <!-- ================== Plugin tab (shared) =================== -->
@@ -601,6 +602,19 @@
     // Providers that have auth config panels
     const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "ollama", "openrouter", "warp", "zai", "kimi-k2"];
 
+    // Display name shown on the per-provider tab.
+    const PROVIDER_DISPLAY_NAMES = {
+      claude:     "Claude",
+      codex:      "Codex",
+      copilot:    "Copilot",
+      cursor:     "Cursor",
+      ollama:     "Ollama",
+      openrouter: "OpenRouter",
+      warp:       "Warp",
+      zai:        "z.ai",
+      "kimi-k2":  "Kimi K2",
+    };
+
     // ---------- Provider from action UUID ----------
     const ACTION_PREFIX = "io.github.anthonybaldwin.usagebuttons.";
     let currentProviderId = "mock";
@@ -628,11 +642,20 @@
       tab.addEventListener("click", () => showTab(tab.dataset.tab));
     }
     // Restore tab across PI reloads within the same session so the
-    // user doesn't land on "This button" every single click.
-    try {
-      const saved = sessionStorage.getItem(TAB_STORAGE_KEY);
-      if (saved === "plugin") showTab("plugin");
-    } catch { /* ignore */ }
+    // user doesn't land on "This button" every single click. The
+    // provider tab is only restored if it's actually visible for the
+    // current action's provider.
+    function restoreTab() {
+      try {
+        const saved = sessionStorage.getItem(TAB_STORAGE_KEY);
+        if (saved === "plugin") {
+          showTab("plugin");
+        } else if (saved === "provider") {
+          const tab = document.getElementById("providerTab");
+          if (tab && tab.style.display !== "none") showTab("provider");
+        }
+      } catch { /* ignore */ }
+    }
 
     // ---------- Browser-gated metric helpers ----------
     // Providers whose ENTIRE metric set requires the Usage Buttons
@@ -752,14 +775,20 @@
       for (const el of document.querySelectorAll(".auth-config")) {
         el.style.display = "none";
       }
-      // Show the relevant one (if it exists)
       const panel = document.getElementById("authConfig-" + providerId);
-      const authSection = document.getElementById("providerAuth");
-      if (panel && providerId !== "mock") {
-        authSection.style.display = "";
+      const providerTab = document.getElementById("providerTab");
+      const displayName = PROVIDER_DISPLAY_NAMES[providerId];
+      if (panel && providerId !== "mock" && displayName) {
         panel.style.display = "";
+        providerTab.textContent = displayName;
+        providerTab.style.display = "";
       } else {
-        authSection.style.display = "none";
+        providerTab.style.display = "none";
+        // Fall back to the button tab if we were on the provider tab
+        // and the new provider doesn't have one.
+        if (document.getElementById("providerPanel").classList.contains("active")) {
+          showTab("button");
+        }
       }
     }
 
@@ -844,6 +873,7 @@
       // Derive provider from action UUID
       currentProviderId = providerIdFromAction(actionInfo.action);
       showAuthConfig(currentProviderId);
+      restoreTab();
 
       websocket = new WebSocket("ws://127.0.0.1:" + port);
       websocket.onopen = () => {

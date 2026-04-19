@@ -1,6 +1,9 @@
 # Reference clones (not part of our source)
 tmp/
 
+# Working plans / scratch notes — keep out of the repo
+plans/
+
 # Dependencies
 node_modules/
 bun.lockb.bak

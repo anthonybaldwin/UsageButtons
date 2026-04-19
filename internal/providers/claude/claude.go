@@ -539,8 +539,8 @@ func extraUsageMetrics(extra *extraUsageSource) []providers.MetricValue {
 		providers.MetricValue{
 			ID: "extra-usage-limit", Label: "LIMIT",
 			Name: fmt.Sprintf("Extra usage monthly limit (%s)", extra.currency),
-			Value: fmt.Sprintf("$%.2f", limit), NumericValue: &spent,
-			NumericUnit: "dollars", NumericGoodWhen: "low", NumericMax: &limit,
+			Value: fmt.Sprintf("$%.2f", limit), NumericValue: &limit,
+			NumericUnit: "dollars", NumericGoodWhen: "high",
 			Caption: "Monthly",
 		},
 		spentMetric,

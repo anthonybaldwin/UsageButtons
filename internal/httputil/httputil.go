@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -36,6 +37,57 @@ func (e *Error) Error() string {
 // Header returns a response header value (case-insensitive).
 func (e *Error) Header(name string) string {
 	return e.Headers.Get(name)
+}
+
+// RetryAfter returns the absolute time the server asked us to wait
+// until before retrying, parsed from common rate-limit / server-busy
+// response headers. Returns zero-time when no recognized hint is
+// present or the status code isn't one that should carry one.
+//
+// Recognized headers, in order of preference:
+//   - Retry-After            (RFC 7231: seconds OR HTTP date)
+//   - x-ratelimit-reset      (Unix timestamp OR seconds-from-now)
+//   - anthropic-ratelimit-requests-reset (ISO 8601)
+//   - anthropic-ratelimit-tokens-reset   (ISO 8601)
+func (e *Error) RetryAfter() time.Time {
+	if e == nil {
+		return time.Time{}
+	}
+	if e.Status != 429 && e.Status != 503 {
+		return time.Time{}
+	}
+	now := time.Now()
+	if v := e.Headers.Get("Retry-After"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil {
+			return now.Add(time.Duration(secs) * time.Second)
+		}
+		if t, err := http.ParseTime(v); err == nil {
+			return t
+		}
+	}
+	if v := e.Headers.Get("x-ratelimit-reset"); v != "" {
+		if secs, err := strconv.ParseInt(v, 10, 64); err == nil {
+			// Heuristic: large integers are absolute Unix timestamps;
+			// small integers are a relative delay in seconds. Anything
+			// far enough in the future to be reached as "now + secs"
+			// (roughly past one year from epoch) is treated as absolute.
+			if secs > now.Unix()-86400 {
+				return time.Unix(secs, 0)
+			}
+			return now.Add(time.Duration(secs) * time.Second)
+		}
+	}
+	for _, name := range []string{
+		"anthropic-ratelimit-requests-reset",
+		"anthropic-ratelimit-tokens-reset",
+	} {
+		if v := e.Headers.Get(name); v != "" {
+			if t, err := time.Parse(time.RFC3339, v); err == nil {
+				return t
+			}
+		}
+	}
+	return time.Time{}
 }
 
 // GetJSON performs a GET request and decodes the JSON response into dst.

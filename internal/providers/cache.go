@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -39,6 +40,38 @@ func cacheLog(format string, args ...any) {
 type cacheError struct {
 	message string
 	at      time.Time
+	// retryAt, when non-zero, overrides the flat CooldownDuration with
+	// an absolute time supplied by the server (via Retry-After /
+	// x-ratelimit-reset / anthropic-ratelimit-*-reset headers).
+	retryAt time.Time
+}
+
+// retryAfterer is satisfied by error types that expose a server-hinted
+// retry time. httputil.Error implements it; any future error type that
+// wraps an upstream response can satisfy the same interface to share
+// this cooldown logic without importing httputil from the cache layer.
+type retryAfterer interface {
+	RetryAfter() time.Time
+}
+
+// retryAfterFromError returns the upstream-supplied retry time if the
+// error (or any error in its chain) provides one, else zero-value.
+func retryAfterFromError(err error) time.Time {
+	var ra retryAfterer
+	if errors.As(err, &ra) {
+		return ra.RetryAfter()
+	}
+	return time.Time{}
+}
+
+// cooldownUntil returns the absolute time the cache should stop
+// serving fresh fetches after a given error. A server hint wins when
+// present; otherwise we fall back to at+CooldownDuration.
+func (e *cacheError) cooldownUntil() time.Time {
+	if !e.retryAt.IsZero() {
+		return e.retryAt
+	}
+	return e.at.Add(CooldownDuration)
 }
 
 type cacheEntry struct {
@@ -83,20 +116,29 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 
 	e.mu.Lock()
 
-	// 1. Error cooldown: serve stale or error snapshot.
-	if e.lastError != nil && now.Sub(e.lastError.at) < CooldownDuration {
-		left := CooldownDuration - now.Sub(e.lastError.at)
-		cacheLog("cache[%s] cool-down: %ds left, serving %s (last error: %s)",
-			p.ID(), int(left.Seconds()),
-			boolStr(e.snapshot != nil, "stale snapshot", "error face"),
-			e.lastError.message)
-		if e.snapshot != nil {
-			s := markStale(*e.snapshot, e.lastError.message)
+	// 1. Error cooldown: serve stale or error snapshot. If the server
+	//    sent a retry hint, honor it; otherwise fall back to the flat
+	//    CooldownDuration.
+	if e.lastError != nil {
+		until := e.lastError.cooldownUntil()
+		if now.Before(until) {
+			left := until.Sub(now)
+			source := "default"
+			if !e.lastError.retryAt.IsZero() {
+				source = "server-hinted"
+			}
+			cacheLog("cache[%s] cool-down (%s): %ds left, serving %s (last error: %s)",
+				p.ID(), source, int(left.Seconds()),
+				boolStr(e.snapshot != nil, "stale snapshot", "error face"),
+				e.lastError.message)
+			if e.snapshot != nil {
+				s := markStale(*e.snapshot, e.lastError.message)
+				e.mu.Unlock()
+				return s
+			}
 			e.mu.Unlock()
-			return s
+			return errorSnapshot(p, e.lastError.message)
 		}
-		e.mu.Unlock()
-		return errorSnapshot(p, e.lastError.message)
 	}
 
 	// 2. Manual refresh throttle.
@@ -156,9 +198,15 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 	e.mu.Lock()
 	if fetchErr != nil {
 		msg := fetchErr.Error()
-		e.lastError = &cacheError{message: msg, at: time.Now()}
-		cacheLog("cache[%s] fetch FAILED: %s — cooling down for %ds",
-			p.ID(), msg, int(CooldownDuration.Seconds()))
+		retryAt := retryAfterFromError(fetchErr)
+		e.lastError = &cacheError{message: msg, at: time.Now(), retryAt: retryAt}
+		if !retryAt.IsZero() {
+			cacheLog("cache[%s] fetch FAILED: %s — server hint: retry after %ds",
+				p.ID(), msg, int(time.Until(retryAt).Seconds()))
+		} else {
+			cacheLog("cache[%s] fetch FAILED: %s — cooling down for %ds",
+				p.ID(), msg, int(CooldownDuration.Seconds()))
+		}
 		if e.snapshot != nil {
 			snapshot = markStale(*e.snapshot, msg)
 		} else {

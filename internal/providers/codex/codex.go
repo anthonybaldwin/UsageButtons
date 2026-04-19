@@ -194,16 +194,28 @@ type usageWindow struct {
 	LimitWindowSeconds *float64 `json:"limit_window_seconds"`
 }
 
+type rateLimitBlock struct {
+	PrimaryWindow   *usageWindow `json:"primary_window"`
+	SecondaryWindow *usageWindow `json:"secondary_window"`
+}
+
+type additionalRateLimit struct {
+	LimitName      string          `json:"limit_name"`
+	MeteredFeature string          `json:"metered_feature"`
+	RateLimit      *rateLimitBlock `json:"rate_limit"`
+}
+
 type usageResponse struct {
-	PlanType  *string `json:"plan_type"`
-	RateLimit *struct {
-		PrimaryWindow   *usageWindow `json:"primary_window"`
-		SecondaryWindow *usageWindow `json:"secondary_window"`
-	} `json:"rate_limit"`
-	Credits *struct {
-		HasCredits *bool   `json:"has_credits"`
-		Unlimited  *bool   `json:"unlimited"`
-		Balance    any     `json:"balance"` // number or string
+	PlanType  *string         `json:"plan_type"`
+	RateLimit *rateLimitBlock `json:"rate_limit"`
+	// Code Review (codex /review) quota — same primary/secondary shape
+	// as rate_limit. Null when the user hasn't used Code Review yet.
+	CodeReviewRateLimit *rateLimitBlock       `json:"code_review_rate_limit"`
+	AdditionalRateLimits []additionalRateLimit `json:"additional_rate_limits"`
+	Credits              *struct {
+		HasCredits *bool `json:"has_credits"`
+		Unlimited  *bool `json:"unlimited"`
+		Balance    any   `json:"balance"` // number or string
 	} `json:"credits"`
 }
 
@@ -414,9 +426,57 @@ func (Provider) MetricIDs() []string {
 	return []string{
 		"session-percent", "session-pace",
 		"weekly-percent", "weekly-pace",
+		"review-percent", "review-pace",
+		"weekly-review-percent", "weekly-review-pace",
 		"credits-balance",
 		"cost-today", "cost-30d",
 	}
+}
+
+// extraLaneSlug turns an additional_rate_limits entry into a stable
+// metric-ID slug. Prefers metered_feature (stable across API model
+// renames) over limit_name (human-readable).
+func extraLaneSlug(x additionalRateLimit) string {
+	for _, candidate := range []string{x.MeteredFeature, x.LimitName} {
+		s := slugify(candidate)
+		if s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+// displayLaneLabel returns a human-readable label for an extra lane.
+// Prefers limit_name; falls back to a title-cased metered_feature.
+func displayLaneLabel(x additionalRateLimit) string {
+	if n := strings.TrimSpace(x.LimitName); n != "" {
+		return n
+	}
+	if n := strings.TrimSpace(x.MeteredFeature); n != "" {
+		return n
+	}
+	return "Extra"
+}
+
+// slugify lower-cases and strips characters that would be unfriendly
+// in a metric ID. Collapses runs of hyphens.
+func slugify(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	prevDash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			prevDash = false
+		case r == '-' || r == '_' || r == ' ' || r == '.' || r == '/':
+			if !prevDash && b.Len() > 0 {
+				b.WriteByte('-')
+				prevDash = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
@@ -469,6 +529,59 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	}
 	if p := paceFromWindow("weekly-pace", "WEEKLY", "Weekly pace (7d)", windows.weekly); p != nil {
 		metrics = append(metrics, *p)
+	}
+
+	// Code Review (codex /review) quota. The wham/usage response
+	// carries a code_review_rate_limit block with the same
+	// primary/secondary shape as the main rate_limit. It's null until
+	// the user first uses Code Review, so we skip metric emission
+	// when it's absent to avoid dead tiles on fresh accounts.
+	if resp.CodeReviewRateLimit != nil {
+		crWindows := normalizeWindows(
+			resp.CodeReviewRateLimit.PrimaryWindow,
+			resp.CodeReviewRateLimit.SecondaryWindow,
+		)
+		if m := remainingMetric("review-percent", "REVIEW", "Code Review session remaining (5h)", crWindows.session); m != nil {
+			metrics = append(metrics, *m)
+		}
+		if m := paceFromWindow("review-pace", "REVIEW", "Code Review pace (5h)", crWindows.session); m != nil {
+			metrics = append(metrics, *m)
+		}
+		if m := remainingMetric("weekly-review-percent", "REVIEW", "Code Review weekly remaining", crWindows.weekly); m != nil {
+			metrics = append(metrics, *m)
+		}
+		if m := paceFromWindow("weekly-review-pace", "REVIEW", "Code Review weekly pace (7d)", crWindows.weekly); m != nil {
+			metrics = append(metrics, *m)
+		}
+	}
+
+	// Additional rate limits — per-model extras like GPT-5.3-Codex-Spark.
+	// Each entry gets its own set of metrics, slugged by metered_feature
+	// so the IDs stay stable across model renames. Labels use limit_name
+	// (human-readable) and fall back to the slug when absent.
+	for _, extra := range resp.AdditionalRateLimits {
+		if extra.RateLimit == nil {
+			continue
+		}
+		slug := extraLaneSlug(extra)
+		if slug == "" {
+			continue
+		}
+		label := strings.ToUpper(displayLaneLabel(extra))
+		extraName := displayLaneLabel(extra)
+		ew := normalizeWindows(extra.RateLimit.PrimaryWindow, extra.RateLimit.SecondaryWindow)
+		if m := remainingMetric(slug+"-percent", label, extraName+" session remaining (5h)", ew.session); m != nil {
+			metrics = append(metrics, *m)
+		}
+		if m := paceFromWindow(slug+"-pace", label, extraName+" pace (5h)", ew.session); m != nil {
+			metrics = append(metrics, *m)
+		}
+		if m := remainingMetric("weekly-"+slug+"-percent", label, extraName+" weekly remaining", ew.weekly); m != nil {
+			metrics = append(metrics, *m)
+		}
+		if m := paceFromWindow("weekly-"+slug+"-pace", label, extraName+" weekly pace (7d)", ew.weekly); m != nil {
+			metrics = append(metrics, *m)
+		}
 	}
 
 	// Credits metric. Emit whenever the plan actually has a credits

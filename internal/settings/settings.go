@@ -200,6 +200,37 @@ func ProviderKeysGet() ProviderKeys {
 	return current.ProviderKeys
 }
 
+// ChangedProviderIDs returns the provider IDs whose credentials or
+// endpoint overrides differ between prev and next. Callers use this
+// to invalidate cached provider snapshots so the next poll picks up
+// the new configuration instead of serving stale data.
+func ChangedProviderIDs(prev, next ProviderKeys) []string {
+	var out []string
+	if prev.OpenRouterKey != next.OpenRouterKey ||
+		prev.OpenRouterURL != next.OpenRouterURL {
+		out = append(out, "openrouter")
+	}
+	if prev.WarpKey != next.WarpKey {
+		out = append(out, "warp")
+	}
+	if prev.ZaiKey != next.ZaiKey ||
+		prev.ZaiHost != next.ZaiHost ||
+		prev.ZaiQuotaURL != next.ZaiQuotaURL ||
+		prev.ZaiRegion != next.ZaiRegion {
+		out = append(out, "zai")
+	}
+	if prev.KimiK2Key != next.KimiK2Key {
+		out = append(out, "kimi-k2")
+	}
+	if prev.CopilotToken != next.CopilotToken {
+		out = append(out, "copilot")
+	}
+	if prev.CodexChatGPTBaseURL != next.CodexChatGPTBaseURL {
+		out = append(out, "codex")
+	}
+	return out
+}
+
 // ResolveAPIKey returns the first non-empty credential from: the
 // user-supplied value (typically a PI settings field) or the named
 // environment variables in order. Values are trimmed and stripped

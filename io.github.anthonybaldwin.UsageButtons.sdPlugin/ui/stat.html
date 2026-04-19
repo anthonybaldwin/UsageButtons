@@ -70,6 +70,17 @@
     hr { border: none; border-top: 1px solid #374151; margin: 14px 0 0; }
     code { background: #1f2937; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
 
+    /* API key row: input + show/hide toggle */
+    .key-row { display: flex; align-items: stretch; gap: 6px; }
+    .key-row input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .reveal-btn {
+      background: #1f2937; color: #9ca3af; border: 1px solid #374151;
+      border-radius: 4px; padding: 4px 10px; font: inherit; font-size: 11px;
+      cursor: pointer; white-space: nowrap;
+    }
+    .reveal-btn:hover { color: #e5e7eb; background: #374151; }
+    .reveal-btn.active { color: #f9fafb; background: #111827; }
+
     /* Subtle header above each logical group inside a panel */
     .group-heading {
       margin: 18px 0 2px;
@@ -150,13 +161,16 @@
 
       <!-- Copilot auth -->
       <div id="authConfig-copilot" class="auth-config" style="display:none">
+        <label for="copilotToken">GitHub token (optional)</label>
+        <div class="key-row">
+          <input id="copilotToken" type="password" autocomplete="off" placeholder="ghp_… / gho_…" data-provider-key="copilotToken">
+          <button type="button" class="reveal-btn" data-reveal-target="copilotToken">Show</button>
+        </div>
         <p class="hint">
-          Copilot reads your GitHub token automatically from
-          <code>~/.config/github-copilot/hosts.json</code> (written by
-          <code>gh auth login</code>). You can also set the
-          <code>GITHUB_TOKEN</code> environment variable. No manual
-          configuration needed if <code>gh</code> CLI is installed and
-          authenticated.
+          Stored in plugin settings. Falls back to <code>GITHUB_TOKEN</code>,
+          then <code>~/.config/github-copilot/hosts.json</code> /
+          <code>apps.json</code> (written by <code>gh auth login</code>).
+          Leave blank if <code>gh</code> is signed in.
         </p>
       </div>
 
@@ -174,34 +188,70 @@
 
       <!-- OpenRouter auth -->
       <div id="authConfig-openrouter" class="auth-config" style="display:none">
+        <label for="openrouterKey">OpenRouter API key</label>
+        <div class="key-row">
+          <input id="openrouterKey" type="password" autocomplete="off" placeholder="sk-or-…" data-provider-key="openRouterKey">
+          <button type="button" class="reveal-btn" data-reveal-target="openrouterKey">Show</button>
+        </div>
+        <label for="openrouterURL">API base URL (optional)</label>
+        <input id="openrouterURL" type="text" placeholder="https://openrouter.ai/api/v1" data-provider-key="openRouterURL">
         <p class="hint">
-          Set the <code>OPENROUTER_API_KEY</code> environment variable with
-          your API key from
+          Stored in plugin settings. Key falls back to
+          <code>OPENROUTER_API_KEY</code>; base URL falls back to
+          <code>OPENROUTER_API_URL</code>, then the public endpoint.
+          Get your key at
           <a href="https://openrouter.ai/settings/keys" style="color:#6467f2">openrouter.ai/settings/keys</a>.
         </p>
       </div>
 
       <!-- Warp auth -->
       <div id="authConfig-warp" class="auth-config" style="display:none">
+        <label for="warpKey">Warp API key</label>
+        <div class="key-row">
+          <input id="warpKey" type="password" autocomplete="off" placeholder="Settings → Platform → API Keys" data-provider-key="warpKey">
+          <button type="button" class="reveal-btn" data-reveal-target="warpKey">Show</button>
+        </div>
         <p class="hint">
-          Set the <code>WARP_API_KEY</code> environment variable. See
+          Stored in plugin settings. Falls back to <code>WARP_API_KEY</code>
+          or <code>WARP_TOKEN</code>. See
           <a href="https://docs.warp.dev/reference/cli/api-keys" style="color:#938bb4">Warp docs</a>.
         </p>
       </div>
 
       <!-- z.ai auth -->
       <div id="authConfig-zai" class="auth-config" style="display:none">
+        <label for="zaiKey">z.ai API key</label>
+        <div class="key-row">
+          <input id="zaiKey" type="password" autocomplete="off" placeholder="z-…" data-provider-key="zaiKey">
+          <button type="button" class="reveal-btn" data-reveal-target="zaiKey">Show</button>
+        </div>
+        <label for="zaiRegion">API region</label>
+        <select id="zaiRegion" data-provider-key="zaiRegion">
+          <option value="">Global (api.z.ai)</option>
+          <option value="bigmodel-cn">BigModel CN (open.bigmodel.cn)</option>
+        </select>
+        <label for="zaiHost">Host override (optional)</label>
+        <input id="zaiHost" type="text" placeholder="https://api.z.ai" data-provider-key="zaiHost">
         <p class="hint">
-          Set the <code>ZAI_API_TOKEN</code> environment variable with
-          your API token from the z.ai dashboard.
+          Stored in plugin settings. Key falls back to
+          <code>Z_AI_API_KEY</code> / <code>ZAI_API_TOKEN</code> /
+          <code>ZAI_API_KEY</code>; host falls back to
+          <code>Z_AI_API_HOST</code> then the region selection. Set
+          <code>Z_AI_QUOTA_URL</code> to override the full quota endpoint.
         </p>
       </div>
 
       <!-- Kimi K2 auth -->
       <div id="authConfig-kimi-k2" class="auth-config" style="display:none">
+        <label for="kimik2Key">Kimi K2 API key</label>
+        <div class="key-row">
+          <input id="kimik2Key" type="password" autocomplete="off" placeholder="sk-…" data-provider-key="kimiK2Key">
+          <button type="button" class="reveal-btn" data-reveal-target="kimik2Key">Show</button>
+        </div>
         <p class="hint">
-          Set the <code>KIMI_K2_API_KEY</code> (or <code>KIMI_API_KEY</code>)
-          environment variable.
+          Stored in plugin settings. Falls back to
+          <code>KIMI_K2_API_KEY</code>, <code>KIMI_API_KEY</code>, or
+          <code>KIMI_KEY</code>.
         </p>
       </div>
     </div>
@@ -754,6 +804,26 @@
       document.getElementById("invertFill").checked = globals.invertFill === true;
       document.getElementById("showGlyphs").checked = globals.showGlyphs !== false;
       document.getElementById("skipUpdateCheck").checked = globals.skipUpdateCheck === true;
+      applyProviderKeys(globals.providerKeys);
+    }
+
+    function applyProviderKeys(keys) {
+      keys = keys || {};
+      document.querySelectorAll("[data-provider-key]").forEach((el) => {
+        const name = el.getAttribute("data-provider-key");
+        el.value = keys[name] || "";
+      });
+    }
+
+    function collectProviderKeys() {
+      const out = {};
+      document.querySelectorAll("[data-provider-key]").forEach((el) => {
+        const name = el.getAttribute("data-provider-key");
+        const raw = el.value || "";
+        const v = raw.trim();
+        if (v) out[name] = v;
+      });
+      return out;
     }
 
     function connectElgatoStreamDeckSocket(port, inUUID, registerEvent, info, inActionInfo) {
@@ -845,9 +915,11 @@
         invertFill:            document.getElementById("invertFill").checked,
         showGlyphs:            document.getElementById("showGlyphs").checked,
         skipUpdateCheck:       document.getElementById("skipUpdateCheck").checked,
+        providerKeys:          collectProviderKeys(),
         // Preserve plugin-managed flags that have no UI control.
-        cookieHostOptedOut:     lastGlobalSettings.cookieHostOptedOut || false,
+        cookieHostOptedOut:    lastGlobalSettings.cookieHostOptedOut || false,
       };
+      lastGlobalSettings = payload;
       websocket.send(JSON.stringify({
         event: "setGlobalSettings",
         context: uuid,
@@ -1056,6 +1128,37 @@
         el.addEventListener("input", pushGlobalSettings);
       }
     }
+
+    // Per-provider key / URL / region inputs live in the "Authentication"
+    // section on the button tab. They all carry a data-provider-key
+    // attribute so collectProviderKeys() can gather them into the
+    // providerKeys payload.
+    document.querySelectorAll("[data-provider-key]").forEach((el) => {
+      el.addEventListener("change", pushGlobalSettings);
+      if (
+        el.tagName === "INPUT" &&
+        (el.type === "text" || el.type === "password")
+      ) {
+        el.addEventListener("input", pushGlobalSettings);
+      }
+    });
+
+    // Show/hide toggles for password fields.
+    document.querySelectorAll(".reveal-btn[data-reveal-target]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const target = document.getElementById(btn.getAttribute("data-reveal-target"));
+        if (!target) return;
+        if (target.type === "password") {
+          target.type = "text";
+          btn.textContent = "Hide";
+          btn.classList.add("active");
+        } else {
+          target.type = "password";
+          btn.textContent = "Show";
+          btn.classList.remove("active");
+        }
+      });
+    });
 
     // "Reset text-size overrides" sends a custom sendToPlugin
     // event that the plugin handles by iterating every visible

@@ -370,7 +370,17 @@ func handleDidReceiveGlobalSettings(conn *streamdeck.Connection, ev streamdeck.E
 
 	var gs settings.GlobalSettings
 	json.Unmarshal(payload.Settings, &gs)
+
+	// Diff the previous snapshot against the incoming one before we
+	// overwrite it, so we can drop cache entries for providers whose
+	// credentials or endpoint overrides just changed. Without this the
+	// next poll would serve the old snapshot for up to MinTTL.
+	prevKeys := settings.ProviderKeysGet()
 	settings.Set(gs)
+	for _, id := range settings.ChangedProviderIDs(prevKeys, gs.ProviderKeys) {
+		providers.ClearCache(id)
+		conn.Logf("provider config changed — cleared cache for %s", id)
+	}
 
 	conn.Logf("global settings updated")
 	go refreshAllVisible(conn)

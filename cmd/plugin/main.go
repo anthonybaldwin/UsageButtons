@@ -1072,8 +1072,8 @@ var knownCaptions = map[string]string{
 	"extra-usage-enabled":    "Toggle",
 	"extra-usage-auto-reload": "Auto-reload",
 	"credits-balance":        "Balance",
-	"cost-today":             "This machine",
-	"cost-30d":               "This machine",
+	"cost-today":             "Cost (local)",
+	"cost-30d":               "Cost (local)",
 }
 
 func metricCaptionForPlaceholder(metricID string) string {

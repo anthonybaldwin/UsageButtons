@@ -197,7 +197,7 @@ func costMetrics() []providers.MetricValue {
 			NumericValue:    &today,
 			NumericUnit:     "dollars",
 			NumericGoodWhen: "low",
-			Caption:         "This machine",
+			Caption:         "Cost (local)",
 			UpdatedAt:       now,
 		})
 
@@ -210,7 +210,7 @@ func costMetrics() []providers.MetricValue {
 			NumericValue:    &last30,
 			NumericUnit:     "dollars",
 			NumericGoodWhen: "low",
-			Caption:         "This machine",
+			Caption:         "Cost (local)",
 			UpdatedAt:       now,
 		})
 	}

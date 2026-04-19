@@ -1,8 +1,10 @@
 // Package codex implements the Codex OAuth API usage provider.
 //
 // Reads credentials from ~/.codex/auth.json (or $CODEX_HOME/auth.json),
-// hits chatgpt.com/backend-api/wham/usage for session/weekly metrics
-// and credits balance.
+// hits {base}/wham/usage for session/weekly metrics and credits balance,
+// where {base} honors a chatgpt_base_url override in the Codex config
+// (~/.codex/config.toml or $CODEX_HOME/config.toml) — matching the
+// Codex CLI's own override plumbing — and defaults to chatgpt.com.
 package codex
 
 import (
@@ -18,15 +20,93 @@ import (
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
 const (
-	usageURL  = "https://chatgpt.com/backend-api/wham/usage"
-	userAgent = "UsageButtons/0.0.1"
+	defaultChatGPTBaseURL = "https://chatgpt.com/backend-api"
+	userAgent             = "UsageButtons/0.0.1"
 
-	sessionWindowSeconds = 5 * 60 * 60  // 18000
+	sessionWindowSeconds = 5 * 60 * 60      // 18000
 	weeklyWindowSeconds  = 7 * 24 * 60 * 60 // 604800
 )
+
+// chatGPTBaseURL resolves the ChatGPT/OpenAI backend base in this
+// priority order:
+//  1. Property Inspector override (settings.ProviderKeys.CodexChatGPTBaseURL)
+//  2. chatgpt_base_url = "..." in ~/.codex/config.toml (or $CODEX_HOME)
+//  3. defaultChatGPTBaseURL
+// Normalizes trailing slashes and appends /backend-api when a bare
+// chatgpt.com / chat.openai.com host is supplied.
+func chatGPTBaseURL() string {
+	if v := normalizeChatGPTBase(settings.ProviderKeysGet().CodexChatGPTBaseURL); v != "" {
+		return v
+	}
+	if v := normalizeChatGPTBase(readConfigBaseURL()); v != "" {
+		return v
+	}
+	return defaultChatGPTBaseURL
+}
+
+func usageURL() string {
+	return chatGPTBaseURL() + "/wham/usage"
+}
+
+func codexConfigPath() string {
+	if ch := strings.TrimSpace(os.Getenv("CODEX_HOME")); ch != "" {
+		return filepath.Join(ch, "config.toml")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".codex", "config.toml")
+}
+
+func readConfigBaseURL() string {
+	data, err := os.ReadFile(codexConfigPath())
+	if err != nil {
+		return ""
+	}
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := raw
+		if i := strings.Index(line, "#"); i >= 0 {
+			line = line[:i]
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		eq := strings.IndexByte(line, '=')
+		if eq < 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:eq])
+		if key != "chatgpt_base_url" {
+			continue
+		}
+		val := strings.TrimSpace(line[eq+1:])
+		if len(val) >= 2 {
+			first, last := val[0], val[len(val)-1]
+			if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+				val = val[1 : len(val)-1]
+			}
+		}
+		return strings.TrimSpace(val)
+	}
+	return ""
+}
+
+func normalizeChatGPTBase(raw string) string {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return ""
+	}
+	v = strings.TrimRight(v, "/")
+	if (strings.HasPrefix(v, "https://chatgpt.com") ||
+		strings.HasPrefix(v, "https://chat.openai.com")) &&
+		!strings.Contains(v, "/backend-api") {
+		v += "/backend-api"
+	}
+	return v
+}
 
 // --- Credential loading ---
 
@@ -355,7 +435,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	}
 
 	var resp usageResponse
-	err = httputil.GetJSON(usageURL, headers, 30*time.Second, &resp)
+	err = httputil.GetJSON(usageURL(), headers, 30*time.Second, &resp)
 	if err != nil {
 		var httpErr *httputil.Error
 		if errors.As(err, &httpErr) {

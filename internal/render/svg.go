@@ -11,15 +11,18 @@ import (
 // Canvas is the edge length (in SVG user units) of a Stream Deck button face.
 const Canvas = 144
 
-// ProviderGlyph holds an SVG path for a provider logo. When Stroke
-// is true, the path is drawn with stroke+fill:none instead of the
-// default filled render — lets us use outline-style marks (Tabler,
-// Lucide, etc.) alongside the solid brand glyphs without reshaping
-// each path to a closed fill region.
+// ProviderGlyph holds an SVG path for a provider logo.
 type ProviderGlyph struct {
+	// ViewBox is the SVG viewBox attribute for the glyph path.
 	ViewBox string
-	D       string
-	Stroke  bool
+	// D is the SVG path `d` attribute for the glyph geometry.
+	D string
+	// Stroke renders the glyph as an outline (stroke + fill:none +
+	// vector-effect:non-scaling-stroke) instead of the default filled
+	// silhouette — lets outline marks (Tabler, Lucide, etc.) sit
+	// alongside solid brand glyphs without reshaping each path to a
+	// closed fill region.
+	Stroke bool
 }
 
 // ButtonInput configures a button face render.

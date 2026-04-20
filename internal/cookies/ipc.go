@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -124,6 +125,59 @@ func logf(format string, args ...any) {
 	}
 }
 
+// safeURLForLog returns scheme://host/path from raw, dropping query
+// strings and fragments. Cookie-gated providers sometimes encode
+// account IDs or session tokens in query params, so the raw URL must
+// not land in the persisted Stream Deck log.
+func safeURLForLog(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "<unparseable>"
+	}
+	return u.Scheme + "://" + u.Host + u.Path
+}
+
+// safeErrForLog collapses an error's text to a short, non-leaky token
+// for logs. We keep the type name (e.g. "*net.OpError") and, where
+// obvious, a coarse category — anything more detailed could echo
+// response bodies or headers back into the log.
+func safeErrForLog(err error) string {
+	if err == nil {
+		return "<nil>"
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "i/o timeout"):
+		return "i/o timeout"
+	case strings.Contains(msg, "connection refused"):
+		return "connection refused"
+	case strings.Contains(msg, "native host unavailable"):
+		return "native host unavailable"
+	case strings.Contains(msg, "deadline exceeded"):
+		return "deadline exceeded"
+	case strings.Contains(msg, "EOF"):
+		return "EOF"
+	}
+	return fmt.Sprintf("%T", err)
+}
+
+// safeExtErrForLog collapses an extension-supplied error string to a
+// short category, avoiding echoing potentially sensitive response
+// snippets into the log.
+func safeExtErrForLog(msg string) string {
+	switch {
+	case strings.Contains(msg, "extension not connected"):
+		return "extension not connected"
+	case strings.Contains(msg, "origin not allowed"):
+		return "origin not allowed"
+	case strings.Contains(msg, "timeout"):
+		return "timeout"
+	case msg == "":
+		return "<empty>"
+	}
+	return "extension error"
+}
+
 // requestID is an atomic counter used to mint unique plugin-side
 // message IDs for the native-messaging correlation layer.
 var requestID atomic.Uint64
@@ -195,17 +249,18 @@ func clientFetch(ctx context.Context, r Request) (Response, error) {
 	}
 
 	started := time.Now()
-	logf("fetch %s %s %s (body=%dB, timeout=%s)", reqID, method, r.URL, len(r.Body), defaultFetchTimeout)
+	logURL := safeURLForLog(r.URL)
+	logf("fetch %s %s %s (body=%dB, timeout=%s)", reqID, method, logURL, len(r.Body), defaultFetchTimeout)
 
 	resp, err := roundtrip(ctx, reqMsg, defaultFetchTimeout)
 	elapsed := time.Since(started)
 	if err != nil {
-		logf("fetch %s failed after %s: %v", reqID, elapsed, err)
+		logf("fetch %s failed after %s: %s", reqID, elapsed, safeErrForLog(err))
 		return Response{}, err
 	}
 
 	if resp.Kind == "error" {
-		logf("fetch %s extension-error after %s: %s", reqID, elapsed, resp.Error)
+		logf("fetch %s extension-error after %s: %s", reqID, elapsed, safeExtErrForLog(resp.Error))
 		if resp.Error == "extension not connected" {
 			return Response{}, ErrHostUnavailable
 		}
@@ -219,7 +274,7 @@ func clientFetch(ctx context.Context, r Request) (Response, error) {
 	if resp.Body != "" {
 		decoded, err := b64.DecodeString(resp.Body)
 		if err != nil {
-			logf("fetch %s decode-error after %s: %v", reqID, elapsed, err)
+			logf("fetch %s decode-error after %s: %s", reqID, elapsed, safeErrForLog(err))
 			return Response{}, fmt.Errorf("cookies: decode response body: %w", err)
 		}
 		body = decoded

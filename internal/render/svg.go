@@ -23,7 +23,7 @@ type ButtonInput struct {
 	Subvalue     string
 	Ratio        *float64 // nil = reference card
 	Direction    string   // "up"|"down"|"right"|"left"
-	Fill         string   // hex
+	Fill         string   // hex — meter fill
 	Bg           string   // hex
 	Fg           string   // hex
 	Border       *bool    // nil = true

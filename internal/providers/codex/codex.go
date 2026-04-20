@@ -423,9 +423,15 @@ func parseBalance(raw any) (float64, bool) {
 // Provider fetches Codex usage data.
 type Provider struct{}
 
-func (Provider) ID() string         { return "codex" }
-func (Provider) Name() string       { return "Codex" }
-func (Provider) BrandColor() string { return "#10A37F" }
+func (Provider) ID() string   { return "codex" }
+func (Provider) Name() string { return "Codex" }
+
+// BrandColor is deep indigo #3941FF — the bottom stop of the lavender→
+// indigo gradient used on the loading reference card. A single hex
+// (rather than a runtime gradient) keeps Codex's rendered buttons
+// visually uniform with every other provider; the gradient only
+// survives on the pre-data loading SVG as a subtle brand accent.
+func (Provider) BrandColor() string { return "#3941FF" }
 func (Provider) BrandBg() string    { return "#000000" }
 func (Provider) MetricIDs() []string {
 	return []string{

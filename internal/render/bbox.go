@@ -57,6 +57,31 @@ func PathBBox(d string) BBox {
 		return v
 	}
 
+	// consumeArcFlag advances past a single arc flag ('0' or '1'). In
+	// compact SVG path notation, flags may be packed with adjacent
+	// numbers (e.g., "013.046" = flag 0, flag 1, coord 3.046); in
+	// that case we peel one character off the current token and leave
+	// the remainder for the next read.
+	consumeArcFlag := func() {
+		for i < len(tokens) && len(tokens[i]) == 1 && isLetter(tokens[i][0]) {
+			i++
+		}
+		if i >= len(tokens) {
+			return
+		}
+		tok := tokens[i]
+		if tok == "0" || tok == "1" {
+			i++
+			return
+		}
+		if len(tok) > 1 && (tok[0] == '0' || tok[0] == '1') {
+			tokens[i] = tok[1:]
+			return
+		}
+		// Malformed; fall back to consuming a whole number.
+		i++
+	}
+
 	for i < len(tokens) {
 		tok := tokens[i]
 		if len(tok) == 1 && isLetter(tok[0]) {
@@ -100,7 +125,12 @@ func PathBBox(d string) BBox {
 			mark(x1, y1); mark(x, y)
 			cx, cy = x, y
 		case "A":
-			nextNum(); nextNum(); nextNum(); nextNum(); nextNum()
+			// rx, ry, x-axis-rotation
+			nextNum(); nextNum(); nextNum()
+			// large-arc-flag, sweep-flag (single '0'/'1' chars, may
+			// be packed with the next coord in compact notation)
+			consumeArcFlag(); consumeArcFlag()
+			// endpoint
 			x, y := nextNum(), nextNum()
 			if rel { x += cx; y += cy }
 			mark(x, y)

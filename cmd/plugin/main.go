@@ -222,6 +222,8 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 				"#374151", "#4b5563", "#1e293b", "#ffffff18", "#222e3b", "#3b82f6",
 				// Old brand colors (pre-v0.3).
 				"#49a3b0", "#a855f7", "#00bfa5", "#888888", "#938bb4", "#e85a6a", "#4c00ff",
+				// Old Codex green (pre blue/purple gradient).
+				"#10a37f",
 			}
 			if prov != nil {
 				staleFill = append(staleFill, strings.ToLower(prov.BrandColor()))

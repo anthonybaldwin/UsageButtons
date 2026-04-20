@@ -47,6 +47,12 @@ type GlobalSettings struct {
 	DefaultCriticalBelow  *float64                    `json:"defaultCriticalBelow,omitempty"`
 	DefaultCriticalColor  string                      `json:"defaultCriticalColor,omitempty"`
 	InvertFill            bool                        `json:"invertFill,omitempty"`
+	// SmartContrast enables the renderer's dual-layer text + glyph
+	// contrast auto-flip so a user-chosen foreground that would sit on
+	// a similar-luminance brand bg or fill gets auto-inverted on the
+	// offending region. Off by default — users opt in via the plugin
+	// settings tab when their provider palette needs it.
+	SmartContrast         *bool                       `json:"smartContrast,omitempty"`
 	ShowGlyphs            *bool                       `json:"showGlyphs,omitempty"`
 	SkipUpdateCheck       bool                        `json:"skipUpdateCheck,omitempty"`
 	CookieHostOptedOut    bool                        `json:"cookieHostOptedOut,omitempty"`
@@ -272,6 +278,19 @@ func InvertFillEnabled() bool {
 	mu.RLock()
 	defer mu.RUnlock()
 	return current.InvertFill
+}
+
+// SmartContrastEnabled returns the global smart-contrast toggle.
+// On by default so the out-of-box experience stays legible across
+// provider palettes (Ollama's light fill + dark bg pair especially
+// needs the auto-flip); users can opt out in the plugin settings tab.
+func SmartContrastEnabled() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if current.SmartContrast == nil {
+		return true
+	}
+	return *current.SmartContrast
 }
 
 // ShowGlyphsEnabled returns the global show-glyphs toggle.

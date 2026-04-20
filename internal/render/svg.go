@@ -11,10 +11,15 @@ import (
 // Canvas is the edge length (in SVG user units) of a Stream Deck button face.
 const Canvas = 144
 
-// ProviderGlyph holds an SVG path for a provider logo.
+// ProviderGlyph holds an SVG path for a provider logo. When Stroke
+// is true, the path is drawn with stroke+fill:none instead of the
+// default filled render — lets us use outline-style marks (Tabler,
+// Lucide, etc.) alongside the solid brand glyphs without reshaping
+// each path to a closed fill region.
 type ProviderGlyph struct {
 	ViewBox string
 	D       string
+	Stroke  bool
 }
 
 // ButtonInput configures a button face render.
@@ -34,6 +39,11 @@ type ButtonInput struct {
 	Glyph        *ProviderGlyph
 	GlyphMode    string // "watermark"|"centered"|"corner"|"none"
 	ShowGlyph    *bool  // nil = true
+	// SmartContrast enables the dual-layer contrast auto-flip for text
+	// and the watermark glyph's back layer. Off by default so the
+	// renderer honors the user's fg exactly; on, it auto-inverts
+	// against bg/fill when the user's fg would blend into them.
+	SmartContrast bool
 }
 
 // valueFontSizes maps a ButtonInput.ValueSize to a starting pixel size.
@@ -45,8 +55,12 @@ var subvalueFontSizes = map[string]int{"small": 14, "medium": 18, "large": 22}
 const (
 	valueFontMin  = 22
 	valueEmWidth  = 0.56
-	labelFontMax  = 16
-	labelFontMin  = 10
+	// labelFontMax matches the "large" subvalueFontSize so a short
+	// label can visually dominate the subtext — the category ("SESSION",
+	// "LIMIT", "TODAY") should read at least as prominently as the
+	// secondary line ("Cost (local)", "4h 20m"), not smaller than it.
+	labelFontMax  = 22
+	labelFontMin  = 12
 	subvalueMin   = 10
 )
 
@@ -131,17 +145,20 @@ func RenderButton(in ButtonInput) string {
 	bot := subvalueTop - float64(valueFontSize)*0.15
 	valueY := math.Round((top + bot) / 2)
 
-	// Label elements
-	labelElements := ""
-	if hasLabel {
+	// Label elements — helper so we can render them once in fg for the
+	// bg layer and again in fgFill for the fill-area overlay.
+	renderLabels := func(color string) string {
+		if !hasLabel {
+			return ""
+		}
 		var parts []string
 		for i, line := range labelLinesRaw {
 			y := 14.0 + float64(labelFontSize) + float64(i)*float64(labelLineHeight)
 			parts = append(parts, fmt.Sprintf(
 				`<text x="%d" y="%.0f" font-family="Helvetica,Arial,sans-serif" font-size="%d" font-weight="700" text-anchor="middle" fill="%s" fill-opacity="0.85">%s</text>`,
-				Canvas/2, y, labelFontSize, fg, xmlEscape(line)))
+				Canvas/2, y, labelFontSize, color, xmlEscape(line)))
 		}
-		labelElements = strings.Join(parts, "")
+		return strings.Join(parts, "")
 	}
 
 	// Border
@@ -157,11 +174,13 @@ func RenderButton(in ButtonInput) string {
 	if hasSub {
 		subvalueFitSize = fitFontSize(subvalue, float64(Canvas-16), preferredSubFont, subvalueMin)
 	}
-	subvalueElement := ""
-	if hasSub {
-		subvalueElement = fmt.Sprintf(
+	renderSubvalue := func(color string) string {
+		if !hasSub {
+			return ""
+		}
+		return fmt.Sprintf(
 			`<text x="%d" y="%.0f" font-family="Helvetica,Arial,sans-serif" font-size="%d" font-weight="700" text-anchor="middle" fill="%s" fill-opacity="0.85">%s</text>`,
-			Canvas/2, subvalueBaselineY, subvalueFitSize, fg, subvalue)
+			Canvas/2, subvalueBaselineY, subvalueFitSize, color, subvalue)
 	}
 
 	// Fill rect
@@ -177,6 +196,16 @@ func RenderButton(in ButtonInput) string {
 	glyphMode := def(in.GlyphMode, "watermark")
 	glyphBack := ""
 	glyphFront := ""
+
+	// Back glyph color: when SmartContrast is on, auto-contrast with bg
+	// so a user-chosen dark fg (e.g. black) doesn't disappear against a
+	// dark brand bg. Off, it uses fg verbatim — matches pre-SmartContrast
+	// behavior. The front layer always uses the original knockout-via-bg
+	// trick, which just produces the duotone watermark.
+	glyphBg := fg
+	if in.SmartContrast {
+		glyphBg = contrastOver(fg, bg)
+	}
 
 	if showGlyph && in.Glyph != nil {
 		switch glyphMode {
@@ -201,51 +230,65 @@ func RenderButton(in ButtonInput) string {
 				frontColor = bg
 				frontOpacity = 0.30
 			} else {
-				// Dark fill (reference cards, empty meters) — white
+				// Dark fill (reference cards, empty meters) — light
 				// glyph so it's actually visible against the dark bg.
-				frontColor = fg
+				frontColor = glyphBg
 				frontOpacity = 0.40
 			}
 
-			glyphBack = fmt.Sprintf(
-				`<g transform="%s" fill="%s" fill-opacity="0.70"><path d="%s"/></g>`,
-				xf, fg, in.Glyph.D)
-			glyphFront = fmt.Sprintf(
-				`<g transform="%s" fill="%s" fill-opacity="%.2f"><path d="%s"/></g>`,
-				xf, frontColor, frontOpacity, in.Glyph.D)
+			glyphBack = glyphPathMarkup(xf, glyphBg, 0.70, in.Glyph)
+			glyphFront = glyphPathMarkup(xf, frontColor, frontOpacity, in.Glyph)
 
 		case "centered":
 			gSize := 60.0
 			gOff := (float64(Canvas) - gSize) / 2
 			xf := ContentFitTransform(in.Glyph.D, gOff, gOff, gSize, gSize)
-			glyphFront = fmt.Sprintf(
-				`<g transform="%s" fill="%s" fill-opacity="0.92"><path d="%s"/></g>`,
-				xf, fg, in.Glyph.D)
+			glyphFront = glyphPathMarkup(xf, glyphBg, 0.92, in.Glyph)
 
 		case "corner":
 			gSize := 20.0
 			gx := float64(Canvas) - gSize - 6
 			gy := 6.0
 			xf := ContentFitTransform(in.Glyph.D, gx, gy, gSize, gSize)
-			glyphFront = fmt.Sprintf(
-				`<g transform="%s" fill="%s" fill-opacity="0.7"><path d="%s"/></g>`,
-				xf, fg, in.Glyph.D)
+			glyphFront = glyphPathMarkup(xf, glyphBg, 0.70, in.Glyph)
 		}
 	}
 
 	showValueText := !(glyphMode == "centered" && showGlyph)
 
-	valueText := ""
-	if showValueText {
-		valueText = fmt.Sprintf(
+	renderValue := func(color string) string {
+		if !showValueText {
+			return ""
+		}
+		return fmt.Sprintf(
 			`<text x="%d" y="%.0f" font-family="Helvetica,Arial,sans-serif" font-size="%d" font-weight="800" text-anchor="middle" fill="%s">%s</text>`,
-			Canvas/2, valueY, valueFontSize, fg, value)
+			Canvas/2, valueY, valueFontSize, color, value)
+	}
+
+	// Text color: when SmartContrast is on, the back layer uses a bg-
+	// contrasted variant of fg and a separate front layer clipped to
+	// the fill rect uses a fill-contrasted variant — so a black fg
+	// stays black over a light fill and auto-flips to light over a
+	// dark bg. Off, both layers use fg verbatim (single-layer-equivalent).
+	fgBack := fg
+	fgFill := fg
+	if in.SmartContrast {
+		fgBack = contrastOver(fg, bg)
+		fgFill = contrastOver(fg, fill)
+	}
+	textBack := renderLabels(fgBack) + renderValue(fgBack) + renderSubvalue(fgBack)
+	textFill := ""
+	if fgFill != fgBack && ratio > 0 {
+		textFill = renderLabels(fgFill) + renderValue(fgFill) + renderSubvalue(fgFill)
 	}
 
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" opacity="%s">
   <defs>
     <clipPath id="card">
       <rect width="%d" height="%d" rx="16" ry="16"/>
+    </clipPath>
+    <clipPath id="fillArea">
+      <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>
     </clipPath>
     <filter id="ts" x="-5%%" y="-5%%" width="110%%" height="110%%">
       <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.55"/>
@@ -258,22 +301,27 @@ func RenderButton(in ButtonInput) string {
   </g>
   %s
   %s
-  <g filter="url(#ts)">
-  %s
-  %s
-  %s
+  <g clip-path="url(#card)">
+    <g filter="url(#ts)">
+      %s
+    </g>
+    <g clip-path="url(#fillArea)">
+      <g filter="url(#ts)">
+        %s
+      </g>
+    </g>
   </g>
 </svg>`,
 		Canvas, Canvas, opacity,
 		Canvas, Canvas,
+		rect.X, rect.Y, rect.W, rect.H,
 		Canvas, Canvas, bg,
 		glyphBack,
 		rect.X, rect.Y, rect.W, rect.H, fill,
 		borderElement,
 		glyphFront,
-		labelElements,
-		valueText,
-		subvalueElement,
+		textBack,
+		textFill,
 	)
 }
 
@@ -303,9 +351,10 @@ func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, sho
 		gxOff := (float64(Canvas) - loadGlyphSize) / 2
 		gyOff := math.Round(lzTop + (lzH-loadGlyphSize)/2)
 		xf := ContentFitTransform(glyph.D, gxOff, gyOff, loadGlyphSize, loadGlyphSize)
-		glyphElement = fmt.Sprintf(
-			`<g transform="%s" fill="%s" fill-opacity="0.85"><path d="%s"/></g>`,
-			xf, glyphColor, glyph.D)
+		// Match the loaded watermark's back-layer opacity so the
+		// glyph doesn't read bolder on load than it will after data
+		// arrives. Same helper that renders stroke/outline glyphs.
+		glyphElement = glyphPathMarkup(xf, glyphColor, 0.70, glyph)
 	} else {
 		glyphElement = fmt.Sprintf(
 			`<circle cx="%d" cy="%d" r="4" fill="%s" fill-opacity="0.4"/>`,
@@ -403,6 +452,45 @@ func expandHexColor(s string) (string, bool) {
 		// Invalid length
 		return "", false
 	}
+}
+
+// glyphPathMarkup returns the <g><path/></g> SVG markup for one glyph
+// layer. Filled glyphs use fill + fill-opacity; outline glyphs use
+// stroke + stroke-opacity with fill:none and vector-effect so the
+// stroke width stays visually consistent regardless of the scale
+// ContentFitTransform applied.
+func glyphPathMarkup(xf, color string, opacity float64, g *ProviderGlyph) string {
+	if g.Stroke {
+		return fmt.Sprintf(
+			`<g transform="%s" fill="none" stroke="%s" stroke-opacity="%.2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"><path d="%s"/></g>`,
+			xf, color, opacity, g.D)
+	}
+	return fmt.Sprintf(
+		`<g transform="%s" fill="%s" fill-opacity="%.2f"><path d="%s"/></g>`,
+		xf, color, opacity, g.D)
+}
+
+// contrastOver returns fg unchanged when it has enough luminance
+// contrast against over; otherwise returns a near-black or near-white
+// that will. Used by RenderButton's dual-layer text so a user-chosen
+// foreground stays readable on both the bg and the meter fill —
+// e.g. a black TextColor stays black where it sits over a light fill
+// but auto-flips to light where it would sit on a dark bg.
+func contrastOver(fg, over string) string {
+	// A luminance delta below this looks like "same-ish color" on
+	// screen — e.g. black on very-dark-gray. 0.3 is roughly the
+	// boundary where WCAG AA starts to fail for body text, which is
+	// a reasonable line to draw for 144×144 Stream Deck tiles.
+	const minDelta = 0.3
+	fgLum := hexLuminance(fg)
+	overLum := hexLuminance(over)
+	if math.Abs(fgLum-overLum) >= minDelta {
+		return fg
+	}
+	if overLum > 0.5 {
+		return "#0a0a0a"
+	}
+	return "#f9fafb"
 }
 
 // hexLuminance returns the perceived luminance (0..1) of a hex color using

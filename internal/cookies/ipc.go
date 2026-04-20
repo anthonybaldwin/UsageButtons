@@ -112,6 +112,18 @@ func (l *portFileListener) Close() error {
 	return err
 }
 
+// LogSink is optionally wired by the plugin so this package can emit
+// diagnostic log lines through the Stream Deck connection. Nil is a
+// valid value — lines are silently dropped when it's unset.
+var LogSink func(string)
+
+// logf is the internal formatter that routes through LogSink.
+func logf(format string, args ...any) {
+	if LogSink != nil {
+		LogSink(fmt.Sprintf("[cookies] "+format, args...))
+	}
+}
+
 // requestID is an atomic counter used to mint unique plugin-side
 // message IDs for the native-messaging correlation layer.
 var requestID atomic.Uint64
@@ -170,8 +182,9 @@ func clientFetch(ctx context.Context, r Request) (Response, error) {
 	if method == "" {
 		method = "GET"
 	}
+	reqID := nextRequestID()
 	reqMsg := Message{
-		ID:      nextRequestID(),
+		ID:      reqID,
 		Kind:    "fetch",
 		URL:     r.URL,
 		Method:  method,
@@ -181,29 +194,37 @@ func clientFetch(ctx context.Context, r Request) (Response, error) {
 		reqMsg.Body = b64.EncodeToString(r.Body)
 	}
 
+	started := time.Now()
+	logf("fetch %s %s %s (body=%dB, timeout=%s)", reqID, method, r.URL, len(r.Body), defaultFetchTimeout)
+
 	resp, err := roundtrip(ctx, reqMsg, defaultFetchTimeout)
+	elapsed := time.Since(started)
 	if err != nil {
+		logf("fetch %s failed after %s: %v", reqID, elapsed, err)
 		return Response{}, err
 	}
 
 	if resp.Kind == "error" {
+		logf("fetch %s extension-error after %s: %s", reqID, elapsed, resp.Error)
 		if resp.Error == "extension not connected" {
 			return Response{}, ErrHostUnavailable
 		}
 		return Response{}, fmt.Errorf("cookies: extension fetch error: %s", resp.Error)
 	}
 	if resp.Kind != "fetchResult" {
+		logf("fetch %s unexpected-kind %q after %s", reqID, resp.Kind, elapsed)
 		return Response{}, fmt.Errorf("cookies: unexpected reply kind %q", resp.Kind)
 	}
-
 	var body []byte
 	if resp.Body != "" {
 		decoded, err := b64.DecodeString(resp.Body)
 		if err != nil {
+			logf("fetch %s decode-error after %s: %v", reqID, elapsed, err)
 			return Response{}, fmt.Errorf("cookies: decode response body: %w", err)
 		}
 		body = decoded
 	}
+	logf("fetch %s ok status=%d, %d bytes, %s elapsed, ct=%s", reqID, resp.Status, len(body), elapsed, resp.ContentType)
 	return Response{
 		Status:      resp.Status,
 		StatusText:  resp.StatusText,

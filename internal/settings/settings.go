@@ -20,9 +20,12 @@ type TextSize string
 
 // TextSize presets. Values match the strings the PI persists.
 const (
-	TextSmall  TextSize = "small"
+	// TextSmall is the small text-size preset persisted by the PI.
+	TextSmall TextSize = "small"
+	// TextMedium is the medium text-size preset persisted by the PI.
 	TextMedium TextSize = "medium"
-	TextLarge  TextSize = "large"
+	// TextLarge is the large text-size preset persisted by the PI.
+	TextLarge TextSize = "large"
 )
 
 // GlobalSettings are shared across every key and persisted by

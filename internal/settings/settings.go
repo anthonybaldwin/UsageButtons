@@ -47,11 +47,17 @@ type GlobalSettings struct {
 	DefaultCriticalBelow  *float64                    `json:"defaultCriticalBelow,omitempty"`
 	DefaultCriticalColor  string                      `json:"defaultCriticalColor,omitempty"`
 	InvertFill            bool                        `json:"invertFill,omitempty"`
-	// SmartContrast enables the renderer's dual-layer text + glyph
-	// contrast auto-flip so a user-chosen foreground that would sit on
-	// a similar-luminance brand bg or fill gets auto-inverted on the
-	// offending region. Off by default — users opt in via the plugin
-	// settings tab when their provider palette needs it.
+	// SmartContrast is the plugin-tier *force-on* override for the
+	// renderer's dual-layer contrast auto-flip. Semantics:
+	//   nil / false -> each provider decides (built-in default or
+	//                  per-provider override below).
+	//   true        -> force the auto-flip ON for every provider,
+	//                  ignoring per-provider defaults and overrides.
+	// The auto-flip's natural home is per-provider: it only earns its
+	// keep on palettes like Ollama's light fill + dark bg pair, and
+	// actively degrades more contrasty palettes like Claude's (white
+	// on terracotta is the borderline WCAG case that flips to black
+	// and produces a jarring half-and-half text).
 	SmartContrast         *bool                       `json:"smartContrast,omitempty"`
 	ShowGlyphs            *bool                       `json:"showGlyphs,omitempty"`
 	SkipUpdateCheck       bool                        `json:"skipUpdateCheck,omitempty"`
@@ -87,6 +93,22 @@ type ProviderSettings struct {
 	ShowResetTimer *bool    `json:"showResetTimer,omitempty"`
 	ShowRawCounts  *bool    `json:"showRawCounts,omitempty"`
 	HideSubvalue   *bool    `json:"hideSubvalue,omitempty"`
+	// SmartContrast is a per-provider override for the renderer's
+	// dual-layer contrast auto-flip. nil = inherit the built-in
+	// default (see providerDefaultSmartContrast). The plugin-tier
+	// force-on toggle (GlobalSettings.SmartContrast == true) wins
+	// over anything set here.
+	SmartContrast  *bool    `json:"smartContrast,omitempty"`
+}
+
+// providerDefaultSmartContrast is the built-in smart-contrast default
+// keyed by provider ID. Only palettes that genuinely need the auto-flip
+// (e.g. Ollama's near-white fill + near-black bg pair) get true; every
+// other provider defaults false and renders the user's fg verbatim.
+// Consulted by SmartContrastFor when no explicit override is set at any
+// tier.
+var providerDefaultSmartContrast = map[string]bool{
+	"ollama": true,
 }
 
 // ProviderKeys holds user-entered credentials and endpoint overrides
@@ -280,17 +302,43 @@ func InvertFillEnabled() bool {
 	return current.InvertFill
 }
 
-// SmartContrastEnabled returns the global smart-contrast toggle.
-// On by default so the out-of-box experience stays legible across
-// provider palettes (Ollama's light fill + dark bg pair especially
-// needs the auto-flip); users can opt out in the plugin settings tab.
-func SmartContrastEnabled() bool {
+// SmartContrastForceAll reports whether the plugin-tier force-on
+// override is set. When true, every provider gets smart-contrast
+// regardless of its built-in default or per-provider override. When
+// false (the default), per-provider defaults apply.
+func SmartContrastForceAll() bool {
 	mu.RLock()
 	defer mu.RUnlock()
-	if current.SmartContrast == nil {
+	return current.SmartContrast != nil && *current.SmartContrast
+}
+
+// SmartContrastFor returns the effective smart-contrast toggle for the
+// given provider ID. Precedence:
+//   1. Plugin-tier force-on (GlobalSettings.SmartContrast == true) —
+//      overrides everything below.
+//   2. Per-provider override (ProviderSettings[id].SmartContrast) —
+//      the user's explicit yes/no for this provider.
+//   3. Built-in default (providerDefaultSmartContrast) — Ollama on,
+//      everyone else off.
+func SmartContrastFor(providerID string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if current.SmartContrast != nil && *current.SmartContrast {
 		return true
 	}
-	return *current.SmartContrast
+	if current.ProviderSettings != nil {
+		if ps, ok := current.ProviderSettings[providerID]; ok && ps.SmartContrast != nil {
+			return *ps.SmartContrast
+		}
+	}
+	return providerDefaultSmartContrast[providerID]
+}
+
+// SmartContrastDefault returns the built-in default for the given
+// provider — used by the Property Inspector to label the inherit
+// state in the per-provider override row.
+func SmartContrastDefault(providerID string) bool {
+	return providerDefaultSmartContrast[providerID]
 }
 
 // ShowGlyphsEnabled returns the global show-glyphs toggle.

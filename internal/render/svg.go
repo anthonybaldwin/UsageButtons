@@ -150,8 +150,13 @@ func RenderButton(in ButtonInput) string {
 	bot := subvalueTop - float64(valueFontSize)*0.15
 	valueY := math.Round((top + bot) / 2)
 
-	// Label elements — helper so we can render them once in fg for the
-	// bg layer and again in fgFill for the fill-area overlay.
+	// Label elements — render helper takes a single color so the
+	// caller can paint the same lines twice: once full-canvas in
+	// fgBack, once clipped to the fill rect in fgFill. That gives
+	// a clean visual split at the fill line so half a letter over
+	// the dark bg reads against fgBack while the other half over
+	// the fill reads against fgFill — matches how the watermark
+	// glyph splits naturally via its layered composition.
 	renderLabels := func(color string) string {
 		if !hasLabel {
 			return ""
@@ -270,11 +275,15 @@ func RenderButton(in ButtonInput) string {
 			Canvas/2, valueY, valueFontSize, color, value)
 	}
 
-	// Text color: when SmartContrast is on, the back layer uses a bg-
-	// contrasted variant of fg and a separate front layer clipped to
-	// the fill rect uses a fill-contrasted variant — so a black fg
-	// stays black over a light fill and auto-flips to light over a
-	// dark bg. Off, both layers use fg verbatim (single-layer-equivalent).
+	// Text color: when SmartContrast is on, the back layer uses a
+	// bg-contrasted variant and a separate front layer clipped to
+	// the fill rect uses a fill-contrasted variant — so a character
+	// straddling the fill line gets painted half in each color and
+	// visually splits at the exact pixel where the fill boundary
+	// crosses it. Matches the watermark glyph's natural split. When
+	// the two contrast picks collapse to the same color (typical
+	// outside collision zones under the new contrastOver rule), we
+	// skip the front layer to keep the SVG minimal.
 	fgBack := fg
 	fgFill := fg
 	if in.SmartContrast {
@@ -517,29 +526,28 @@ func hexRelativeLuminance(hex string) float64 {
 	return 0.2126*r + 0.7152*g + 0.0722*b
 }
 
-// contrastOver returns fg unchanged when it already meets the WCAG AA
-// body-text threshold (4.5:1) against over; otherwise it picks whichever
-// of near-black or near-white yields the better contrast against over.
-// Used by RenderButton's dual-layer text so a user-chosen foreground
-// stays as-is where it's already legible (e.g. black on a light fill,
-// or black on mid-gray) and only flips where it would genuinely blend
-// in. Luminances are computed with hexRelativeLuminance so the 4.5:1
-// gate matches the real WCAG definition rather than a gamma-uncorrected
-// approximation.
+// contrastOver returns fg unchanged unless fg and over both sit in the
+// near-white zone or both sit in the near-dark zone — the only real
+// collision cases we care about (white text on a white fill; dark text
+// on a dark bg). Mid-luminance pairs (e.g. white on Claude's terracotta,
+// or a soft gray on a mid-purple) still read fine, so a strict WCAG
+// 4.5:1 gate was over-flipping them to high-contrast black/white and
+// making the tile feel off-brand. Zone thresholds sit above Ollama's
+// #f7f7f7 fill + #141414 bg pair (the primary trigger) and below any
+// mid-tone brand color in the current palette.
 func contrastOver(fg, over string) string {
-	const minRatio = 4.5
+	const darkZone = 0.06
+	const lightZone = 0.75
+	const dark, light = "#0a0a0a", "#f9fafb"
 	fgLum := hexRelativeLuminance(fg)
 	overLum := hexRelativeLuminance(over)
-	if contrastRatio(fgLum, overLum) >= minRatio {
-		return fg
+	if fgLum <= darkZone && overLum <= darkZone {
+		return light
 	}
-	const dark, light = "#0a0a0a", "#f9fafb"
-	darkLum := hexRelativeLuminance(dark)
-	lightLum := hexRelativeLuminance(light)
-	if contrastRatio(darkLum, overLum) >= contrastRatio(lightLum, overLum) {
+	if fgLum >= lightZone && overLum >= lightZone {
 		return dark
 	}
-	return light
+	return fg
 }
 
 // hexLuminance returns the perceived luminance (0..1) of a hex color using

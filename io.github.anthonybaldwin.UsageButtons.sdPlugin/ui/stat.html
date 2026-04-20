@@ -521,6 +521,24 @@
       </label>
     </div>
 
+    <!-- Smart contrast: three-state (inherit built-in default, force on,
+         force off). Built-in default differs per provider (Ollama on,
+         everyone else off) so a simple "inverse" flip has no single
+         meaningful label. -->
+    <div class="override-row" data-provider-override="smartContrast">
+      <label class="override-label">
+        <input type="checkbox" id="po-smartContrast-enabled">
+        Smart contrast (auto-flip text/logo on brand colors)
+        <span class="override-inherit" id="po-smartContrast-inherit"></span>
+      </label>
+      <div class="override-control">
+        <select id="po-smartContrast">
+          <option value="true">On</option>
+          <option value="false">Off</option>
+        </select>
+      </div>
+    </div>
+
     <div class="override-row" data-provider-override="warnBelow">
       <label class="override-label">
         <input type="checkbox" id="po-warnBelow-enabled">
@@ -587,8 +605,8 @@
       <label for="defaultShowBorder">Draw border around tiles</label>
     </div>
     <div class="checkbox-row">
-      <input id="smartContrast" type="checkbox" checked>
-      <label for="smartContrast">Smart contrast (auto-flip text/logo on brand colors)</label>
+      <input id="smartContrast" type="checkbox">
+      <label for="smartContrast">Force smart contrast on every provider (overrides per-provider defaults)</label>
     </div>
     <div class="checkbox-row">
       <input id="defaultShowResetTimer" type="checkbox" checked>
@@ -1185,7 +1203,7 @@
         validSize(globals.defaultSubvalueSize);
       document.getElementById("invertFill").checked = globals.invertFill === true;
       document.getElementById("showGlyphs").checked = globals.showGlyphs !== false;
-      document.getElementById("smartContrast").checked = globals.smartContrast !== false;
+      document.getElementById("smartContrast").checked = globals.smartContrast === true;
       document.getElementById("defaultShowBorder").checked = globals.defaultShowBorder !== false;
       document.getElementById("defaultShowResetTimer").checked = globals.defaultShowResetTimer !== false;
       document.getElementById("defaultShowRawCounts").checked = globals.defaultShowRawCounts === true;
@@ -1282,6 +1300,24 @@
       applyInverseCheckbox("po", "showResetTimer", ps.showResetTimer);
       applyInverseCheckbox("po", "showRawCounts", ps.showRawCounts);
       applyInverseCheckbox("po", "hideSubvalue", ps.hideSubvalue);
+
+      // Smart contrast: built-in default differs by provider (Ollama on,
+      // others off) so the inherit hint has to name the actual default.
+      // When the plugin-tier force-on toggle is active, the backend
+      // returns true before ever consulting the provider row, so show
+      // that state and disable the controls — otherwise the row looks
+      // live but any change is ignored at render time.
+      const forceAllSmartContrast = lastGlobalSettings.smartContrast === true;
+      const scDefault = SMART_CONTRAST_DEFAULTS[currentProviderId] === true;
+      setText("po-smartContrast-inherit",
+        forceAllSmartContrast
+          ? "forced on by plugin setting"
+          : "inherits built-in default: " + (scDefault ? "on" : "off"));
+      document.getElementById("po-smartContrast-enabled").disabled = forceAllSmartContrast;
+      document.getElementById("po-smartContrast").disabled = forceAllSmartContrast;
+      bindOverrideValue("smartContrast",
+        ps.smartContrast != null ? String(!!ps.smartContrast) : String(scDefault),
+        ps.smartContrast != null);
       bindOverrideValue("warnBelow",
         ps.warnBelow != null ? String(ps.warnBelow) : "",
         ps.warnBelow != null);
@@ -1335,6 +1371,13 @@
       hideSubvalue: true,     // "Hide subtext"
     };
 
+    // SMART_CONTRAST_DEFAULTS mirrors providerDefaultSmartContrast in
+    // internal/settings/settings.go — the built-in per-provider defaults
+    // the inherit hint shows. Keep the two lists in sync.
+    const SMART_CONTRAST_DEFAULTS = {
+      ollama: true,
+    };
+
     function applyInverseCheckbox(prefix, name, savedValue) {
       const el = document.getElementById(prefix + "-inv-" + name);
       if (!el) return false;
@@ -1379,6 +1422,7 @@
         const v = readInverseCheckbox("po", name);
         if (v !== undefined) ps[name] = v;
       });
+      if (enabled("smartContrast")) ps.smartContrast = val("smartContrast") === "true";
       if (enabled("warnBelow")) {
         const n = parseNum(val("warnBelow"));
         if (n !== undefined) ps.warnBelow = n;
@@ -1867,6 +1911,7 @@
       "po-refreshMinutes", "po-fillDirection",
       "po-valueSize", "po-subvalueSize",
       "po-fillColor", "po-bgColor", "po-textColor",
+      "po-smartContrast",
       "po-warnBelow", "po-warnColor",
       "po-criticalBelow", "po-criticalColor",
     ].forEach((id) => {

@@ -475,9 +475,11 @@ func glyphPathMarkup(xf, color string, opacity float64, g *ProviderGlyph) string
 		xf, color, opacity, g.D)
 }
 
-// contrastRatio returns the WCAG contrast ratio between two Rec. 709
+// contrastRatio returns the WCAG contrast ratio between two relative
 // luminances. The formula ((Lhi + 0.05) / (Llo + 0.05)) yields 1 for
-// identical colors and 21 for black-on-white.
+// identical colors and 21 for black-on-white. Inputs must be WCAG
+// relative luminance (sRGB-linearized), not the gamma-uncorrected
+// approximation hexLuminance returns — see hexRelativeLuminance.
 func contrastRatio(a, b float64) float64 {
 	hi, lo := a, b
 	if lo > hi {
@@ -486,23 +488,55 @@ func contrastRatio(a, b float64) float64 {
 	return (hi + 0.05) / (lo + 0.05)
 }
 
+// srgbToLinear undoes the sRGB gamma curve for one channel value in
+// [0, 1], producing the linear-light value WCAG's relative luminance
+// formula expects.
+func srgbToLinear(c float64) float64 {
+	if c <= 0.04045 {
+		return c / 12.92
+	}
+	return math.Pow((c+0.055)/1.055, 2.4)
+}
+
+// hexRelativeLuminance returns the WCAG 2.x relative luminance of a
+// hex color — sRGB channels linearized, then Rec. 709 weighted. Use
+// this for contrast-ratio math; the cheaper hexLuminance is kept for
+// coarse "is this color bright or dark" checks that don't need to be
+// colorimetrically accurate.
+func hexRelativeLuminance(hex string) float64 {
+	expanded, ok := expandHexColor(hex)
+	if !ok {
+		return 0.0
+	}
+	r8, _ := strconv.ParseInt(expanded[0:2], 16, 64)
+	g8, _ := strconv.ParseInt(expanded[2:4], 16, 64)
+	b8, _ := strconv.ParseInt(expanded[4:6], 16, 64)
+	r := srgbToLinear(float64(r8) / 255.0)
+	g := srgbToLinear(float64(g8) / 255.0)
+	b := srgbToLinear(float64(b8) / 255.0)
+	return 0.2126*r + 0.7152*g + 0.0722*b
+}
+
 // contrastOver returns fg unchanged when it already meets the WCAG AA
 // body-text threshold (4.5:1) against over; otherwise it picks whichever
 // of near-black or near-white yields the better contrast against over.
 // Used by RenderButton's dual-layer text so a user-chosen foreground
 // stays as-is where it's already legible (e.g. black on a light fill,
 // or black on mid-gray) and only flips where it would genuinely blend
-// in. Avoids the prior pitfall where a luminance-delta heuristic would
-// "correct" an already-high-contrast pair to a worse color.
+// in. Luminances are computed with hexRelativeLuminance so the 4.5:1
+// gate matches the real WCAG definition rather than a gamma-uncorrected
+// approximation.
 func contrastOver(fg, over string) string {
 	const minRatio = 4.5
-	fgLum := hexLuminance(fg)
-	overLum := hexLuminance(over)
+	fgLum := hexRelativeLuminance(fg)
+	overLum := hexRelativeLuminance(over)
 	if contrastRatio(fgLum, overLum) >= minRatio {
 		return fg
 	}
 	const dark, light = "#0a0a0a", "#f9fafb"
-	if contrastRatio(hexLuminance(dark), overLum) >= contrastRatio(hexLuminance(light), overLum) {
+	darkLum := hexRelativeLuminance(dark)
+	lightLum := hexRelativeLuminance(light)
+	if contrastRatio(darkLum, overLum) >= contrastRatio(lightLum, overLum) {
 		return dark
 	}
 	return light

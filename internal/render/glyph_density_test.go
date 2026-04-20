@@ -2,6 +2,7 @@ package render_test
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,18 +16,11 @@ import (
 // Not an assertion — just evidence for sizing decisions. Run with:
 //   go test ./internal/render/ -run TestGlyphDensityAudit -v
 func TestGlyphDensityAudit(t *testing.T) {
-	ids := []string{}
+	ids := make([]string, 0, len(icons.ProviderIcons))
 	for id := range icons.ProviderIcons {
 		ids = append(ids, id)
 	}
-	// Stable order
-	for i := 0; i < len(ids); i++ {
-		for j := i + 1; j < len(ids); j++ {
-			if ids[j] < ids[i] {
-				ids[i], ids[j] = ids[j], ids[i]
-			}
-		}
-	}
+	sort.Strings(ids)
 	t.Logf("%-12s  %-14s  %-18s  %-18s  %s",
 		"glyph", "viewBox", "bbox w×h", "viewBox w×h", "bbox/vb area %")
 	for _, id := range ids {

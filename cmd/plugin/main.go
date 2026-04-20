@@ -977,7 +977,7 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 
 	in := render.ButtonInput{
 		Value:         valueStr,
-		SmartContrast: settings.SmartContrastEnabled(),
+		SmartContrast: settings.SmartContrastFor(prov.ID()),
 	}
 
 	// Label: render in SVG unless the user has set a custom native
@@ -1157,7 +1157,7 @@ func placeholderFace(prov providers.Provider, label, value, subvalue string, ks 
 		Value:         value,
 		Fill:          fill,
 		Bg:            bg,
-		SmartContrast: settings.SmartContrastEnabled(),
+		SmartContrast: settings.SmartContrastFor(prov.ID()),
 	}
 	if subvalue != "" {
 		in.Subvalue = subvalue

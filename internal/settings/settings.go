@@ -10,10 +10,15 @@ import (
 // RefreshPresets are the allowed refresh intervals in minutes.
 var RefreshPresets = []int{5, 10, 15, 30, 60}
 
+// DefaultRefreshMinutes is the built-in fallback refresh interval in
+// minutes when neither the user nor the provider overrides it.
 const DefaultRefreshMinutes = 15
 
+// TextSize is the discriminator for value / subvalue font-size buckets
+// exposed in the Property Inspector.
 type TextSize string
 
+// TextSize presets. Values match the strings the PI persists.
 const (
 	TextSmall  TextSize = "small"
 	TextMedium TextSize = "medium"

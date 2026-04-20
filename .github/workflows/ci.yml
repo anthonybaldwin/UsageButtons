@@ -41,6 +41,12 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Lint (golangci-lint — godoc coverage via revive)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62
+          args: --timeout=5m
+
       - name: Build Windows binary
         env:
           GOOS: windows

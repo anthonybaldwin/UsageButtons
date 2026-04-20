@@ -43,10 +43,26 @@ GOOS=darwin GOARCH=arm64 go build -o ...sdPlugin/bin/usagebuttons-native-host-ma
 GOOS=darwin GOARCH=amd64 go build -o ...sdPlugin/bin/usagebuttons-native-host-mac-x64 ./cmd/native-host/
 
 go vet ./...                                                                                    # lint
+golangci-lint run ./...                                                                         # lint (incl. godoc)
 go test ./...                                                                                   # tests
+./scripts/install-hooks.sh                                                                      # install git pre-commit
 ./scripts/install-dev.sh --restart                                                              # link + restart SD
 ./scripts/sync-codexbar.sh                                                                      # refresh CodexBar ref
 ```
+
+### One-time setup per clone
+
+Install `golangci-lint` and wire up the pre-commit hook:
+
+```bash
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
+./scripts/install-hooks.sh
+```
+
+The hook runs `go vet`, `golangci-lint`, and `go build` before every
+commit that touches Go files, `go.mod`, `go.sum`, or `.golangci.yml`.
+It's the same set CI runs, so fixing issues locally matches what the
+PR will see.
 
 ### macOS dual-arch
 
@@ -165,6 +181,36 @@ matches.
 - When implementing or modifying a provider, read the matching file
   under `tmp/CodexBar/Sources/CodexBarCore/Providers/<Name>/` and the
   doc at `tmp/CodexBar/docs/<provider>.md` first.
+
+## Docstrings
+
+Every exported Go identifier (func, method, type, struct field, var,
+const, package) MUST carry a doc comment starting with the identifier
+name — standard godoc form:
+
+```go
+// Foo does a thing.
+func Foo() {}
+
+// Bar is the thing.
+type Bar struct{}
+```
+
+Unexported helpers inside `internal/providers/*` and `internal/cookies/*`
+should also carry a one-line comment when they aren't self-evident — we
+want CodeRabbit's docstring-coverage check to stay at 100%, not crater
+again after the next refactor.
+
+Enforcement:
+
+1. `golangci-lint run ./...` runs locally and in CI (`.github/workflows/ci.yml`).
+   Config: `.golangci.yml`. The `revive` linter's `exported` rule fails
+   the build on any exported identifier missing a doc comment.
+2. CodeRabbit's PR review provides a second layer (catches unexported
+   gaps the linter doesn't enforce).
+
+If you add a new exported symbol without a godoc line, CI fails before
+the PR is even reviewed. Don't bypass with `//nolint`.
 
 ## Commit conventions
 

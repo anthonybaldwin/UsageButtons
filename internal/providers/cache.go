@@ -12,16 +12,17 @@ const (
 	// Any poll within this window reuses the snapshot.
 	MinTTL = 5 * time.Minute
 
-	// CooldownDuration: after an upstream error, stop hitting the API.
+	// CooldownDuration is how long to stop hitting an API after an
+	// upstream error.
 	CooldownDuration = 10 * time.Minute
 
-	// ManualCooldown: minimum gap between user-initiated (force=true)
-	// refreshes per provider. Prevents button-mashing from hammering
-	// upstream APIs. 30s is responsive enough for deliberate retries
-	// but limits a frustrated user to ~2 req/min.
+	// ManualCooldown is the minimum gap between user-initiated
+	// (force=true) refreshes per provider. Prevents button-mashing from
+	// hammering upstream APIs. 30s is responsive enough for deliberate
+	// retries but limits a frustrated user to ~2 req/min.
 	ManualCooldown = 30 * time.Second
 
-	// StaleTTL: how long missing metrics are preserved from a previous
+	// StaleTTL is how long missing metrics are preserved from a previous
 	// snapshot. After this window a permanently failed sub-fetch (e.g.
 	// expired cookie) stops carrying forward stale data so the button
 	// can show a setup/error state instead.

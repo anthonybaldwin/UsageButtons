@@ -1,0 +1,44 @@
+# golangci-lint config for UsageButtons.
+#
+# Scoped narrowly: we run go vet elsewhere, and we don't want a wall of
+# new lints every time the linter is upgraded. The one rule we care
+# about here is godoc coverage — `revive`'s `exported` rule fails the
+# build on any exported Go identifier that lacks a doc comment.
+#
+# See AGENTS.md §Docstrings for the rationale.
+
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - revive
+
+  settings:
+    revive:
+      rules:
+        # Require godoc comments on exported identifiers (func, method,
+        # type, var, const, package). Standard Go style.
+        - name: exported
+          disabled: false
+          arguments:
+            # Methods on exported types with unexported receivers still
+            # count as exported API (e.g. `func (p Provider) ID()`).
+            - "checkPrivateReceivers"
+            # Comment must start with the identifier name.
+            - "disableStutteringCheck"
+
+  exclusions:
+    # Generated or vendored code doesn't need godoc.
+    paths:
+      - "tmp/.*"
+      - ".*_test\\.go"
+      - "scripts/gen-.*\\.go"
+    # Skip cmd/genkeys main.go — it's a throwaway keygen tool.
+    rules:
+      - path: "cmd/genkeys/"
+        linters:
+          - revive

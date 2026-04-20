@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Pre-commit hook for UsageButtons.
+#
+# Runs the same Go checks CI enforces on every commit:
+#   1. go vet ./...
+#   2. golangci-lint run ./...     (godoc coverage via revive)
+#   3. go build ./...              (catch syntax + import errors fast)
+#
+# Install via: ./scripts/install-hooks.sh
+#
+# Hooks can be bypassed with `git commit --no-verify`, but AGENTS.md
+# forbids that. If a check fails, fix the underlying issue.
+
+set -euo pipefail
+
+# Only run when Go files are staged. Keeps non-code commits (docs,
+# workflows, manifest bumps) fast.
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -qE '\.go$|go\.(mod|sum)$|\.golangci\.ya?ml$'; then
+    exit 0
+fi
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+fail() {
+    echo -e "${RED}pre-commit: $1 failed${NC}" >&2
+    echo -e "${YELLOW}Fix the issue, re-stage, and commit again. Do NOT --no-verify.${NC}" >&2
+    exit 1
+}
+
+echo "pre-commit: go vet ./..."
+go vet ./... || fail "go vet"
+
+# Prefer a locally installed golangci-lint. Fall back to the one in
+# GOPATH/bin. If neither is present, warn but don't block — CI still
+# catches it.
+LINTER=""
+if command -v golangci-lint >/dev/null 2>&1; then
+    LINTER="golangci-lint"
+elif [[ -x "$(go env GOPATH)/bin/golangci-lint" ]]; then
+    LINTER="$(go env GOPATH)/bin/golangci-lint"
+elif [[ -x "$(go env GOPATH)/bin/golangci-lint.exe" ]]; then
+    LINTER="$(go env GOPATH)/bin/golangci-lint.exe"
+fi
+
+if [[ -n "$LINTER" ]]; then
+    echo "pre-commit: $LINTER run ./..."
+    "$LINTER" run ./... || fail "golangci-lint"
+else
+    echo -e "${YELLOW}pre-commit: golangci-lint not found — skipping docstring check.${NC}"
+    echo -e "${YELLOW}  Install with: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6${NC}"
+fi
+
+echo "pre-commit: go build ./..."
+go build ./... || fail "go build"
+
+echo -e "${GREEN}pre-commit: OK${NC}"

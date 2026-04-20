@@ -43,9 +43,11 @@ type ButtonInput struct {
 	GlyphMode    string // "watermark"|"centered"|"corner"|"none"
 	ShowGlyph    *bool  // nil = true
 	// SmartContrast enables the dual-layer contrast auto-flip for text
-	// and the watermark glyph's back layer. Off by default so the
-	// renderer honors the user's fg exactly; on, it auto-inverts
-	// against bg/fill when the user's fg would blend into them.
+	// and the watermark glyph's back layer. The zero value (false)
+	// renders fg exactly as provided — callers opt in per-render.
+	// Application-level defaults live in GlobalSettings.SmartContrast
+	// (default on), and main.go threads that runtime decision into
+	// this field at each render site.
 	SmartContrast bool
 }
 
@@ -473,27 +475,37 @@ func glyphPathMarkup(xf, color string, opacity float64, g *ProviderGlyph) string
 		xf, color, opacity, g.D)
 }
 
-// contrastOver returns fg unchanged when it has enough luminance
-// contrast against over; otherwise returns a near-black or near-white
-// that will. Used by RenderButton's dual-layer text so a user-chosen
-// foreground stays readable on both the bg and the meter fill —
-// e.g. a black TextColor stays black where it sits over a light fill
-// but auto-flips to light where it would sit on a dark bg.
+// contrastRatio returns the WCAG contrast ratio between two Rec. 709
+// luminances. The formula ((Lhi + 0.05) / (Llo + 0.05)) yields 1 for
+// identical colors and 21 for black-on-white.
+func contrastRatio(a, b float64) float64 {
+	hi, lo := a, b
+	if lo > hi {
+		hi, lo = lo, hi
+	}
+	return (hi + 0.05) / (lo + 0.05)
+}
+
+// contrastOver returns fg unchanged when it already meets the WCAG AA
+// body-text threshold (4.5:1) against over; otherwise it picks whichever
+// of near-black or near-white yields the better contrast against over.
+// Used by RenderButton's dual-layer text so a user-chosen foreground
+// stays as-is where it's already legible (e.g. black on a light fill,
+// or black on mid-gray) and only flips where it would genuinely blend
+// in. Avoids the prior pitfall where a luminance-delta heuristic would
+// "correct" an already-high-contrast pair to a worse color.
 func contrastOver(fg, over string) string {
-	// A luminance delta below this looks like "same-ish color" on
-	// screen — e.g. black on very-dark-gray. 0.3 is roughly the
-	// boundary where WCAG AA starts to fail for body text, which is
-	// a reasonable line to draw for 144×144 Stream Deck tiles.
-	const minDelta = 0.3
+	const minRatio = 4.5
 	fgLum := hexLuminance(fg)
 	overLum := hexLuminance(over)
-	if math.Abs(fgLum-overLum) >= minDelta {
+	if contrastRatio(fgLum, overLum) >= minRatio {
 		return fg
 	}
-	if overLum > 0.5 {
-		return "#0a0a0a"
+	const dark, light = "#0a0a0a", "#f9fafb"
+	if contrastRatio(hexLuminance(dark), overLum) >= contrastRatio(hexLuminance(light), overLum) {
+		return dark
 	}
-	return "#f9fafb"
+	return light
 }
 
 // hexLuminance returns the perceived luminance (0..1) of a hex color using

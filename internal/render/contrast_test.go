@@ -2,81 +2,60 @@ package render
 
 import "testing"
 
-// TestContrastOver_KeepsHighContrastFg verifies that a foreground
-// already meeting WCAG AA (4.5:1) against the backdrop is returned
-// unchanged, and that a backdrop which fails the gate flips the fg
-// to whichever of near-black / near-white has higher contrast.
-func TestContrastOver_KeepsHighContrastFg(t *testing.T) {
-	// Black on light gray (#cccccc) is ~13:1 — well above AA — so the
-	// caller-supplied fg must be preserved. The earlier luminance-
-	// delta heuristic could have flipped pairs with small delta but
-	// still-fine contrast; WCAG ratio gates on the actual ratio.
-	got := contrastOver("#000000", "#cccccc")
-	if got != "#000000" {
-		t.Fatalf("black over #cccccc: want #000000 (already high-contrast), got %s", got)
+// TestContrastOver_KeepsFgOutsideCollisionZones verifies that a fg
+// outside the near-dark / near-white zones is returned unchanged even
+// if WCAG ratio would be marginal — the user's chosen text color wins
+// unless it would truly blend into a similarly extreme backdrop.
+func TestContrastOver_KeepsFgOutsideCollisionZones(t *testing.T) {
+	// White on Claude terracotta — WCAG ratio ~3:1 (below AA body-text
+	// 4.5) but fg is light, over is mid, so NOT a collision zone. Must
+	// keep white — the whole point of the new rule.
+	if got := contrastOver("#f9fafb", "#cc7c5e"); got != "#f9fafb" {
+		t.Fatalf("white over terracotta: want #f9fafb (no collision), got %s", got)
 	}
-
-	// #444 under WCAG is actually a bad bg for black (~2.2:1, below
-	// AA), so contrastOver must flip — and the flip should land on
-	// near-white, which is the higher-contrast choice against #444
-	// (~9.5:1 vs ~2.2:1 for near-black).
-	if got := contrastOver("#000000", "#444444"); got != "#f9fafb" {
-		t.Fatalf("black over #444444 (actually low-contrast under WCAG): want flip to #f9fafb, got %s", got)
+	// Black on light gray — fg is dark, over is mid-light. Not a
+	// collision; keep black.
+	if got := contrastOver("#000000", "#cccccc"); got != "#000000" {
+		t.Fatalf("black over #cccccc: want #000000 (no collision), got %s", got)
 	}
 }
 
-// TestContrastOver_FlipsWhenFgBlends verifies that a near-black
-// foreground on a near-black backdrop (Ollama's dark bg case) flips
-// to near-white so the text stays readable.
-func TestContrastOver_FlipsWhenFgBlends(t *testing.T) {
-	// Near-black on Ollama's dark bg — low contrast, must flip.
+// TestContrastOver_FlipsOnDarkDarkCollision verifies that near-black
+// fg on a near-black backdrop (Ollama's dark bg case) flips to
+// near-white.
+func TestContrastOver_FlipsOnDarkDarkCollision(t *testing.T) {
 	got := contrastOver("#0a0a0a", "#141414")
-	if got == "#0a0a0a" {
-		t.Fatal("near-black over near-black should flip, got same color back")
-	}
 	if got != "#f9fafb" {
-		t.Fatalf("expected flip to near-white, got %s", got)
+		t.Fatalf("near-black over near-black: want flip to near-white, got %s", got)
 	}
 }
 
-// TestContrastOver_StaysOnLightFill verifies that a dark foreground
-// on a light fill (Ollama's brand fill case) is preserved — the
-// user's chosen text color is honored when contrast is fine.
-func TestContrastOver_StaysOnLightFill(t *testing.T) {
-	// Black text over Ollama's light brand fill — already high
-	// contrast, must not flip.
-	got := contrastOver("#0a0a0a", "#f7f7f7")
+// TestContrastOver_FlipsOnLightLightCollision verifies that near-white
+// fg on a near-white backdrop (Ollama's brand fill + default text)
+// flips to near-black.
+func TestContrastOver_FlipsOnLightLightCollision(t *testing.T) {
+	got := contrastOver("#f9fafb", "#f7f7f7")
 	if got != "#0a0a0a" {
-		t.Fatalf("black over light fill: want #0a0a0a, got %s", got)
+		t.Fatalf("near-white over near-white: want flip to near-black, got %s", got)
 	}
 }
 
-// TestContrastOver_PicksBetterOfDarkOrLight verifies that when the
-// caller's fg fails the 4.5:1 gate, the fallback picks whichever of
-// near-black / near-white yields the higher contrast ratio against
-// the backdrop — not a fixed midpoint rule.
-func TestContrastOver_PicksBetterOfDarkOrLight(t *testing.T) {
-	// For a mid-luminance over where neither dark nor light is ideal,
-	// ensure we return whichever of dark/light yields higher contrast.
-	// Must use the same luminance function as production (WCAG
-	// relative luminance) so the expectation lines up with the pick.
-	over := "#7a7a7a"
-	fg := "#888888" // blends with `over`
-	got := contrastOver(fg, over)
-	if got == fg {
-		t.Fatalf("blending fg should flip, got same color %s", got)
+// TestContrastOver_KeepsDarkFgOnLightBg verifies that dark fg over
+// light backdrop is preserved — opposite zones are fine as-is.
+func TestContrastOver_KeepsDarkFgOnLightBg(t *testing.T) {
+	if got := contrastOver("#0a0a0a", "#f7f7f7"); got != "#0a0a0a" {
+		t.Fatalf("dark fg over light bg: want #0a0a0a (no collision), got %s", got)
 	}
-	overLum := hexRelativeLuminance(over)
-	darkRatio := contrastRatio(hexRelativeLuminance("#0a0a0a"), overLum)
-	lightRatio := contrastRatio(hexRelativeLuminance("#f9fafb"), overLum)
-	var want string
-	if darkRatio >= lightRatio {
-		want = "#0a0a0a"
-	} else {
-		want = "#f9fafb"
-	}
-	if got != want {
-		t.Fatalf("mid-gray over #7a7a7a: want %s (higher contrast), got %s", want, got)
+}
+
+// TestContrastOver_KeepsMidGrayOnMidGray verifies that mid-luminance
+// pairs where neither color hits a collision zone stay unchanged. A
+// strict WCAG gate would have flipped these; the zone-based rule
+// honors the user's choice as long as both colors aren't simultaneously
+// dark or simultaneously light.
+func TestContrastOver_KeepsMidGrayOnMidGray(t *testing.T) {
+	if got := contrastOver("#888888", "#7a7a7a"); got != "#888888" {
+		t.Fatalf("mid-gray on mid-gray: want fg unchanged (no collision zone), got %s", got)
 	}
 }
 

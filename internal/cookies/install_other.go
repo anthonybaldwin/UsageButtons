@@ -8,12 +8,12 @@ import "errors"
 // Deck doesn't ship) without pretending the install path exists.
 var errUnsupported = errors.New("cookies: native-messaging host install is only supported on Windows and macOS")
 
-// RegisterHost is a no-op on unsupported platforms.
+// RegisterHost returns errUnsupported on unsupported platforms.
 func RegisterHost(hostName, binaryPath string, allowedOrigins []string) error {
 	return errUnsupported
 }
 
-// UnregisterHost is a no-op on unsupported platforms.
+// UnregisterHost returns errUnsupported on unsupported platforms.
 func UnregisterHost(hostName string) error {
 	return errUnsupported
 }

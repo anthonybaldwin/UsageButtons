@@ -29,12 +29,45 @@ const (
 )
 
 // LogSink is called for cache observability. Set by the plugin at init.
+// Dispatch is asynchronous (see cacheLog), so the sink does not need to
+// be non-blocking — but callers should not assume log lines arrive
+// strictly before subsequent code runs.
 var LogSink func(msg string)
 
-// cacheLog emits a formatted log line via LogSink when one is configured.
+// logCh buffers log messages for the async worker. Sized generously so
+// a burst of cache events under lock can't overflow in practice; if it
+// ever does, cacheLog drops the line rather than blocking.
+var logCh = make(chan string, 256)
+
+// logWorkerOnce starts the consumer goroutine on first use.
+var logWorkerOnce sync.Once
+
+// startLogWorker drains logCh into LogSink on a dedicated goroutine,
+// so cacheLog callers never block on (or re-enter via) the sink.
+func startLogWorker() {
+	go func() {
+		for msg := range logCh {
+			if sink := LogSink; sink != nil {
+				sink(msg)
+			}
+		}
+	}()
+}
+
+// cacheLog formats a log line and enqueues it for the async worker.
+// Safe to call while holding cache locks: the sink never runs on the
+// caller's goroutine, and a full buffer drops the line instead of
+// blocking. Messages preserve FIFO order across callers.
 func cacheLog(format string, args ...any) {
-	if LogSink != nil {
-		LogSink(fmt.Sprintf(format, args...))
+	if LogSink == nil {
+		return
+	}
+	logWorkerOnce.Do(startLogWorker)
+	msg := fmt.Sprintf(format, args...)
+	select {
+	case logCh <- msg:
+	default:
+		// Buffer full — drop rather than stall the cache.
 	}
 }
 

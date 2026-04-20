@@ -375,7 +375,9 @@ func def(val, fallback string) string {
 }
 
 // hexColorRe matches a #RGB / #RGBA / #RRGGBB / #RRGGBBAA hex color literal.
-var hexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{3,8}$`)
+// Lengths 5 and 7 are rejected — the old `{3,8}` bound let malformed
+// colors pass, breaking downstream color-math assumptions.
+var hexColorRe = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
 
 // IsValidHexColor checks if a string is a valid hex color.
 func IsValidHexColor(s string) bool {

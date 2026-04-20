@@ -35,15 +35,25 @@ jobs:
     steps:
       - name: Decide
         id: decide
+        env:
+          # Scan every commit in the push, not just the head. A regular
+          # "Create merge commit" merge puts "Merge pull request #N …"
+          # at the head, hiding the `chore(release): X.Y.Z` commit one
+          # level down. Squash/rebase merges put the release commit at
+          # the head directly, so scanning the whole push covers all
+          # three merge styles.
+          COMMITS_JSON: ${{ toJSON(github.event.commits) }}
         run: |
           if [ -n "${{ inputs.version }}" ]; then
             SEMVER="${{ inputs.version }}"
           else
-            MSG=$(printf '%s' "${{ github.event.head_commit.message }}" | head -n1)
-            SEMVER=$(printf '%s' "$MSG" | sed -n 's/^chore(release): \([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')
+            SEMVER=$(printf '%s' "$COMMITS_JSON" \
+              | jq -r '.[]?.message // empty' \
+              | sed -n 's/^chore(release): \([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' \
+              | head -n1)
           fi
           if [ -z "$SEMVER" ]; then
-            echo "head commit is not a release commit; skipping"
+            echo "no chore(release): X.Y.Z commit in this push; skipping"
             echo "publish=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi

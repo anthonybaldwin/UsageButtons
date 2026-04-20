@@ -92,10 +92,11 @@ That bumps both manifests (plugin + Helper extension) on a
 `release/vX.Y.Z` branch and opens a PR titled
 `chore(release): X.Y.Z`.
 
-**Step 2 — merge the PR.** Use _Merge_ or _Rebase_, or _Squash_
-without editing the title. The squashed/merged commit message must
-still start with `chore(release): X.Y.Z` — that's the signal
-`publish.yml` keys off of.
+**Step 2 — merge the PR.** Any merge method works — `publish.yml`
+scans every commit in the push for a `chore(release): X.Y.Z`
+message, so it catches the original commit under a merge commit,
+the preserved commit under a rebase-merge, and the PR title under
+a squash-merge. Just don't rename the PR title if you squash.
 
 Once the commit lands on `main`, `publish.yml` tags `vX.Y.Z`,
 cross-compiles Windows + macOS binaries (both arches), packages

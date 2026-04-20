@@ -126,6 +126,6 @@ jobs:
 
           Merging this PR triggers \`publish.yml\`, which tags \`${{ steps.version.outputs.tag }}\`, cross-compiles win/mac binaries, and attaches the \`.streamDeckPlugin\` bundles + extension zip to a GitHub Release.
 
-          **Merge method matters:** use _Merge_ or _Rebase_ so the commit message stays \`chore(release): ${{ steps.version.outputs.semver }}\`. _Squash_ also works as long as the squash title isn't edited.
+          Any merge method works — \`publish.yml\` scans every commit in the push for the \`chore(release):\` message. Just don't rename this PR title if you squash.
           EOF
           )"

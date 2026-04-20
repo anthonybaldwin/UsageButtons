@@ -587,6 +587,10 @@
       <label for="defaultShowBorder">Draw border around tiles</label>
     </div>
     <div class="checkbox-row">
+      <input id="smartContrast" type="checkbox" checked>
+      <label for="smartContrast">Smart contrast (auto-flip text/logo on brand colors)</label>
+    </div>
+    <div class="checkbox-row">
       <input id="defaultShowResetTimer" type="checkbox" checked>
       <label for="defaultShowResetTimer">Show reset countdown</label>
     </div>
@@ -802,7 +806,7 @@
       "kimi-k2":  "#4c00ff",
     };
 
-    // Per-provider brand background colors. Kept in sync with each
+// Per-provider brand background colors. Kept in sync with each
     // provider's BrandBg() in Go so the PI can pre-fill the hidden
     // bgColor picker with the actual default the tile will render.
     const BRAND_BGS = {
@@ -1025,8 +1029,9 @@
     // Helpers for the button-override (bo-*) checkbox rows.
     // bindButtonOverrideValue toggles the row's active state, sets the
     // control to either the saved override or the inherited value, and
-    // writes the inherit-hint so users can see what they'd fall back
-    // to if they uncheck the checkbox.
+    // writes the hint so users can see where the effective value is
+    // coming from. When the override is active the hint says
+    // "overrides <label>"; when inactive it says "inherits <label>".
     function bindButtonOverrideValue(name, savedValue, inheritedValue, inheritedLabel) {
       const chk = document.getElementById("bo-" + name + "-enabled");
       const ctrl = document.getElementById(name);
@@ -1035,7 +1040,7 @@
       const isOverride = savedValue !== null && savedValue !== undefined && savedValue !== "";
       if (chk) chk.checked = isOverride;
       if (ctrl) ctrl.value = isOverride ? savedValue : inheritedValue;
-      if (hint) hint.textContent = "inherits " + inheritedLabel;
+      if (hint) hint.textContent = (isOverride ? "overrides " : "inherits ") + inheritedLabel;
       if (row) row.classList.toggle("override-active", isOverride);
       return isOverride;
     }
@@ -1048,7 +1053,7 @@
       const isOverride = savedValue !== undefined && savedValue !== null;
       if (chk) chk.checked = isOverride;
       if (ctrl) ctrl.checked = isOverride ? !!savedValue : !!inheritedOn;
-      if (hint) hint.textContent = "inherits " + inheritedLabel;
+      if (hint) hint.textContent = (isOverride ? "overrides " : "inherits ") + inheritedLabel;
       if (row) row.classList.toggle("override-active", isOverride);
       return isOverride;
     }
@@ -1180,6 +1185,7 @@
         validSize(globals.defaultSubvalueSize);
       document.getElementById("invertFill").checked = globals.invertFill === true;
       document.getElementById("showGlyphs").checked = globals.showGlyphs !== false;
+      document.getElementById("smartContrast").checked = globals.smartContrast !== false;
       document.getElementById("defaultShowBorder").checked = globals.defaultShowBorder !== false;
       document.getElementById("defaultShowResetTimer").checked = globals.defaultShowResetTimer !== false;
       document.getElementById("defaultShowRawCounts").checked = globals.defaultShowRawCounts === true;
@@ -1234,7 +1240,8 @@
       setText("po-fillDirection-inherit", "inherits plugin default: " + defFillDir);
       setText("po-valueSize-inherit", "inherits plugin default: " + defVal);
       setText("po-subvalueSize-inherit", "inherits plugin default: " + defSub);
-      setText("po-textColor-inherit", "inherits plugin default");
+      // po-textColor-inherit is re-computed below once we know whether
+      // the provider has a saved override.
 
       bindOverrideValue("refreshMinutes",
         ps.refreshMinutes != null ? String(ps.refreshMinutes) : defRefresh,
@@ -1243,17 +1250,16 @@
       bindOverrideValue("valueSize", ps.valueSize || defVal, !!ps.valueSize);
       bindOverrideValue("subvalueSize", ps.subvalueSize || defSub, !!ps.subvalueSize);
 
-      // Fill / bg colors: the provider is the active source unless the
-      // plugin tier has its own override. "Using brand" and "using
-      // custom provider override" both count as provider-is-source —
-      // show the checkbox as checked in either case so the user
-      // sees that provider is supplying the color.
+      // Fill / bg colors: the provider-tier checkbox is checked only
+      // when the provider actually has a saved override. Unchecked
+      // means the tile inherits — either the plugin-wide default (if
+      // set) or the brand color. Picker shows the effective inherited
+      // value when unchecked so the user can see what the brand /
+      // plugin fallback looks like.
       const plugFillSet = !!lastGlobalSettings.defaultFillColor;
       const plugBgSet = !!lastGlobalSettings.defaultBgColor;
       const fillVal = ps.fillColor || (plugFillSet ? lastGlobalSettings.defaultFillColor : brandFill);
       const bgVal = ps.bgColor || (plugBgSet ? lastGlobalSettings.defaultBgColor : brandBg);
-      const fillProviderIsSource = !!ps.fillColor || !plugFillSet;
-      const bgProviderIsSource = !!ps.bgColor || !plugBgSet;
       setText("po-fillColor-inherit",
         ps.fillColor ? "custom" :
         plugFillSet ? "inherits plugin default" :
@@ -1262,9 +1268,11 @@
         ps.bgColor ? "custom" :
         plugBgSet ? "inherits plugin default" :
         "brand background");
-      bindOverrideValue("fillColor", fillVal, fillProviderIsSource);
-      bindOverrideValue("bgColor", bgVal, bgProviderIsSource);
+      bindOverrideValue("fillColor", fillVal, !!ps.fillColor);
+      bindOverrideValue("bgColor", bgVal, !!ps.bgColor);
 
+      setText("po-textColor-inherit",
+        ps.textColor ? "custom" : "inherits plugin default");
       bindOverrideValue("textColor", ps.textColor || defTextColor, !!ps.textColor);
 
       // Inverse boolean overrides — one checkbox each, ticking saves
@@ -1552,6 +1560,7 @@
         })(),
         invertFill:            document.getElementById("invertFill").checked,
         showGlyphs:            document.getElementById("showGlyphs").checked,
+        smartContrast:         document.getElementById("smartContrast").checked,
         skipUpdateCheck:       document.getElementById("skipUpdateCheck").checked,
         providerKeys:          collectProviderKeys(),
         providerSettings,
@@ -1804,7 +1813,7 @@
       "defaultShowResetTimer", "defaultShowRawCounts", "defaultHideSubvalue",
       "defaultWarnBelow", "defaultWarnColor",
       "defaultCriticalBelow", "defaultCriticalColor",
-      "invertFill", "showGlyphs", "skipUpdateCheck",
+      "invertFill", "showGlyphs", "smartContrast", "skipUpdateCheck",
     ]) {
       const el = document.getElementById(id);
       el.addEventListener("change", pushGlobalSettings);

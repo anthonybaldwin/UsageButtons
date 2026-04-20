@@ -72,6 +72,7 @@ func main() {
 	providers.LogSink = func(msg string) { conn.Log(msg) }
 	update.LogSink = func(msg string) { conn.Log(msg) }
 	claude.LogSink = func(msg string) { conn.Log(msg) }
+	cookies.LogSink = func(msg string) { conn.Log(msg) }
 
 	// Request global settings before first tick.
 	conn.GetGlobalSettings()
@@ -334,9 +335,13 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		if !hideLabel {
 			svgLabel = title
 		}
-		conn.SetImage(ev.Context, placeholderFace(prov, svgLabel, "", "", ks))
+		// Merge provider-tier overrides so the initial placeholder
+		// reflects the same colors the live tile will render with.
+		ksEff := settings.EffectiveSettings(ks, prov.ID())
+		conn.SetImage(ev.Context, placeholderFace(prov, svgLabel, "", "", ksEff))
 	} else {
-		conn.SetImage(ev.Context, loadingFaceFor(providerID, &ks))
+		ksEff := settings.EffectiveSettings(ks, providerID)
+		conn.SetImage(ev.Context, loadingFaceFor(providerID, &ksEff))
 	}
 	setTitleForKey(conn, ev.Context, customTitle, title)
 	conn.Logf("key appeared, no cache (now tracking %d visible key(s))", countVisible())
@@ -835,7 +840,11 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 		switch {
 		case notConfigured:
 			value = "SETUP"
-			subHint = "Needs Key"
+			if isExtensionNeeded(snapshot.Error) {
+				subHint = "Needs ext."
+			} else {
+				subHint = "Needs Key"
+			}
 		case rateLimit:
 			value = "WAIT"
 			subHint = "Rate Limit"
@@ -848,6 +857,9 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 		case isMissingScope(snapshot.Error):
 			value = "AUTH"
 			subHint = "Bad Scope"
+		case isExtensionTimeout(snapshot.Error):
+			value = "EXT"
+			subHint = "Slow Response"
 		case isNetworkError(snapshot.Error):
 			value = "NET"
 			subHint = "Offline"
@@ -862,6 +874,8 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 		if !hideLabel {
 			svgLabel = title
 		}
+		conn.Logf("render[%s/%s] error-face: value=%q sub=%q err=%q",
+			prov.ID(), metricID, value, subHint, snapshot.Error)
 		conn.SetImage(context, placeholderFace(prov,
 			svgLabel, value, subHint, ks))
 		setTitleForKey(conn, context, customTitle, title)
@@ -905,6 +919,8 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 		if !hideLabel {
 			svgLabel = title
 		}
+		conn.Logf("render[%s/%s] no-metric placeholder: caption=%q (snapshot had %d metrics)",
+			prov.ID(), metricID, caption, len(snapshot.Metrics))
 		conn.SetImage(context, placeholderFace(prov,
 			svgLabel, "—", caption, ks))
 		setTitleForKey(conn, context, customTitle, title)
@@ -917,6 +933,8 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 	if metricLabel == "" {
 		metricLabel = title
 	}
+	conn.Logf("render[%s/%s] metric: value=%v unit=%s ratio=%v source=%s",
+		prov.ID(), metricID, metricCopy.Value, metricCopy.Unit, metricCopy.Ratio, snapshot.Source)
 	conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, metricCopy, ks, hideLabel))
 	setTitleForKey(conn, context, customTitle, metricLabel)
 }
@@ -958,7 +976,8 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 	valueStr := formatValue(effectiveValue, metric.Unit)
 
 	in := render.ButtonInput{
-		Value: valueStr,
+		Value:         valueStr,
+		SmartContrast: settings.SmartContrastEnabled(),
 	}
 
 	// Label: render in SVG unless the user has set a custom native
@@ -1007,7 +1026,9 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 	if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
 		in.Bg = ks.BgColor
 	}
-	// Text color: button/provider override > plugin default > hardcoded
+	// Text color: button/provider override > plugin default > hardcoded.
+	// The renderer handles contrast with bg/fill itself via a dual-
+	// layer draw, so we don't need a "brand text" fallback here.
 	if ks.TextColor != "" && render.IsValidHexColor(ks.TextColor) {
 		in.Fg = ks.TextColor
 	} else if v := settings.DefaultTextColorValue(); render.IsValidHexColor(v) {
@@ -1120,11 +1141,23 @@ func placeholderFace(prov providers.Provider, label, value, subvalue string, ks 
 	if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
 		bg = ks.BgColor
 	}
+	// Fill: button/provider override > plugin default > brand. Reference
+	// cards don't draw a fill (no ratio), but Fill still colors the
+	// glyph watermark, so honoring the override keeps the placeholder
+	// visually consistent with the live tile.
+	fill := prov.BrandColor()
+	if v := settings.DefaultFillColorValue(); v != "" && render.IsValidHexColor(v) {
+		fill = v
+	}
+	if ks.FillColor != "" && render.IsValidHexColor(ks.FillColor) {
+		fill = ks.FillColor
+	}
 	in := render.ButtonInput{
-		Label: label,
-		Value: value,
-		Fill:  prov.BrandColor(),
-		Bg:    bg,
+		Label:         label,
+		Value:         value,
+		Fill:          fill,
+		Bg:            bg,
+		SmartContrast: settings.SmartContrastEnabled(),
 	}
 	if subvalue != "" {
 		in.Subvalue = subvalue
@@ -1162,9 +1195,13 @@ func placeholderFace(prov providers.Provider, label, value, subvalue string, ks 
 func loadingFaceFor(providerID string, ks *settings.KeySettings) string {
 	prov := providers.Get(providerID)
 	glyph := getProviderGlyph(providerID)
+	// Fill: button/provider override > plugin default > brand.
 	fillColor := ""
 	if prov != nil {
 		fillColor = prov.BrandColor()
+	}
+	if v := settings.DefaultFillColorValue(); v != "" && render.IsValidHexColor(v) {
+		fillColor = v
 	}
 	// Bg: button override > plugin default > brand bg.
 	bg := "#111827"
@@ -1181,6 +1218,9 @@ func loadingFaceFor(providerID string, ks *settings.KeySettings) string {
 		border = &f
 	}
 	if ks != nil {
+		if ks.FillColor != "" && render.IsValidHexColor(ks.FillColor) {
+			fillColor = ks.FillColor
+		}
 		if ks.BgColor != "" && render.IsValidHexColor(ks.BgColor) {
 			bg = ks.BgColor
 		}
@@ -1430,17 +1470,27 @@ var (
 	expiredRe       = regexp.MustCompile(`(?i)expired|unauthorized|re-authenticate`)
 	signedOutRe     = regexp.MustCompile(`(?i)signed out|session is signed out`)
 	scopeRe         = regexp.MustCompile(`(?i)missing.*scope`)
-	networkRe       = regexp.MustCompile(`(?i)network error|dial tcp|connection refused|timeout|ETIMEDOUT`)
-	serverErrRe     = regexp.MustCompile(`(?i)server error|HTTP [5]\d\d`)
+	// extensionTimeoutRe matches loopback (sidecar ↔ plugin) timeouts —
+	// e.g. "read tcp 127.0.0.1:... i/o timeout". The fetch never left
+	// the machine, so calling this a "network error" is misleading.
+	extensionTimeoutRe = regexp.MustCompile(`(?i)(127\.0\.0\.1|extension response timeout).*(timeout|i/o)`)
+	// extensionNeededRe matches the "not configured" family of errors
+	// that specifically need the Chrome extension (cookie-gated
+	// providers) rather than an API key.
+	extensionNeededRe = regexp.MustCompile(`(?i)Install the Usage Buttons|Paste a Cookie|Helper Chrome extension`)
+	networkRe          = regexp.MustCompile(`(?i)network error|dial tcp|connection refused|timeout|ETIMEDOUT`)
+	serverErrRe        = regexp.MustCompile(`(?i)server error|HTTP [5]\d\d`)
 )
 
-func isRateLimit(msg string) bool     { return rateLimitRe.MatchString(msg) }
-func isNotConfigured(msg string) bool  { return notConfiguredRe.MatchString(msg) }
-func isExpired(msg string) bool        { return expiredRe.MatchString(msg) }
-func isSignedOut(msg string) bool      { return signedOutRe.MatchString(msg) }
-func isMissingScope(msg string) bool   { return scopeRe.MatchString(msg) }
-func isNetworkError(msg string) bool   { return networkRe.MatchString(msg) }
-func isServerError(msg string) bool    { return serverErrRe.MatchString(msg) }
+func isRateLimit(msg string) bool        { return rateLimitRe.MatchString(msg) }
+func isNotConfigured(msg string) bool    { return notConfiguredRe.MatchString(msg) }
+func isExpired(msg string) bool          { return expiredRe.MatchString(msg) }
+func isSignedOut(msg string) bool        { return signedOutRe.MatchString(msg) }
+func isMissingScope(msg string) bool     { return scopeRe.MatchString(msg) }
+func isExtensionTimeout(msg string) bool { return extensionTimeoutRe.MatchString(msg) }
+func isExtensionNeeded(msg string) bool  { return extensionNeededRe.MatchString(msg) }
+func isNetworkError(msg string) bool     { return networkRe.MatchString(msg) }
+func isServerError(msg string) bool      { return serverErrRe.MatchString(msg) }
 
 func countVisible() int {
 	return len(visibleKeys)

@@ -20,9 +20,11 @@ done
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*|Windows_NT)
     BIN="io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe"
+    NATIVE_HOST="io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/usagebuttons-native-host-win.exe"
     ;;
   Darwin)
     BIN="io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac-$(uname -m)"
+    NATIVE_HOST="io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/usagebuttons-native-host-mac-$(uname -m | sed 's/x86_64/x64/')"
     ;;
   *)
     echo "✗ unsupported platform: $(uname -s)"
@@ -32,6 +34,10 @@ esac
 
 echo "→ building $BIN"
 go build -o "$ROOT/$BIN" "$ROOT/cmd/plugin/"
+echo "✓ built"
+
+echo "→ building $NATIVE_HOST"
+go build -o "$ROOT/$NATIVE_HOST" "$ROOT/cmd/native-host/"
 echo "✓ built"
 
 if $RESTART; then

@@ -8,7 +8,8 @@
 #     ./scripts/install-hooks.sh
 #
 # Works on Windows (Git Bash) and macOS. No external dependencies
-# beyond a POSIX shell.
+# beyond Bash — the script uses Bash-only features (`set -o pipefail`,
+# `[[ ... ]]`).
 
 set -euo pipefail
 

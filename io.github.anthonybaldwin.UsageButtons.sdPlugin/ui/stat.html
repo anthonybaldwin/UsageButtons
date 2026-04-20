@@ -1303,9 +1303,18 @@
 
       // Smart contrast: built-in default differs by provider (Ollama on,
       // others off) so the inherit hint has to name the actual default.
+      // When the plugin-tier force-on toggle is active, the backend
+      // returns true before ever consulting the provider row, so show
+      // that state and disable the controls — otherwise the row looks
+      // live but any change is ignored at render time.
+      const forceAllSmartContrast = lastGlobalSettings.smartContrast === true;
       const scDefault = SMART_CONTRAST_DEFAULTS[currentProviderId] === true;
       setText("po-smartContrast-inherit",
-        "inherits built-in default: " + (scDefault ? "on" : "off"));
+        forceAllSmartContrast
+          ? "forced on by plugin setting"
+          : "inherits built-in default: " + (scDefault ? "on" : "off"));
+      document.getElementById("po-smartContrast-enabled").disabled = forceAllSmartContrast;
+      document.getElementById("po-smartContrast").disabled = forceAllSmartContrast;
       bindOverrideValue("smartContrast",
         ps.smartContrast != null ? String(!!ps.smartContrast) : String(scDefault),
         ps.smartContrast != null);

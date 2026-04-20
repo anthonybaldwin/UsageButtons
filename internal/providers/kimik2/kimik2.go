@@ -17,8 +17,10 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
+// creditsURL is the Kimi K2 credits lookup endpoint.
 const creditsURL = "https://kimi-k2.ai/api/user/credits"
 
+// getAPIKey resolves a Kimi K2 API key from user settings or env vars.
 func getAPIKey() string {
 	return settings.ResolveAPIKey(
 		settings.ProviderKeysGet().KimiK2Key,
@@ -59,6 +61,7 @@ func dig(obj any, path []string) (float64, bool) {
 // Short key paths applied against each context map so nested APIs that
 // return { data: { credits: { ... } } } or { result: { usage: ... } }
 // resolve without exhaustive prefix enumeration.
+// consumedPaths lists JSON key paths that may carry a consumed-credits value.
 var consumedPaths = [][]string{
 	{"total_credits_consumed"},
 	{"totalCreditsConsumed"},
@@ -70,6 +73,7 @@ var consumedPaths = [][]string{
 	{"consumed"},
 }
 
+// remainingPaths lists JSON key paths that may carry a remaining-credits value.
 var remainingPaths = [][]string{
 	{"credits_remaining"},
 	{"creditsRemaining"},
@@ -109,6 +113,7 @@ func contexts(body map[string]any) []map[string]any {
 	return out
 }
 
+// findFirst returns the first dig hit from any of paths under ctx.
 func findFirst(ctx map[string]any, paths [][]string) (float64, bool) {
 	for _, path := range paths {
 		if v, ok := dig(ctx, path); ok {
@@ -147,14 +152,24 @@ func extractCredits(body map[string]any) (consumed float64, consumedOk bool, rem
 // Provider fetches Kimi K2 usage data.
 type Provider struct{}
 
-func (Provider) ID() string         { return "kimi-k2" }
-func (Provider) Name() string       { return "Kimi K2" }
+// ID returns the provider identifier used by the registry.
+func (Provider) ID() string { return "kimi-k2" }
+
+// Name returns the human-readable provider name.
+func (Provider) Name() string { return "Kimi K2" }
+
+// BrandColor returns the accent color used on button faces.
 func (Provider) BrandColor() string { return "#0071e3" }
-func (Provider) BrandBg() string    { return "#0a1225" }
+
+// BrandBg returns the background color used on button faces.
+func (Provider) BrandBg() string { return "#0a1225" }
+
+// MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
 	return []string{"credits-balance"}
 }
 
+// Fetch returns the latest Kimi K2 credits snapshot.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	apiKey := getAPIKey()
 	if apiKey == "" {
@@ -247,6 +262,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	}, nil
 }
 
+// init registers the Kimi K2 provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

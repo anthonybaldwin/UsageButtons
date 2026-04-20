@@ -27,11 +27,15 @@ import (
 )
 
 const (
+	// defaultChatGPTBaseURL is the fallback ChatGPT backend base URL.
 	defaultChatGPTBaseURL = "https://chatgpt.com/backend-api"
-	userAgent             = "UsageButtons/0.0.1"
+	// userAgent is the User-Agent header sent to chatgpt.com endpoints.
+	userAgent = "UsageButtons/0.0.1"
 
-	sessionWindowSeconds = 5 * 60 * 60      // 18000
-	weeklyWindowSeconds  = 7 * 24 * 60 * 60 // 604800
+	// sessionWindowSeconds is the length of the 5-hour usage window.
+	sessionWindowSeconds = 5 * 60 * 60 // 18000
+	// weeklyWindowSeconds is the length of the 7-day usage window.
+	weeklyWindowSeconds = 7 * 24 * 60 * 60 // 604800
 )
 
 // chatGPTBaseURL resolves the ChatGPT/OpenAI backend base in this
@@ -51,10 +55,12 @@ func chatGPTBaseURL() string {
 	return defaultChatGPTBaseURL
 }
 
+// usageURL returns the fully qualified Codex usage endpoint.
 func usageURL() string {
 	return chatGPTBaseURL() + "/wham/usage"
 }
 
+// codexConfigPath returns the filesystem path to the Codex config.toml.
 func codexConfigPath() string {
 	if ch := strings.TrimSpace(os.Getenv("CODEX_HOME")); ch != "" {
 		return filepath.Join(ch, "config.toml")
@@ -63,6 +69,8 @@ func codexConfigPath() string {
 	return filepath.Join(home, ".codex", "config.toml")
 }
 
+// readConfigBaseURL parses the Codex config.toml and returns the value
+// of chatgpt_base_url if present.
 func readConfigBaseURL() string {
 	data, err := os.ReadFile(codexConfigPath())
 	if err != nil {
@@ -97,6 +105,8 @@ func readConfigBaseURL() string {
 	return ""
 }
 
+// normalizeChatGPTBase strips trailing slashes and appends /backend-api
+// to bare ChatGPT hosts so callers can freely concatenate API paths.
 func normalizeChatGPTBase(raw string) string {
 	v := strings.TrimSpace(raw)
 	if v == "" {
@@ -113,6 +123,8 @@ func normalizeChatGPTBase(raw string) string {
 
 // --- Credential loading ---
 
+// authTokens mirrors the nested tokens block of Codex auth.json, tolerating
+// both snake_case and camelCase field layouts.
 type authTokens struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
@@ -125,6 +137,7 @@ type authTokens struct {
 	AccountIDC    string `json:"accountId"`
 }
 
+// authFile is the on-disk shape of ~/.codex/auth.json.
 type authFile struct {
 	OpenAIAPIKey  *string     `json:"OPENAI_API_KEY"`
 	OpenAIAPIKeyL *string     `json:"openai_api_key"`
@@ -133,6 +146,7 @@ type authFile struct {
 	LastRefreshC  string      `json:"lastRefresh"`
 }
 
+// codexCreds is the resolved credential used by Fetch.
 type codexCreds struct {
 	accessToken string
 	accountID   string
@@ -140,6 +154,7 @@ type codexCreds struct {
 	isAPIKey    bool
 }
 
+// authPath returns the filesystem path to the Codex auth.json.
 func authPath() string {
 	if ch := os.Getenv("CODEX_HOME"); ch != "" {
 		return filepath.Join(ch, "auth.json")
@@ -148,6 +163,8 @@ func authPath() string {
 	return filepath.Join(home, ".codex", "auth.json")
 }
 
+// loadCredentials reads and validates the Codex auth.json, returning
+// either OAuth tokens or a legacy API key.
 func loadCredentials() (codexCreds, error) {
 	path := authPath()
 	data, err := os.ReadFile(path)
@@ -191,23 +208,28 @@ func loadCredentials() (codexCreds, error) {
 
 // --- API response types ---
 
+// usageWindow is a single primary/secondary utilization bucket.
 type usageWindow struct {
 	UsedPercent        *float64 `json:"used_percent"`
 	ResetAt            *float64 `json:"reset_at"` // epoch seconds
 	LimitWindowSeconds *float64 `json:"limit_window_seconds"`
 }
 
+// rateLimitBlock pairs a primary and secondary window.
 type rateLimitBlock struct {
 	PrimaryWindow   *usageWindow `json:"primary_window"`
 	SecondaryWindow *usageWindow `json:"secondary_window"`
 }
 
+// additionalRateLimit represents one extra lane (e.g. per-model quota)
+// surfaced alongside the main rate limit.
 type additionalRateLimit struct {
 	LimitName      string          `json:"limit_name"`
 	MeteredFeature string          `json:"metered_feature"`
 	RateLimit      *rateLimitBlock `json:"rate_limit"`
 }
 
+// usageResponse is the top-level Codex usage payload consumed by Fetch.
 type usageResponse struct {
 	PlanType  *string         `json:"plan_type"`
 	Email     *string         `json:"email"`
@@ -226,6 +248,7 @@ type usageResponse struct {
 
 // --- Plan name mapping ---
 
+// planMap converts an OpenAI plan_type string to a user-visible label.
 var planMap = map[string]string{
 	"guest":          "ChatGPT Guest",
 	"free":           "ChatGPT Free",
@@ -245,6 +268,8 @@ var planMap = map[string]string{
 	"k12":            "ChatGPT (K12)",
 }
 
+// humanPlan maps an API plan_type pointer to its display label,
+// falling back to the raw string when no mapping is known.
 func humanPlan(planType *string) string {
 	if planType == nil || *planType == "" {
 		return ""
@@ -258,6 +283,8 @@ func humanPlan(planType *string) string {
 
 // --- JWT helpers ---
 
+// decodeJWTPayload base64url-decodes the payload segment of a JWT and
+// returns it as a map, or nil on any decode failure.
 func decodeJWTPayload(token string) map[string]any {
 	parts := strings.Split(token, ".")
 	if len(parts) < 2 || parts[1] == "" {
@@ -280,6 +307,8 @@ func decodeJWTPayload(token string) map[string]any {
 	return payload
 }
 
+// emailFromIDToken extracts the user email from an OpenID id_token,
+// checking both the standard "email" claim and OpenAI's profile namespace.
 func emailFromIDToken(idToken string) string {
 	if idToken == "" {
 		return ""
@@ -301,14 +330,19 @@ func emailFromIDToken(idToken string) string {
 
 // --- Window normalization ---
 
+// windowRole tags a usageWindow as session, weekly, or unknown.
 type windowRole int
 
 const (
+	// roleUnknown means the window length didn't match a known bucket.
 	roleUnknown windowRole = iota
+	// roleSession is the 5-hour session window.
 	roleSession
+	// roleWeekly is the 7-day weekly window.
 	roleWeekly
 )
 
+// classifyWindow derives the windowRole from a limit_window_seconds value.
 func classifyWindow(seconds *float64) windowRole {
 	if seconds == nil {
 		return roleUnknown
@@ -323,11 +357,15 @@ func classifyWindow(seconds *float64) windowRole {
 	return roleUnknown
 }
 
+// normalizedWindows holds the session/weekly pair resolved from the raw
+// primary/secondary API fields.
 type normalizedWindows struct {
 	session *usageWindow
 	weekly  *usageWindow
 }
 
+// normalizeWindows maps primary/secondary windows to session/weekly slots
+// using limit_window_seconds to identify each bucket.
 func normalizeWindows(primary, secondary *usageWindow) normalizedWindows {
 	result := normalizedWindows{}
 	assign := func(w *usageWindow) {
@@ -359,6 +397,7 @@ func normalizeWindows(primary, secondary *usageWindow) normalizedWindows {
 
 // --- Metric helpers ---
 
+// remainingMetric builds a "remaining %" MetricValue from a usageWindow.
 func remainingMetric(id, label, name string, w *usageWindow) *providers.MetricValue {
 	if w == nil || w.UsedPercent == nil {
 		return nil
@@ -389,6 +428,8 @@ func remainingMetric(id, label, name string, w *usageWindow) *providers.MetricVa
 	return &m
 }
 
+// paceFromWindow turns a usageWindow into a pace (burn-rate) MetricValue,
+// or nil if the window lacks enough data.
 func paceFromWindow(id, label, name string, w *usageWindow) *providers.MetricValue {
 	if w == nil || w.UsedPercent == nil || w.ResetAt == nil || w.LimitWindowSeconds == nil {
 		return nil
@@ -402,6 +443,8 @@ func paceFromWindow(id, label, name string, w *usageWindow) *providers.MetricVal
 	})
 }
 
+// parseBalance normalizes a credits.balance value that the API may return
+// as either a JSON number or a stringified number.
 func parseBalance(raw any) (float64, bool) {
 	switch v := raw.(type) {
 	case float64:
@@ -423,7 +466,10 @@ func parseBalance(raw any) (float64, bool) {
 // Provider fetches Codex usage data.
 type Provider struct{}
 
-func (Provider) ID() string   { return "codex" }
+// ID returns the provider identifier used by the registry.
+func (Provider) ID() string { return "codex" }
+
+// Name returns the human-readable provider name.
 func (Provider) Name() string { return "Codex" }
 
 // BrandColor is deep indigo #3941FF — the bottom stop of the lavender→
@@ -432,7 +478,11 @@ func (Provider) Name() string { return "Codex" }
 // visually uniform with every other provider; the gradient only
 // survives on the pre-data loading SVG as a subtle brand accent.
 func (Provider) BrandColor() string { return "#3941FF" }
-func (Provider) BrandBg() string    { return "#000000" }
+
+// BrandBg returns the background color used on button faces.
+func (Provider) BrandBg() string { return "#000000" }
+
+// MetricIDs enumerates every metric this provider can emit.
 func (Provider) MetricIDs() []string {
 	return []string{
 		"session-percent", "session-pace",
@@ -581,6 +631,8 @@ func fetchUsageOAuth() (usageResponse, string, string, error) {
 	return resp, source, emailFromIDToken(creds.idToken), nil
 }
 
+// Fetch returns the latest Codex usage snapshot using the browser-proxied
+// path when available and the OAuth direct path otherwise.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	resp, source, email, err := fetchUsage()
 	if err != nil {
@@ -720,6 +772,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 
 // --- Utility ---
 
+// ptrStr dereferences p or returns "" when p is nil.
 func ptrStr(p *string) string {
 	if p != nil {
 		return *p
@@ -727,6 +780,7 @@ func ptrStr(p *string) string {
 	return ""
 }
 
+// firstNonEmpty returns the first non-empty element of vals, or "".
 func firstNonEmpty(vals ...string) string {
 	for _, v := range vals {
 		if v != "" {
@@ -736,6 +790,7 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
+// init registers the Codex provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

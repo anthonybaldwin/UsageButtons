@@ -24,19 +24,30 @@ import (
 )
 
 const (
-	usageURL   = "https://api.anthropic.com/api/oauth/usage"
-	betaHdr    = "oauth-2025-04-20"
-	userAgent  = "claude-code/2.1.70"
+	// usageURL is the OAuth-authenticated usage endpoint.
+	usageURL = "https://api.anthropic.com/api/oauth/usage"
+	// betaHdr identifies the OAuth beta profile required by the usage API.
+	betaHdr = "oauth-2025-04-20"
+	// userAgent mimics the Claude CLI so the endpoint accepts the request.
+	userAgent = "claude-code/2.1.70"
+	// baseWebURL is the root of the cookie-authenticated claude.ai web API.
 	baseWebURL = "https://claude.ai/api"
 
+	// extrasDefaultTTL is how long cached extras data is reused when the
+	// plan is nowhere near its limits.
 	extrasDefaultTTL = 60 * time.Minute
-	extrasActiveTTL  = 15 * time.Minute
-	nearLimitPct     = 80.0
+	// extrasActiveTTL is the shorter refresh interval used when extras are
+	// enabled or session/weekly utilization is near the limit.
+	extrasActiveTTL = 15 * time.Minute
+	// nearLimitPct is the utilization threshold that switches extras to
+	// the active refresh cadence.
+	nearLimitPct = 80.0
 )
 
 // LogSink is wired by the plugin for debug logging.
 var LogSink func(string)
 
+// logf emits a tagged log line via LogSink when one is configured.
 func logf(format string, args ...any) {
 	if LogSink != nil {
 		LogSink(fmt.Sprintf("[claude] "+format, args...))
@@ -45,6 +56,7 @@ func logf(format string, args ...any) {
 
 // --- Credential loading ---
 
+// credFile is the on-disk shape of ~/.claude/.credentials.json.
 type credFile struct {
 	ClaudeAiOauth *struct {
 		AccessToken   string   `json:"accessToken"`
@@ -55,6 +67,7 @@ type credFile struct {
 	} `json:"claudeAiOauth"`
 }
 
+// creds is the parsed view of a Claude OAuth credential used by Fetch.
 type creds struct {
 	accessToken   string
 	scopes        []string
@@ -62,6 +75,7 @@ type creds struct {
 	rateLimitTier string
 }
 
+// credPath returns the canonical location of the Claude credential file.
 func credPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".claude", ".credentials.json")
@@ -91,6 +105,7 @@ func readCredBlob() ([]byte, string, error) {
 		credsSourceHint())
 }
 
+// loadCreds loads, parses, and validates the Claude OAuth credential blob.
 func loadCreds() (creds, error) {
 	data, source, err := readCredBlob()
 	if err != nil {
@@ -122,6 +137,8 @@ func loadCreds() (creds, error) {
 	return c, nil
 }
 
+// planFromTier maps an Anthropic rate-limit tier string to a user-visible
+// plan name, returning "" when the tier is unknown.
 func planFromTier(tier string) string {
 	t := strings.ToLower(strings.TrimSpace(tier))
 	switch {
@@ -140,6 +157,7 @@ func planFromTier(tier string) string {
 	}
 }
 
+// hasScope reports whether s is present in the OAuth scopes list.
 func hasScope(scopes []string, s string) bool {
 	for _, sc := range scopes {
 		if sc == s {
@@ -151,11 +169,13 @@ func hasScope(scopes []string, s string) bool {
 
 // --- API response types ---
 
+// usageWindow is a single utilization bucket (session or weekly).
 type usageWindow struct {
 	Utilization *float64 `json:"utilization"`
 	ResetsAt    *string  `json:"resets_at"`
 }
 
+// extraUsageRaw is the extras block as returned by the OAuth endpoint.
 type extraUsageRaw struct {
 	IsEnabled    *bool    `json:"is_enabled"`
 	MonthlyLimit *float64 `json:"monthly_limit"` // cents (API may return int or float)
@@ -164,6 +184,8 @@ type extraUsageRaw struct {
 	Currency     *string  `json:"currency"`
 }
 
+// usageResponse is the top-level shape returned by both the OAuth
+// usage endpoint and the cookie-authenticated organization usage endpoint.
 type usageResponse struct {
 	FiveHour       *usageWindow   `json:"five_hour"`
 	SevenDay       *usageWindow   `json:"seven_day"`
@@ -178,6 +200,8 @@ type usageResponse struct {
 
 // --- Extra usage source (unified shape from OAuth or Web) ---
 
+// extraUsageSource is the provider-internal view of extras spend and
+// balance state, regardless of whether it came from OAuth or the web API.
 type extraUsageSource struct {
 	isEnabled         bool
 	monthlyLimitCents int64
@@ -195,16 +219,22 @@ type extraUsageSource struct {
 
 // --- Extras caching ---
 
+// cachedExtrasEntry is the most recent extraUsageSource retained between
+// fetches so the web API isn't hit every poll.
 type cachedExtrasEntry struct {
 	source     extraUsageSource
 	capturedAt time.Time
 }
 
 var (
-	extrasMu     sync.Mutex
+	// extrasMu guards cachedExtras.
+	extrasMu sync.Mutex
+	// cachedExtras holds the last captured extras snapshot.
 	cachedExtras *cachedExtrasEntry
 )
 
+// shouldRefreshExtras decides whether to hit the extras endpoints this
+// fetch, using the cache TTL and current utilization as inputs.
 func shouldRefreshExtras(resp usageResponse, force bool) bool {
 	if force {
 		return true
@@ -240,12 +270,14 @@ func shouldRefreshExtras(resp usageResponse, force bool) bool {
 
 // --- Web API (cookie path) ---
 
+// orgRow is one entry in the claude.ai organizations list response.
 type orgRow struct {
 	UUID         string   `json:"uuid"`
 	Name         string   `json:"name"`
 	Capabilities []string `json:"capabilities"`
 }
 
+// overageResponse mirrors the claude.ai overage_spend_limit endpoint.
 type overageResponse struct {
 	IsEnabled          *bool    `json:"is_enabled"`
 	MonthlyCreditLimit *float64 `json:"monthly_credit_limit"`
@@ -258,6 +290,7 @@ type overageResponse struct {
 	DisabledUntil      string `json:"disabled_until"`
 }
 
+// prepaidCreditsResponse mirrors the claude.ai prepaid/credits endpoint.
 type prepaidCreditsResponse struct {
 	Amount             *float64 `json:"amount"`
 	Currency           string `json:"currency"`
@@ -265,10 +298,14 @@ type prepaidCreditsResponse struct {
 }
 
 var (
-	orgMu    sync.Mutex
+	// orgMu guards orgCache.
+	orgMu sync.Mutex
+	// orgCache memoizes the resolved organization UUID per cacheKey.
 	orgCache = map[string]string{}
 )
 
+// fetchOrgID resolves the user's chat-capable organization UUID, caching
+// the result under cacheKey for the life of the process.
 func fetchOrgID(ctx context.Context, cacheKey string) (string, error) {
 	orgMu.Lock()
 	cached, ok := orgCache[cacheKey]
@@ -319,6 +356,8 @@ func fetchOrgID(ctx context.Context, cacheKey string) (string, error) {
 	return selected, nil
 }
 
+// fetchWebExtras calls the claude.ai overage + prepaid endpoints via the
+// browser extension and returns an extraUsageSource or nil on failure.
 func fetchWebExtras() *extraUsageSource {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
@@ -430,6 +469,7 @@ func fetchWebPrepaid() (*int64, *bool) {
 
 // --- Metric construction ---
 
+// remainingMetric builds a "remaining %" MetricValue from a usageWindow.
 func remainingMetric(id, label, name string, w *usageWindow) *providers.MetricValue {
 	if w == nil || w.Utilization == nil {
 		return nil
@@ -463,6 +503,8 @@ func remainingMetric(id, label, name string, w *usageWindow) *providers.MetricVa
 	return &m
 }
 
+// extraUsageMetrics expands an extraUsageSource into the set of metric
+// tiles shown in the UI (spent, limit, headroom, balance, toggle…).
 func extraUsageMetrics(extra *extraUsageSource) []providers.MetricValue {
 	if extra == nil {
 		return nil
@@ -553,10 +595,19 @@ func extraUsageMetrics(extra *extraUsageSource) []providers.MetricValue {
 // Provider fetches Claude usage data via OAuth + optional cookie web API.
 type Provider struct{}
 
-func (Provider) ID() string         { return "claude" }
-func (Provider) Name() string       { return "Claude" }
+// ID returns the provider identifier used by the registry.
+func (Provider) ID() string { return "claude" }
+
+// Name returns the human-readable provider name.
+func (Provider) Name() string { return "Claude" }
+
+// BrandColor returns the accent color used on button faces.
 func (Provider) BrandColor() string { return "#cc7c5e" }
-func (Provider) BrandBg() string    { return "#1c1210" }
+
+// BrandBg returns the background color used on button faces.
+func (Provider) BrandBg() string { return "#1c1210" }
+
+// MetricIDs enumerates every metric this provider can emit.
 func (Provider) MetricIDs() []string {
 	return []string{
 		"session-percent", "session-pace", "weekly-percent", "weekly-pace",
@@ -568,6 +619,8 @@ func (Provider) MetricIDs() []string {
 	}
 }
 
+// Fetch returns the latest Claude usage snapshot, preferring the
+// extension-proxied web API and falling back to OAuth.
 func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 	// Browser-first: hit claude.ai/api/organizations/{id}/usage via the
 	// extension when connected. Same JSON shape as the OAuth endpoint,
@@ -819,6 +872,8 @@ func tryFetchUsageViaExtension() (usageResponse, bool) {
 	return resp, true
 }
 
+// oauthToSource converts the OAuth extras payload into the common
+// extraUsageSource shape, returning nil if raw itself is nil.
 func oauthToSource(raw *extraUsageRaw) *extraUsageSource {
 	if raw == nil {
 		return nil
@@ -831,6 +886,8 @@ func oauthToSource(raw *extraUsageRaw) *extraUsageSource {
 	}
 }
 
+// cacheExtras stores src as the most recent extraUsageSource snapshot
+// used by shouldRefreshExtras on subsequent polls.
 func cacheExtras(src *extraUsageSource) {
 	if src == nil {
 		return
@@ -840,6 +897,7 @@ func cacheExtras(src *extraUsageSource) {
 	extrasMu.Unlock()
 }
 
+// valOr rounds *p to an int64 or returns def when p is nil.
 func valOr(p *float64, def int64) int64 {
 	if p != nil {
 		return int64(math.Round(*p))
@@ -847,6 +905,7 @@ func valOr(p *float64, def int64) int64 {
 	return def
 }
 
+// defStr returns v when non-empty and fallback otherwise.
 func defStr(v, fallback string) string {
 	if v == "" {
 		return fallback
@@ -872,6 +931,7 @@ func humanizeDisabledReason(r string) string {
 	}
 }
 
+// ptrStr dereferences p or returns "" when p is nil.
 func ptrStr(p *string) string {
 	if p != nil {
 		return *p
@@ -879,6 +939,7 @@ func ptrStr(p *string) string {
 	return ""
 }
 
+// init registers the Claude provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

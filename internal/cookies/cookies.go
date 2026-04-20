@@ -145,6 +145,7 @@ func StatusDetail(ctx context.Context) (StatusInfo, bool, error) {
 	return probeStatusDetail(ctx)
 }
 
+// validateRequest enforces URL presence and the compile-time allowlist.
 func validateRequest(r Request) error {
 	if strings.TrimSpace(r.URL) == "" {
 		return fmt.Errorf("cookies: request URL is required")
@@ -155,6 +156,7 @@ func validateRequest(r Request) error {
 	return nil
 }
 
+// statusError turns a non-2xx Response into a *httputil.Error.
 func statusError(url string, resp Response) error {
 	if resp.Status >= 200 && resp.Status < 300 {
 		return nil
@@ -167,6 +169,8 @@ func statusError(url string, resp Response) error {
 	}
 }
 
+// cloneHeaders returns a shallow copy of h so callers can add defaults
+// without mutating the caller-supplied map.
 func cloneHeaders(h map[string]string) map[string]string {
 	out := make(map[string]string, len(h))
 	for k, v := range h {
@@ -184,20 +188,23 @@ var dispatchFetch = func(ctx context.Context, r Request) (Response, error) {
 	return Response{}, ErrHostUnavailable
 }
 
+// probeStatus is overridden in ipc.go init(); defaults to "unavailable".
 var probeStatus = func(ctx context.Context) StatusInfo {
 	info, _, _ := probeStatusDetail(ctx)
 	return info
 }
 
+// probeStatusDetail is overridden in ipc.go init(); defaults to "unavailable".
 var probeStatusDetail = func(ctx context.Context) (StatusInfo, bool, error) {
 	_ = ctx
 	return StatusInfo{}, false, ErrHostUnavailable
 }
 
-// b64 helpers are exported so tests in sibling packages can build
-// wire bytes that match the protocol without poking internals.
+// b64 is the base64 encoding used on the native-messaging wire. Sibling
+// test packages reuse it to build protocol-matching wire bytes.
 var b64 = base64.StdEncoding
 
-// wire deadline for the extension fetch round trip. Matches the
-// existing httputil 15–30s timeouts the providers use directly.
+// defaultFetchTimeout is the wire deadline for an extension fetch round
+// trip. Matches the existing httputil 15–30s timeouts providers use
+// directly.
 const defaultFetchTimeout = 20 * time.Second

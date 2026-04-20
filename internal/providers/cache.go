@@ -12,16 +12,17 @@ const (
 	// Any poll within this window reuses the snapshot.
 	MinTTL = 5 * time.Minute
 
-	// CooldownDuration: after an upstream error, stop hitting the API.
+	// CooldownDuration is how long to stop hitting an API after an
+	// upstream error.
 	CooldownDuration = 10 * time.Minute
 
-	// ManualCooldown: minimum gap between user-initiated (force=true)
-	// refreshes per provider. Prevents button-mashing from hammering
-	// upstream APIs. 30s is responsive enough for deliberate retries
-	// but limits a frustrated user to ~2 req/min.
+	// ManualCooldown is the minimum gap between user-initiated
+	// (force=true) refreshes per provider. Prevents button-mashing from
+	// hammering upstream APIs. 30s is responsive enough for deliberate
+	// retries but limits a frustrated user to ~2 req/min.
 	ManualCooldown = 30 * time.Second
 
-	// StaleTTL: how long missing metrics are preserved from a previous
+	// StaleTTL is how long missing metrics are preserved from a previous
 	// snapshot. After this window a permanently failed sub-fetch (e.g.
 	// expired cookie) stops carrying forward stale data so the button
 	// can show a setup/error state instead.
@@ -29,14 +30,50 @@ const (
 )
 
 // LogSink is called for cache observability. Set by the plugin at init.
+// Dispatch is asynchronous (see cacheLog), so the sink does not need to
+// be non-blocking — but callers should not assume log lines arrive
+// strictly before subsequent code runs.
 var LogSink func(msg string)
 
+// logCh buffers log messages for the async worker. Sized generously so
+// a burst of cache events under lock can't overflow in practice; if it
+// ever does, cacheLog drops the line rather than blocking.
+var logCh = make(chan string, 256)
+
+// logWorkerOnce starts the consumer goroutine on first use.
+var logWorkerOnce sync.Once
+
+// startLogWorker drains logCh into LogSink on a dedicated goroutine,
+// so cacheLog callers never block on (or re-enter via) the sink.
+func startLogWorker() {
+	go func() {
+		for msg := range logCh {
+			if sink := LogSink; sink != nil {
+				sink(msg)
+			}
+		}
+	}()
+}
+
+// cacheLog formats a log line and enqueues it for the async worker.
+// Safe to call while holding cache locks: the sink never runs on the
+// caller's goroutine, and a full buffer drops the line instead of
+// blocking. Messages preserve FIFO order across callers.
 func cacheLog(format string, args ...any) {
-	if LogSink != nil {
-		LogSink(fmt.Sprintf(format, args...))
+	if LogSink == nil {
+		return
+	}
+	logWorkerOnce.Do(startLogWorker)
+	msg := fmt.Sprintf(format, args...)
+	select {
+	case logCh <- msg:
+	default:
+		// Buffer full — drop rather than stall the cache.
 	}
 }
 
+// cacheError records the last upstream failure for a provider and the
+// earliest time at which fresh fetches should be attempted again.
 type cacheError struct {
 	message string
 	at      time.Time
@@ -74,6 +111,8 @@ func (e *cacheError) cooldownUntil() time.Time {
 	return e.at.Add(CooldownDuration)
 }
 
+// cacheEntry is the per-provider cache slot tracking the last snapshot,
+// the last error, and the in-flight fetch promise used for coalescing.
 type cacheEntry struct {
 	snapshot  *Snapshot
 	fetchedAt time.Time
@@ -88,10 +127,13 @@ type cacheEntry struct {
 }
 
 var (
+	// cacheMu guards entries against concurrent map access.
 	cacheMu sync.Mutex
+	// entries is the provider-ID-keyed cache map.
 	entries = map[string]*cacheEntry{}
 )
 
+// getEntry returns (and lazily allocates) the cache entry for providerID.
 func getEntry(providerID string) *cacheEntry {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
@@ -287,6 +329,8 @@ func ClearCache(providerID string) {
 	}
 }
 
+// markStale returns a deep-enough copy of s with every metric marked
+// stale and the given error message attached.
 func markStale(s Snapshot, errMsg string) Snapshot {
 	out := s
 	out.Error = errMsg
@@ -299,6 +343,8 @@ func markStale(s Snapshot, errMsg string) Snapshot {
 	return out
 }
 
+// errorSnapshot builds a placeholder Snapshot for a provider that has no
+// prior successful fetch to fall back on.
 func errorSnapshot(p Provider, errMsg string) Snapshot {
 	return Snapshot{
 		ProviderID:   p.ID(),
@@ -328,6 +374,7 @@ func preserveMissing(prev, next Snapshot) Snapshot {
 	return next
 }
 
+// metricIDs returns a comma-joined list of the metric IDs in s for logging.
 func metricIDs(s Snapshot) string {
 	if len(s.Metrics) == 0 {
 		return "(none)"
@@ -343,6 +390,8 @@ func metricIDs(s Snapshot) string {
 	return result
 }
 
+// boolStr picks t when cond is true and f otherwise; a tiny helper used
+// by log formatting.
 func boolStr(cond bool, t, f string) string {
 	if cond {
 		return t

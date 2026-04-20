@@ -18,13 +18,19 @@ import (
 )
 
 const (
-	defaultGlobalHost    = "https://api.z.ai"
+	// defaultGlobalHost is the z.ai host used for the Global region.
+	defaultGlobalHost = "https://api.z.ai"
+	// defaultBigModelCNHost is the z.ai host used for the China region.
 	defaultBigModelCNHost = "https://open.bigmodel.cn"
-	quotaPath             = "/api/monitor/usage/quota/limit"
+	// quotaPath is the usage quota endpoint path appended to the host.
+	quotaPath = "/api/monitor/usage/quota/limit"
 )
 
 // --- API response types ---
 
+// quotaLimit describes one lane (tokens, MCP minutes, etc.) in the
+// z.ai quota response. Fields use pointers because the server sends
+// different combinations depending on the lane type.
 type quotaLimit struct {
 	Type          *string  `json:"type"`
 	Used          *float64 `json:"used"`
@@ -39,6 +45,8 @@ type quotaLimit struct {
 	NextResetTime *int64   `json:"nextResetTime"` // epoch ms
 }
 
+// quotaResponse is the envelope returned by the z.ai quota endpoint; the
+// limits array may be at the root or nested under data.
 type quotaResponse struct {
 	Limits *[]quotaLimit `json:"limits"`
 	Data   *struct {
@@ -49,6 +57,7 @@ type quotaResponse struct {
 	} `json:"data"`
 }
 
+// getAPIToken resolves a z.ai API token from user settings or env vars.
 func getAPIToken() string {
 	// CodexBar uses Z_AI_API_KEY (with underscores); accept it and our
 	// legacy ZAI_* names too.
@@ -75,6 +84,7 @@ func quotaURL() string {
 	return host + quotaPath
 }
 
+// regionHost maps a user-facing region name to the matching host.
 func regionHost(region string) string {
 	switch strings.ToLower(strings.TrimSpace(region)) {
 	case "bigmodel-cn", "bigmodel", "cn", "china":
@@ -84,6 +94,8 @@ func regionHost(region string) string {
 	}
 }
 
+// resetSecondsFromLimit computes a reset delta (in seconds from now) from
+// either nextResetTime or resetAt, returning nil when neither is present.
 func resetSecondsFromLimit(limit quotaLimit) *float64 {
 	// Try nextResetTime (epoch ms) first
 	if limit.NextResetTime != nil {
@@ -109,14 +121,24 @@ func resetSecondsFromLimit(limit quotaLimit) *float64 {
 // Provider fetches z.ai usage data.
 type Provider struct{}
 
-func (Provider) ID() string         { return "zai" }
-func (Provider) Name() string       { return "z.ai" }
+// ID returns the provider identifier used by the registry.
+func (Provider) ID() string { return "zai" }
+
+// Name returns the human-readable provider name.
+func (Provider) Name() string { return "z.ai" }
+
+// BrandColor returns the accent color used on button faces.
 func (Provider) BrandColor() string { return "#ffffff" }
-func (Provider) BrandBg() string    { return "#0c0c0c" }
+
+// BrandBg returns the background color used on button faces.
+func (Provider) BrandBg() string { return "#0c0c0c" }
+
+// MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
 	return []string{"tokens-percent", "mcp-percent"}
 }
 
+// Fetch returns the latest z.ai quota snapshot.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	apiToken := getAPIToken()
 	if apiToken == "" {
@@ -254,6 +276,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	}, nil
 }
 
+// init registers the z.ai provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

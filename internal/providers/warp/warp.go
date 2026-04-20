@@ -15,8 +15,10 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
+// graphqlURL is the Warp GraphQL endpoint for the GetRequestLimitInfo op.
 const graphqlURL = "https://app.warp.dev/graphql/v2?op=GetRequestLimitInfo"
 
+// graphqlQuery is the GraphQL document sent by Fetch.
 const graphqlQuery = `
 query GetRequestLimitInfo($requestContext: RequestContext!) {
   user(requestContext: $requestContext) {
@@ -49,6 +51,7 @@ query GetRequestLimitInfo($requestContext: RequestContext!) {
 
 // --- API response types ---
 
+// requestLimitInfo captures the per-user request limit and next refresh.
 type requestLimitInfo struct {
 	IsUnlimited                  *bool   `json:"isUnlimited"`
 	NextRefreshTime              *string `json:"nextRefreshTime"`
@@ -56,18 +59,21 @@ type requestLimitInfo struct {
 	RequestsUsedSinceLastRefresh *int    `json:"requestsUsedSinceLastRefresh"`
 }
 
+// bonusGrant represents a one-off pool of bonus credits and its expiry.
 type bonusGrant struct {
 	RequestCreditsGranted   *int    `json:"requestCreditsGranted"`
 	RequestCreditsRemaining *int    `json:"requestCreditsRemaining"`
 	Expiration              *string `json:"expiration"`
 }
 
+// workspaceBonusInfo carries the per-workspace bonus grant list.
 type workspaceBonusInfo struct {
 	BonusGrantsInfo *struct {
 		Grants []bonusGrant `json:"grants"`
 	} `json:"bonusGrantsInfo"`
 }
 
+// graphqlResponse is the shape returned by the Warp GraphQL endpoint.
 type graphqlResponse struct {
 	Data *struct {
 		User *struct {
@@ -83,6 +89,7 @@ type graphqlResponse struct {
 	} `json:"errors"`
 }
 
+// graphqlRequest is the JSON body posted to the Warp GraphQL endpoint.
 type graphqlRequest struct {
 	Query     string `json:"query"`
 	Variables struct {
@@ -98,6 +105,7 @@ type graphqlRequest struct {
 	} `json:"variables"`
 }
 
+// getAPIKey resolves a Warp API key from user settings or env vars.
 func getAPIKey() string {
 	return settings.ResolveAPIKey(
 		settings.ProviderKeysGet().WarpKey,
@@ -108,14 +116,24 @@ func getAPIKey() string {
 // Provider fetches Warp usage data.
 type Provider struct{}
 
-func (Provider) ID() string         { return "warp" }
-func (Provider) Name() string       { return "Warp" }
+// ID returns the provider identifier used by the registry.
+func (Provider) ID() string { return "warp" }
+
+// Name returns the human-readable provider name.
+func (Provider) Name() string { return "Warp" }
+
+// BrandColor returns the accent color used on button faces.
 func (Provider) BrandColor() string { return "#01A4FF" }
-func (Provider) BrandBg() string    { return "#081520" }
+
+// BrandBg returns the background color used on button faces.
+func (Provider) BrandBg() string { return "#081520" }
+
+// MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
 	return []string{"credits-percent", "bonus-credits"}
 }
 
+// Fetch returns the latest Warp request-limit snapshot.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	apiKey := getAPIKey()
 	if apiKey == "" {
@@ -297,6 +315,7 @@ func formatExpiryCaption(remaining int, expiry time.Time) string {
 	return strconv.Itoa(remaining) + " " + noun + " " + expiry.Local().Format("Jan 2")
 }
 
+// init registers the Warp provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

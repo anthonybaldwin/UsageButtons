@@ -17,10 +17,13 @@ import (
 )
 
 const (
-	defaultBaseURL  = "https://openrouter.ai/api/v1"
+	// defaultBaseURL is the public OpenRouter API base when no override is set.
+	defaultBaseURL = "https://openrouter.ai/api/v1"
+	// keyFetchTimeout bounds the optional /auth/key enrichment call.
 	keyFetchTimeout = 1 * time.Second
 )
 
+// creditsResponse mirrors /auth/credits.
 type creditsResponse struct {
 	Data *struct {
 		TotalCredits *float64 `json:"total_credits"`
@@ -28,6 +31,7 @@ type creditsResponse struct {
 	} `json:"data"`
 }
 
+// keyResponse mirrors /auth/key; carries the key-specific quota and rate limit.
 type keyResponse struct {
 	Data *struct {
 		Limit     *float64 `json:"limit"`
@@ -39,6 +43,7 @@ type keyResponse struct {
 	} `json:"data"`
 }
 
+// getAPIKey resolves an OpenRouter API key from user settings or env vars.
 func getAPIKey() string {
 	return settings.ResolveAPIKey(
 		settings.ProviderKeysGet().OpenRouterKey,
@@ -46,6 +51,7 @@ func getAPIKey() string {
 	)
 }
 
+// baseURL resolves the API base URL from user settings, env vars, or the default.
 func baseURL() string {
 	return settings.ResolveEndpoint(
 		settings.ProviderKeysGet().OpenRouterURL,
@@ -54,8 +60,11 @@ func baseURL() string {
 	)
 }
 
+// creditsURL returns the full URL of the /auth/credits endpoint.
 func creditsURL() string { return baseURL() + "/auth/credits" }
-func keyURL() string     { return baseURL() + "/auth/key" }
+
+// keyURL returns the full URL of the /auth/key endpoint.
+func keyURL() string { return baseURL() + "/auth/key" }
 
 // fetchKeyInfo calls /auth/key with a tight timeout so a slow or absent
 // endpoint can't delay the credits update. Any failure returns nil.
@@ -74,14 +83,24 @@ func fetchKeyInfo(apiKey string) *keyResponse {
 // Provider fetches OpenRouter usage data.
 type Provider struct{}
 
-func (Provider) ID() string         { return "openrouter" }
-func (Provider) Name() string       { return "OpenRouter" }
+// ID returns the provider identifier used by the registry.
+func (Provider) ID() string { return "openrouter" }
+
+// Name returns the human-readable provider name.
+func (Provider) Name() string { return "OpenRouter" }
+
+// BrandColor returns the accent color used on button faces.
 func (Provider) BrandColor() string { return "#6467f2" }
-func (Provider) BrandBg() string    { return "#101028" }
+
+// BrandBg returns the background color used on button faces.
+func (Provider) BrandBg() string { return "#101028" }
+
+// MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
 	return []string{"credits-balance", "credits-used", "key-percent", "rate-limit"}
 }
 
+// Fetch returns the latest OpenRouter credits + key snapshot.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	apiKey := getAPIKey()
 	if apiKey == "" {
@@ -217,6 +236,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	}, nil
 }
 
+// init registers the OpenRouter provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

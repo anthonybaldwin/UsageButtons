@@ -30,22 +30,33 @@ import (
 // the baseline so inherited tokens are not double-counted.
 
 var (
-	codexCostMu       sync.Mutex
-	codexCostCache    *codexCostResult
-	codexCostCacheT   time.Time
+	// codexCostMu guards the cost cache against concurrent scanners.
+	codexCostMu sync.Mutex
+	// codexCostCache is the most recent scan result.
+	codexCostCache *codexCostResult
+	// codexCostCacheT is the time of the most recent scan.
+	codexCostCacheT time.Time
+	// codexCostCacheErr is the error from the most recent scan, if any.
 	codexCostCacheErr error
 )
 
+// codexCostCacheTTL bounds how often session logs are rescanned.
 const codexCostCacheTTL = 5 * time.Minute
 
 // Per-million-token pricing for GPT-5 class Codex models (USD).
 const (
-	codexPriceInputPerMTok     = 1.25
-	codexPriceCachedPerMTok    = 0.125
-	codexPriceOutputPerMTok    = 10.0
+	// codexPriceInputPerMTok is the price per million input tokens.
+	codexPriceInputPerMTok = 1.25
+	// codexPriceCachedPerMTok is the price per million cached-input tokens.
+	codexPriceCachedPerMTok = 0.125
+	// codexPriceOutputPerMTok is the price per million output tokens.
+	codexPriceOutputPerMTok = 10.0
+	// codexPriceReasoningPerMTok is the price per million reasoning tokens.
 	codexPriceReasoningPerMTok = 10.0
 )
 
+// codexTokenUsage mirrors the total_token_usage object Codex writes into
+// every token_count event.
 type codexTokenUsage struct {
 	InputTokens           int `json:"input_tokens"`
 	CachedInputTokens     int `json:"cached_input_tokens"`
@@ -72,27 +83,36 @@ type codexLine struct {
 	} `json:"payload"`
 }
 
+// codexCostResult aggregates today / last-30d token cost estimates.
 type codexCostResult struct {
 	Today   float64
 	Last30d float64
 }
 
+// codexRawSnapshot is one cumulative total_token_usage observation
+// paired with the timestamp at which it was emitted.
 type codexRawSnapshot struct {
 	ts    time.Time
 	usage codexTokenUsage
 }
 
+// codexSessionMeta captures the session-identifying fields needed to
+// handle forked sessions correctly.
 type codexSessionMeta struct {
 	sessionID    string
 	forkedFromID string
 	forkTS       time.Time
 }
 
+// codexScanState threads session-ID lookups and parent-snapshot caches
+// through a single scan so forked sessions reparse parents at most once.
 type codexScanState struct {
 	byID        map[string]string // session ID → file path, populated during discovery
 	parentCache map[string][]codexRawSnapshot
 }
 
+// sessionsRoot returns the filesystem root under which Codex writes
+// session JSONL files, honoring CODEX_HOME when set.
 func sessionsRoot() string {
 	if ch := os.Getenv("CODEX_HOME"); ch != "" {
 		return filepath.Join(ch, "sessions")
@@ -104,6 +124,8 @@ func sessionsRoot() string {
 	return filepath.Join(home, ".codex", "sessions")
 }
 
+// scanCodexCosts walks the session tree and returns aggregated token cost
+// estimates for today and the last 30 days, memoized for codexCostCacheTTL.
 func scanCodexCosts() (*codexCostResult, error) {
 	codexCostMu.Lock()
 	defer codexCostMu.Unlock()
@@ -326,6 +348,7 @@ func subUsage(a, b codexTokenUsage) codexTokenUsage {
 	}
 }
 
+// maxZero clamps n to a non-negative int.
 func maxZero(n int) int {
 	if n < 0 {
 		return 0
@@ -333,6 +356,8 @@ func maxZero(n int) int {
 	return n
 }
 
+// parseCodexTimestamp parses an RFC3339 or RFC3339Nano timestamp from a
+// session log event, returning ok=false on unrecognised input.
 func parseCodexTimestamp(ts string) (time.Time, bool) {
 	if ts == "" {
 		return time.Time{}, false
@@ -346,6 +371,7 @@ func parseCodexTimestamp(ts string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// codexTokenCost returns the USD cost for a single codexTokenUsage delta.
 func codexTokenCost(u codexTokenUsage) float64 {
 	return float64(u.InputTokens)*codexPriceInputPerMTok/1_000_000 +
 		float64(u.CachedInputTokens)*codexPriceCachedPerMTok/1_000_000 +

@@ -16,15 +16,19 @@ import (
 
 // Cost scan cache — rescan at most once per 5 minutes.
 var (
-	costMu     sync.Mutex
-	costCache  *costResult
+	// costMu guards costCache and costCacheT.
+	costMu sync.Mutex
+	// costCache holds the most recent result from scanCosts.
+	costCache *costResult
+	// costCacheT is the wall-clock time of the last successful scan.
 	costCacheT time.Time
 )
 
+// costCacheTTL bounds how often scanCosts re-reads the session JSONL files.
 const costCacheTTL = 5 * time.Minute
 
-// Per-million-token pricing (USD). Matches Anthropic's published API rates.
-// Cache creation is 1.25x input; cache reads are 0.1x input.
+// modelPricing is the per-million-token price (USD) for supported Claude
+// models. Cache creation is 1.25x input; cache reads are 0.1x input.
 var modelPricing = map[string]struct{ input, output float64 }{
 	"claude-opus-4-7":              {5.0, 25.0},
 	"claude-opus-4-6":              {5.0, 25.0},
@@ -37,9 +41,13 @@ var modelPricing = map[string]struct{ input, output float64 }{
 	"claude-3-5-haiku-20241022":    {0.80, 4.0},
 }
 
-const defaultInputPrice = 3.0  // fallback: Sonnet-class
+// defaultInputPrice is the Sonnet-class fallback input price per million tokens.
+const defaultInputPrice = 3.0
+
+// defaultOutputPrice is the Sonnet-class fallback output price per million tokens.
 const defaultOutputPrice = 15.0
 
+// sessionRecord is the shape of one line in a Claude session .jsonl file.
 type sessionRecord struct {
 	Timestamp string `json:"timestamp"`
 	Type      string `json:"type"`
@@ -54,11 +62,14 @@ type sessionRecord struct {
 	} `json:"message"`
 }
 
+// costResult aggregates the estimated spend across session files.
 type costResult struct {
 	Today    float64
 	Last30d  float64
 }
 
+// scanCosts walks ~/.claude/projects and returns aggregated today/30-day
+// spend estimates, memoized for costCacheTTL.
 func scanCosts() (*costResult, error) {
 	costMu.Lock()
 	defer costMu.Unlock()
@@ -113,6 +124,8 @@ func scanCosts() (*costResult, error) {
 	return &result, nil
 }
 
+// scanFile parses one session .jsonl file and accumulates token costs
+// into result for entries newer than thirtyDaysAgo.
 func scanFile(path string, todayStart, thirtyDaysAgo time.Time, result *costResult) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -154,6 +167,8 @@ func scanFile(path string, todayStart, thirtyDaysAgo time.Time, result *costResu
 	}
 }
 
+// tokenCost returns the estimated USD cost for a single assistant message
+// given its model and per-bucket token counts.
 func tokenCost(model string, input, output, cacheCreate, cacheRead int) float64 {
 	pricing, ok := modelPricing[model]
 	if !ok {
@@ -178,6 +193,8 @@ func tokenCost(model string, input, output, cacheCreate, cacheRead int) float64 
 	return inputCost + outputCost + cacheCreateCost + cacheReadCost
 }
 
+// costMetrics renders the scanned spend into MetricValue tiles for today
+// and the trailing 30 days.
 func costMetrics() []providers.MetricValue {
 	result, err := scanCosts()
 	if err != nil || result == nil {

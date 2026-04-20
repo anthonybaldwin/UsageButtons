@@ -1,0 +1,176 @@
+name: publish
+
+# Fires when a release PR merges into main. Reads the version from the
+# head commit (`chore(release): X.Y.Z`), tags it, cross-compiles, and
+# creates a GitHub Release with all three artifacts attached.
+#
+# Can also be dispatched manually with an explicit version string if
+# you need to re-run the publish step for a release that was already
+# committed + tagged (e.g. after fixing the build).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semver to publish (e.g. 0.5.0). Leave blank to read from head commit.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: decide whether to publish
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+      semver: ${{ steps.decide.outputs.semver }}
+      tag: ${{ steps.decide.outputs.tag }}
+    steps:
+      - name: Decide
+        id: decide
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            SEMVER="${{ inputs.version }}"
+          else
+            MSG=$(printf '%s' "${{ github.event.head_commit.message }}" | head -n1)
+            SEMVER=$(printf '%s' "$MSG" | sed -n 's/^chore(release): \([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')
+          fi
+          if [ -z "$SEMVER" ]; then
+            echo "head commit is not a release commit; skipping"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "semver=$SEMVER" >> "$GITHUB_OUTPUT"
+          echo "tag=v$SEMVER" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: tag + build + publish
+    needs: check
+    if: needs.check.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    env:
+      PLUGIN_DIR: io.github.anthonybaldwin.UsageButtons.sdPlugin
+      BIN_DIR: io.github.anthonybaldwin.UsageButtons.sdPlugin/bin
+      SEMVER: ${{ needs.check.outputs.semver }}
+      TAG: ${{ needs.check.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Verify manifest matches expected version
+        run: |
+          GOT=$(jq -r '.Version' "$PLUGIN_DIR/manifest.json")
+          WANT="$SEMVER.0"
+          if [ "$GOT" != "$WANT" ]; then
+            echo "manifest Version is $GOT, expected $WANT" >&2
+            exit 1
+          fi
+          EXT_GOT=$(jq -r '.version' chrome-extension/manifest.json)
+          if [ "$EXT_GOT" != "$SEMVER" ]; then
+            echo "extension manifest version is $EXT_GOT, expected $SEMVER" >&2
+            exit 1
+          fi
+
+      - name: Tag
+        run: |
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "tag $TAG already exists locally; assuming it is already on origin"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Build Windows binaries
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          go build -o $BIN_DIR/plugin-win.exe ./cmd/plugin/
+          go build -o $BIN_DIR/usagebuttons-native-host-win.exe ./cmd/native-host/
+
+      - name: Build macOS binaries
+        run: |
+          GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/plugin-mac-arm64 ./cmd/plugin/
+          GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/plugin-mac-x64 ./cmd/plugin/
+          GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/usagebuttons-native-host-mac-arm64 ./cmd/native-host/
+          GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/usagebuttons-native-host-mac-x64 ./cmd/native-host/
+
+      - name: Write macOS arch-dispatch wrapper
+        run: |
+          cat > $BIN_DIR/plugin-mac << 'WRAPPER'
+          #!/bin/sh
+          set -e
+          dir="$(cd "$(dirname "$0")" && pwd)"
+          case "$(uname -m)" in
+            arm64|aarch64) exec "$dir/plugin-mac-arm64" "$@" ;;
+            x86_64)        exec "$dir/plugin-mac-x64" "$@" ;;
+            *)             echo "UsageButtons: unsupported arch: $(uname -m)" >&2; exit 1 ;;
+          esac
+          WRAPPER
+          chmod +x $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
+          chmod +x $BIN_DIR/usagebuttons-native-host-mac-arm64 $BIN_DIR/usagebuttons-native-host-mac-x64
+
+      - name: Package Windows .streamDeckPlugin
+        run: |
+          rm -f $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
+          rm -f $BIN_DIR/usagebuttons-native-host-mac-arm64 $BIN_DIR/usagebuttons-native-host-mac-x64
+          zip -ry UsageButtons-Windows.streamDeckPlugin $PLUGIN_DIR -x "$PLUGIN_DIR/logs/*"
+
+      - name: Package macOS .streamDeckPlugin
+        run: |
+          rm -f $BIN_DIR/plugin-win.exe $BIN_DIR/usagebuttons-native-host-win.exe
+          GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/plugin-mac-arm64 ./cmd/plugin/
+          GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/plugin-mac-x64 ./cmd/plugin/
+          GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/usagebuttons-native-host-mac-arm64 ./cmd/native-host/
+          GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/usagebuttons-native-host-mac-x64 ./cmd/native-host/
+          cat > $BIN_DIR/plugin-mac << 'WRAPPER'
+          #!/bin/sh
+          set -e
+          dir="$(cd "$(dirname "$0")" && pwd)"
+          case "$(uname -m)" in
+            arm64|aarch64) exec "$dir/plugin-mac-arm64" "$@" ;;
+            x86_64)        exec "$dir/plugin-mac-x64" "$@" ;;
+            *)             echo "UsageButtons: unsupported arch: $(uname -m)" >&2; exit 1 ;;
+          esac
+          WRAPPER
+          chmod +x $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
+          chmod +x $BIN_DIR/usagebuttons-native-host-mac-arm64 $BIN_DIR/usagebuttons-native-host-mac-x64
+          zip -ry UsageButtons-macOS.streamDeckPlugin $PLUGIN_DIR -x "$PLUGIN_DIR/logs/*"
+
+      # Chrome blocks consumer .crx sideloads since 2019, so Load Unpacked
+      # is the viable self-install path from a GitHub Release.
+      - name: Package Chrome extension
+        run: |
+          (cd chrome-extension && zip -ry ../UsageButtons-Helper-unpacked.zip .)
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: Usage Buttons ${{ env.SEMVER }}
+          tag_name: ${{ env.TAG }}
+          generate_release_notes: true
+          files: |
+            UsageButtons-Windows.streamDeckPlugin
+            UsageButtons-macOS.streamDeckPlugin
+            UsageButtons-Helper-unpacked.zip

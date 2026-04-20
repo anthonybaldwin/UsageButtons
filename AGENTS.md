@@ -74,21 +74,43 @@ Cross-compilation from any host: `GOOS=darwin GOARCH=arm64 go build ...`
 
 ## Releasing
 
-Releases are cut via the `release` workflow — manually dispatched
-from GitHub Actions or the CLI:
+Releases are a two-step PR flow. `main` is protected by a branch
+rule (changes must go through a PR), so the release workflow can't
+push directly — instead it opens a PR, and merging the PR triggers
+the publish workflow.
+
+**Step 1 — open the release PR** via `release.yml` (manual dispatch):
 
 ```
 gh workflow run release.yml --field bump=patch   # 0.3.2 → 0.3.3
 gh workflow run release.yml --field bump=minor   # 0.3.2 → 0.4.0
 gh workflow run release.yml --field bump=major   # 0.3.2 → 1.0.0
 gh workflow run release.yml --field bump=custom --field custom_version=0.4.0
-gh workflow run release.yml --field bump=patch --field draft=true  # draft release
 ```
 
-No local releasing — the workflow bumps both manifests (plugin +
-Helper extension), commits to `main`, tags, builds binaries for
-Windows + macOS (both arches), packages the Helper zip, and
-publishes the GitHub Release with all three artifacts attached.
+That bumps both manifests (plugin + Helper extension) on a
+`release/vX.Y.Z` branch and opens a PR titled
+`chore(release): X.Y.Z`.
+
+**Step 2 — merge the PR.** Use _Merge_ or _Rebase_, or _Squash_
+without editing the title. The squashed/merged commit message must
+still start with `chore(release): X.Y.Z` — that's the signal
+`publish.yml` keys off of.
+
+Once the commit lands on `main`, `publish.yml` tags `vX.Y.Z`,
+cross-compiles Windows + macOS binaries (both arches), packages
+the Helper zip, and creates the GitHub Release with all three
+artifacts attached.
+
+If the publish step fails after the PR merged, you can re-run it
+manually without recommitting:
+
+```
+gh workflow run publish.yml --field version=0.4.0
+```
+
+No local releasing — don't run `git tag v*` yourself. Let the
+workflow do it.
 
 **After cutting a release**, pull + rebuild locally so your dev
 binary matches the new version (otherwise the update checker on

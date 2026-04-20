@@ -1,22 +1,14 @@
 name: release
 
-# Manually-dispatched release. Single source of truth — no local
-# releasing, no ./scripts/release.sh, no local tag pushing. Kick it off
-# from the GitHub Actions UI OR via:
+# Manually-dispatched release prep. Opens a PR that bumps both
+# manifests; merging that PR triggers publish.yml which tags the
+# release, cross-compiles, and attaches artifacts.
+#
+# Kick off from the GitHub Actions UI OR via:
 #
 #   gh workflow run release.yml --field bump=patch
 #   gh workflow run release.yml --field bump=minor
-#   gh workflow run release.yml --field bump=custom --field custom_version=0.4.0
-#
-# What it does, start to finish:
-#   1. Compute the new version from the current manifest.json + bump.
-#   2. Refuse to run if the target tag already exists.
-#   3. Bump both manifests (plugin + Helper extension) on main.
-#   4. Commit + tag + push (main + the new tag).
-#   5. Cross-compile plugin + native-host for win/mac (both arches).
-#   6. Package Windows + macOS .streamDeckPlugin bundles.
-#   7. Package the Helper extension as an unpacked zip.
-#   8. Create the GitHub Release with all three artifacts attached.
+#   gh workflow run release.yml --field bump=custom --field custom_version=0.5.0
 on:
   workflow_dispatch:
     inputs:
@@ -31,33 +23,24 @@ on:
           - major
           - custom
       custom_version:
-        description: 'Custom semver (used only when bump=custom, e.g. 0.4.0)'
+        description: 'Custom semver (used only when bump=custom, e.g. 0.5.0)'
         required: false
         type: string
-      draft:
-        description: 'Create as draft release'
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: write
+  pull-requests: write
 
-# Serialize release dispatches — a second trigger waits for the first
-# to finish (cancel-in-progress: false). Never cancel mid-release;
-# the workflow pushes commits + tags, half-applying that would be a
-# mess to unwind.
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: bump + build + publish
+  open-pr:
+    name: bump + open release PR
     runs-on: ubuntu-latest
     env:
       PLUGIN_DIR: io.github.anthonybaldwin.UsageButtons.sdPlugin
-      BIN_DIR: io.github.anthonybaldwin.UsageButtons.sdPlugin/bin
 
     steps:
       - name: Checkout
@@ -65,20 +48,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-
-      - name: Vet
-        run: go vet ./...
-
       - name: Compute new version
         id: version
         run: |
           MANIFEST="$PLUGIN_DIR/manifest.json"
           CURRENT=$(jq -r '.Version' "$MANIFEST")
-          IFS='.' read -ra PARTS <<< "$CURRENT"
+          # Stream Deck stores x.y.z.0 — strip the trailing .0 to get semver.
+          SEMVER_CURRENT=$(echo "$CURRENT" | awk -F. '{printf "%d.%d.%d", $1, $2, $3}')
+          IFS='.' read -ra PARTS <<< "$SEMVER_CURRENT"
           MAJOR=${PARTS[0]:-0}
           MINOR=${PARTS[1]:-0}
           PATCH=${PARTS[2]:-0}
@@ -90,7 +67,7 @@ jobs:
             custom)
               NEW="${{ inputs.custom_version }}"
               if [ -z "$NEW" ]; then
-                echo "✗ bump=custom requires the custom_version input" >&2
+                echo "bump=custom requires the custom_version input" >&2
                 exit 1
               fi
               ;;
@@ -98,18 +75,23 @@ jobs:
 
           SD_VERSION="$NEW.0"
           TAG="v$NEW"
+          BRANCH="release/$TAG"
 
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "✗ tag $TAG already exists" >&2
+            echo "tag $TAG already exists" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "branch $BRANCH already exists on origin" >&2
             exit 1
           fi
 
           echo "semver=$NEW" >> "$GITHUB_OUTPUT"
           echo "sd_version=$SD_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
-      - name: Bump manifests + commit + tag
+      - name: Bump manifests + push branch
         run: |
           jq --arg v "${{ steps.version.outputs.sd_version }}" \
             '.Version = $v' \
@@ -122,85 +104,28 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${{ steps.version.outputs.branch }}"
           git add $PLUGIN_DIR/manifest.json chrome-extension/manifest.json
           git commit -m "chore(release): ${{ steps.version.outputs.semver }}"
-          git tag "${{ steps.version.outputs.tag }}"
-          git push origin main
-          git push origin "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.branch }}"
 
-      - name: Build Windows binaries
+      - name: Open release PR
         env:
-          GOOS: windows
-          GOARCH: amd64
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          go build -o $BIN_DIR/plugin-win.exe ./cmd/plugin/
-          go build -o $BIN_DIR/usagebuttons-native-host-win.exe ./cmd/native-host/
+          gh pr create \
+            --base main \
+            --head "${{ steps.version.outputs.branch }}" \
+            --title "chore(release): ${{ steps.version.outputs.semver }}" \
+            --body "$(cat <<EOF
+          Release prep for **${{ steps.version.outputs.tag }}**.
 
-      - name: Build macOS binaries
-        run: |
-          GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/plugin-mac-arm64 ./cmd/plugin/
-          GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/plugin-mac-x64 ./cmd/plugin/
-          GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/usagebuttons-native-host-mac-arm64 ./cmd/native-host/
-          GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/usagebuttons-native-host-mac-x64 ./cmd/native-host/
+          Bumps:
+          - Plugin manifest \`Version\` → \`${{ steps.version.outputs.sd_version }}\`
+          - Extension manifest \`version\` → \`${{ steps.version.outputs.semver }}\`
 
-      - name: Write macOS arch-dispatch wrapper
-        run: |
-          cat > $BIN_DIR/plugin-mac << 'WRAPPER'
-          #!/bin/sh
-          set -e
-          dir="$(cd "$(dirname "$0")" && pwd)"
-          case "$(uname -m)" in
-            arm64|aarch64) exec "$dir/plugin-mac-arm64" "$@" ;;
-            x86_64)        exec "$dir/plugin-mac-x64" "$@" ;;
-            *)             echo "UsageButtons: unsupported arch: $(uname -m)" >&2; exit 1 ;;
-          esac
-          WRAPPER
-          chmod +x $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
-          chmod +x $BIN_DIR/usagebuttons-native-host-mac-arm64 $BIN_DIR/usagebuttons-native-host-mac-x64
+          Merging this PR triggers \`publish.yml\`, which tags \`${{ steps.version.outputs.tag }}\`, cross-compiles win/mac binaries, and attaches the \`.streamDeckPlugin\` bundles + extension zip to a GitHub Release.
 
-      - name: Package Windows .streamDeckPlugin
-        run: |
-          rm -f $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
-          rm -f $BIN_DIR/usagebuttons-native-host-mac-arm64 $BIN_DIR/usagebuttons-native-host-mac-x64
-          zip -ry UsageButtons-Windows.streamDeckPlugin $PLUGIN_DIR -x "$PLUGIN_DIR/logs/*"
-
-      - name: Package macOS .streamDeckPlugin
-        run: |
-          rm -f $BIN_DIR/plugin-win.exe $BIN_DIR/usagebuttons-native-host-win.exe
-          GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/plugin-mac-arm64 ./cmd/plugin/
-          GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/plugin-mac-x64 ./cmd/plugin/
-          GOOS=darwin GOARCH=arm64 go build -o $BIN_DIR/usagebuttons-native-host-mac-arm64 ./cmd/native-host/
-          GOOS=darwin GOARCH=amd64 go build -o $BIN_DIR/usagebuttons-native-host-mac-x64 ./cmd/native-host/
-          cat > $BIN_DIR/plugin-mac << 'WRAPPER'
-          #!/bin/sh
-          set -e
-          dir="$(cd "$(dirname "$0")" && pwd)"
-          case "$(uname -m)" in
-            arm64|aarch64) exec "$dir/plugin-mac-arm64" "$@" ;;
-            x86_64)        exec "$dir/plugin-mac-x64" "$@" ;;
-            *)             echo "UsageButtons: unsupported arch: $(uname -m)" >&2; exit 1 ;;
-          esac
-          WRAPPER
-          chmod +x $BIN_DIR/plugin-mac $BIN_DIR/plugin-mac-arm64 $BIN_DIR/plugin-mac-x64
-          chmod +x $BIN_DIR/usagebuttons-native-host-mac-arm64 $BIN_DIR/usagebuttons-native-host-mac-x64
-          zip -ry UsageButtons-macOS.streamDeckPlugin $PLUGIN_DIR -x "$PLUGIN_DIR/logs/*"
-
-      # Chrome extension: version was already bumped in the Bump step,
-      # so this just zips the folder. Chrome blocks consumer .crx
-      # sideloads since 2019, so Load Unpacked is the viable self-
-      # install path from a GitHub Release.
-      - name: Package Chrome extension
-        run: |
-          (cd chrome-extension && zip -ry ../UsageButtons-Helper-unpacked.zip .)
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          name: Usage Buttons ${{ steps.version.outputs.semver }}
-          tag_name: ${{ steps.version.outputs.tag }}
-          draft: ${{ inputs.draft }}
-          generate_release_notes: true
-          files: |
-            UsageButtons-Windows.streamDeckPlugin
-            UsageButtons-macOS.streamDeckPlugin
-            UsageButtons-Helper-unpacked.zip
+          **Merge method matters:** use _Merge_ or _Rebase_ so the commit message stays \`chore(release): ${{ steps.version.outputs.semver }}\`. _Squash_ also works as long as the squash title isn't edited.
+          EOF
+          )"

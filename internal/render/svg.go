@@ -385,38 +385,48 @@ func IsValidHexColor(s string) bool {
 }
 
 // expandHexColor expands shorthand hex colors (#RGB -> #RRGGBB, #RGBA -> #RRGGBBAA)
-// to their full forms. Returns the expanded hex string without the # prefix.
-func expandHexColor(s string) string {
+// to their full forms. Returns the expanded hex string without the # prefix and a
+// bool indicating success. Returns ("", false) if the input length is invalid.
+func expandHexColor(s string) (string, bool) {
 	hex := strings.TrimPrefix(s, "#")
 	switch len(hex) {
 	case 3:
 		// RGB -> RRGGBB
-		return string([]byte{hex[0], hex[0], hex[1], hex[1], hex[2], hex[2]})
+		return string([]byte{hex[0], hex[0], hex[1], hex[1], hex[2], hex[2]}), true
 	case 4:
 		// RGBA -> RRGGBBAA
-		return string([]byte{hex[0], hex[0], hex[1], hex[1], hex[2], hex[2], hex[3], hex[3]})
-	default:
+		return string([]byte{hex[0], hex[0], hex[1], hex[1], hex[2], hex[2], hex[3], hex[3]}), true
+	case 6, 8:
 		// Already 6 or 8 digits, return as-is
-		return hex
+		return hex, true
+	default:
+		// Invalid length
+		return "", false
 	}
 }
 
 // hexLuminance returns the perceived luminance (0..1) of a hex color using
 // the Rec. 709 weighted RGB formula.
 func hexLuminance(hex string) float64 {
-	hex = expandHexColor(hex)
-	r, _ := strconv.ParseInt(hex[0:2], 16, 64)
-	g, _ := strconv.ParseInt(hex[2:4], 16, 64)
-	b, _ := strconv.ParseInt(hex[4:6], 16, 64)
+	expanded, ok := expandHexColor(hex)
+	if !ok {
+		return 0.0 // Invalid color, return dark
+	}
+	r, _ := strconv.ParseInt(expanded[0:2], 16, 64)
+	g, _ := strconv.ParseInt(expanded[2:4], 16, 64)
+	b, _ := strconv.ParseInt(expanded[4:6], 16, 64)
 	return (0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(b)) / 255
 }
 
 // LightenHex blends a hex color toward white by amount (0..1).
 func LightenHex(hex string, amount float64) string {
-	hex = expandHexColor(hex)
-	r, _ := strconv.ParseInt(hex[0:2], 16, 64)
-	g, _ := strconv.ParseInt(hex[2:4], 16, 64)
-	b, _ := strconv.ParseInt(hex[4:6], 16, 64)
+	expanded, ok := expandHexColor(hex)
+	if !ok {
+		return "#ffffff" // Invalid color, return white as a safe fallback
+	}
+	r, _ := strconv.ParseInt(expanded[0:2], 16, 64)
+	g, _ := strconv.ParseInt(expanded[2:4], 16, 64)
+	b, _ := strconv.ParseInt(expanded[4:6], 16, 64)
 	r = int64(math.Min(255, math.Round(float64(r)+(255-float64(r))*amount)))
 	g = int64(math.Min(255, math.Round(float64(g)+(255-float64(g))*amount)))
 	b = int64(math.Min(255, math.Round(float64(b)+(255-float64(b))*amount)))

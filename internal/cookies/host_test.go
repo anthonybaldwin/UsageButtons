@@ -51,7 +51,7 @@ func TestServeNativeHost_EchoFlow(t *testing.T) {
 	var out bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := ServeNativeHost(ctx, &in, &out, EchoHandler()); err != nil {
+	if err := ServeNativeHost(ctx, &in, &out, echoHandler()); err != nil {
 		t.Fatalf("serve: %v", err)
 	}
 
@@ -92,7 +92,7 @@ func TestServeNativeHost_MalformedFrameStaysAlive(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := ServeNativeHost(context.Background(), &in, &out, EchoHandler()); err != nil {
+	if err := ServeNativeHost(context.Background(), &in, &out, echoHandler()); err != nil {
 		t.Fatalf("serve: %v", err)
 	}
 
@@ -136,5 +136,15 @@ func TestServeNativeHost_CtxCancelStopsLoop(t *testing.T) {
 	err := ServeNativeHost(ctx, pr, io.Discard, h.handle())
 	if err != nil && !errors.Is(err, context.Canceled) {
 		t.Fatalf("unexpected err: %v", err)
+	}
+}
+
+// echoHandler returns inbound messages verbatim with Kind="echo". Used
+// by message-loop tests in isolation.
+func echoHandler() Handler {
+	return func(_ context.Context, in Message, send func(Message) error) error {
+		out := in
+		out.Kind = "echo"
+		return send(out)
 	}
 }

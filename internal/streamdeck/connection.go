@@ -66,9 +66,6 @@ func Connect(args RegistrationArgs) (*Connection, error) {
 	return c, nil
 }
 
-// UUID returns the plugin UUID.
-func (c *Connection) UUID() string { return c.uuid }
-
 // ReadEvent blocks until the next inbound event arrives.
 func (c *Connection) ReadEvent() (Event, error) {
 	var ev Event

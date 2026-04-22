@@ -302,16 +302,6 @@ func InvertFillEnabled() bool {
 	return current.InvertFill
 }
 
-// SmartContrastForceAll reports whether the plugin-tier force-on
-// override is set. When true, every provider gets smart-contrast
-// regardless of its built-in default or per-provider override. When
-// false (the default), per-provider defaults apply.
-func SmartContrastForceAll() bool {
-	mu.RLock()
-	defer mu.RUnlock()
-	return current.SmartContrast != nil && *current.SmartContrast
-}
-
 // SmartContrastFor returns the effective smart-contrast toggle for the
 // given provider ID. Precedence:
 //   1. Plugin-tier force-on (GlobalSettings.SmartContrast == true) —
@@ -331,13 +321,6 @@ func SmartContrastFor(providerID string) bool {
 			return *ps.SmartContrast
 		}
 	}
-	return providerDefaultSmartContrast[providerID]
-}
-
-// SmartContrastDefault returns the built-in default for the given
-// provider — used by the Property Inspector to label the inherit
-// state in the per-provider override row.
-func SmartContrastDefault(providerID string) bool {
 	return providerDefaultSmartContrast[providerID]
 }
 

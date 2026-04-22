@@ -80,11 +80,3 @@ func Get(id string) Provider {
 	return registry[id]
 }
 
-// List returns all registered providers.
-func List() []Provider {
-	out := make([]Provider, 0, len(registry))
-	for _, p := range registry {
-		out = append(out, p)
-	}
-	return out
-}

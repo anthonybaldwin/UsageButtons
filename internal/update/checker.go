@@ -180,13 +180,6 @@ func LatestVersion() string {
 	return st.latest
 }
 
-// CurrentVersion returns the baked-in version.
-func CurrentVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return st.current
-}
-
 // URL returns the appropriate update URL based on install type.
 // Dev installs (.git exists) → repo URL. Release bundles → website.
 func URL() string {

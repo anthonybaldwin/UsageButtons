@@ -286,19 +286,6 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 	return snapshot
 }
 
-// PeekSnapshot returns the cached snapshot without fetching.
-func PeekSnapshot(providerID string) *Snapshot {
-	cacheMu.Lock()
-	e, ok := entries[providerID]
-	cacheMu.Unlock()
-	if !ok {
-		return nil
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.snapshot
-}
-
 // PeekSnapshotState returns the last rendered snapshot and its
 // fetch time without triggering a new fetch. Prefers e.result so
 // stale/error faces produced on the last fetch are preserved across

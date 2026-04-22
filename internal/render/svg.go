@@ -484,19 +484,6 @@ func glyphPathMarkup(xf, color string, opacity float64, g *ProviderGlyph) string
 		xf, color, opacity, g.D)
 }
 
-// contrastRatio returns the WCAG contrast ratio between two relative
-// luminances. The formula ((Lhi + 0.05) / (Llo + 0.05)) yields 1 for
-// identical colors and 21 for black-on-white. Inputs must be WCAG
-// relative luminance (sRGB-linearized), not the gamma-uncorrected
-// approximation hexLuminance returns — see hexRelativeLuminance.
-func contrastRatio(a, b float64) float64 {
-	hi, lo := a, b
-	if lo > hi {
-		hi, lo = lo, hi
-	}
-	return (hi + 0.05) / (lo + 0.05)
-}
-
 // srgbToLinear undoes the sRGB gamma curve for one channel value in
 // [0, 1], producing the linear-light value WCAG's relative luminance
 // formula expects.
@@ -561,21 +548,6 @@ func hexLuminance(hex string) float64 {
 	g, _ := strconv.ParseInt(expanded[2:4], 16, 64)
 	b, _ := strconv.ParseInt(expanded[4:6], 16, 64)
 	return (0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(b)) / 255
-}
-
-// LightenHex blends a hex color toward white by amount (0..1).
-func LightenHex(hex string, amount float64) string {
-	expanded, ok := expandHexColor(hex)
-	if !ok {
-		return "#ffffff" // Invalid color, return white as a safe fallback
-	}
-	r, _ := strconv.ParseInt(expanded[0:2], 16, 64)
-	g, _ := strconv.ParseInt(expanded[2:4], 16, 64)
-	b, _ := strconv.ParseInt(expanded[4:6], 16, 64)
-	r = int64(math.Min(255, math.Round(float64(r)+(255-float64(r))*amount)))
-	g = int64(math.Min(255, math.Round(float64(g)+(255-float64(g))*amount)))
-	b = int64(math.Min(255, math.Round(float64(b)+(255-float64(b))*amount)))
-	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
 }
 
 // xmlEscape escapes characters in s that are unsafe inside SVG text nodes

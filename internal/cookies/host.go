@@ -95,16 +95,6 @@ func ServeNativeHost(ctx context.Context, r io.Reader, w io.Writer, handle Handl
 	}
 }
 
-// EchoHandler returns inbound messages verbatim with Kind="echo". Kept
-// for unit tests of the message loop in isolation.
-func EchoHandler() Handler {
-	return func(ctx context.Context, in Message, send func(Message) error) error {
-		out := in
-		out.Kind = "echo"
-		return send(out)
-	}
-}
-
 // LogPath returns a sensible sidecar log path for the native host. We
 // can't log to stdout — the browser owns it.
 func LogPath() string {

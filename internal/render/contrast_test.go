@@ -59,20 +59,6 @@ func TestContrastOver_KeepsMidGrayOnMidGray(t *testing.T) {
 	}
 }
 
-// TestContrastRatio_KnownExtremes verifies contrastRatio returns
-// the canonical WCAG values at the edges: ~21 for black-on-white and
-// 1.0 for identical colors.
-func TestContrastRatio_KnownExtremes(t *testing.T) {
-	black := hexRelativeLuminance("#000000")
-	white := hexRelativeLuminance("#ffffff")
-	if r := contrastRatio(black, white); r < 20.9 || r > 21.1 {
-		t.Fatalf("black vs white contrast ratio: want ~21, got %.3f", r)
-	}
-	if r := contrastRatio(black, black); r < 0.99 || r > 1.01 {
-		t.Fatalf("identical colors contrast ratio: want 1, got %.3f", r)
-	}
-}
-
 // TestHexRelativeLuminance_MatchesWCAGReference verifies that
 // hexRelativeLuminance returns the canonical WCAG relative luminance
 // for the sRGB primaries (0.2126 / 0.7152 / 0.0722 for pure red /

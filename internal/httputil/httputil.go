@@ -184,46 +184,6 @@ func PostJSON(url string, headers map[string]string, payload any, timeout time.D
 	return nil
 }
 
-// GetHTML performs a GET request and returns the response body as a string.
-func GetHTML(url string, headers map[string]string, timeout time.Duration) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return "", fmt.Errorf("build request %s: %w", url, err)
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	if req.Header.Get("Accept") == "" {
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-	}
-	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", DefaultUserAgent)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("transport error %s: %w", url, err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", &Error{
-			Status:     resp.StatusCode,
-			StatusText: resp.Status,
-			Body:       string(body),
-			URL:        url,
-			Headers:    resp.Header,
-		}
-	}
-
-	return string(body), nil
-}
-
 // Truncate shortens a string to n chars.
 func Truncate(s string, n int) string {
 	s = strings.Join(strings.Fields(s), " ")

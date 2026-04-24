@@ -573,5 +573,5 @@ func FormatCountdown(seconds float64) string {
 	if hours < 24 {
 		return fmt.Sprintf("%dh %dm", hours, mins%60)
 	}
-	return fmt.Sprintf("%dd %dh %dm", hours/24, hours%24, mins%60)
+	return fmt.Sprintf("%dd", hours/24)
 }

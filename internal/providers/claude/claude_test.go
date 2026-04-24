@@ -42,6 +42,20 @@ func TestAnyStaleResetWindow(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "exactly at grace boundary is not stale",
+			resp: usageResponse{
+				FiveHour: win(now.Add(-staleResetGrace)),
+			},
+			want: false,
+		},
+		{
+			name: "one second past grace is stale",
+			resp: usageResponse{
+				FiveHour: win(now.Add(-(staleResetGrace + time.Second))),
+			},
+			want: true,
+		},
+		{
 			name: "weekly in the past beyond grace",
 			resp: usageResponse{
 				FiveHour: win(now.Add(2 * time.Hour)),
@@ -127,4 +141,5 @@ func TestApplyStaleWindowMarker(t *testing.T) {
 	})
 }
 
+// ptrString returns a pointer to s.
 func ptrString(s string) *string { return &s }

@@ -1,8 +1,11 @@
 package providers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -27,6 +30,13 @@ const (
 	// expired cookie) stops carrying forward stale data so the button
 	// can show a setup/error state instead.
 	StaleTTL = 30 * time.Minute
+
+	// PersistentTTL bounds how long a snapshot survives process restarts.
+	// This smooths normal Stream Deck / computer restarts without showing
+	// week-old usage after a long absence.
+	PersistentTTL = 24 * time.Hour
+
+	persistentCacheVersion = 1
 )
 
 // LogSink is called for cache observability. Set by the plugin at init.
@@ -114,16 +124,29 @@ func (e *cacheError) cooldownUntil() time.Time {
 // cacheEntry is the per-provider cache slot tracking the last snapshot,
 // the last error, and the in-flight fetch promise used for coalescing.
 type cacheEntry struct {
-	snapshot  *Snapshot
-	fetchedAt time.Time
-	lastError *cacheError
+	snapshot    *Snapshot
+	fetchedAt   time.Time
+	lastError   *cacheError
 	lastForceAt time.Time
 
 	// mu protects the inflight promise pattern.
-	mu       sync.Mutex
-	inflight chan struct{} // non-nil when a fetch is in progress
-	result   *Snapshot     // set when inflight completes
+	mu        sync.Mutex
+	inflight  chan struct{} // non-nil when a fetch is in progress
+	result    *Snapshot     // set when inflight completes
 	resultErr error
+}
+
+// persistentCacheDir returns the directory used for restart-surviving
+// provider snapshots. Tests replace it with a temp directory.
+var persistentCacheDir = defaultPersistentCacheDir
+
+// persistentSnapshot is the on-disk representation of one cached provider
+// snapshot.
+type persistentSnapshot struct {
+	Version    int       `json:"version"`
+	ProviderID string    `json:"providerId"`
+	FetchedAt  time.Time `json:"fetchedAt"`
+	Snapshot   Snapshot  `json:"snapshot"`
 }
 
 var (
@@ -140,6 +163,13 @@ func getEntry(providerID string) *cacheEntry {
 	e, ok := entries[providerID]
 	if !ok {
 		e = &cacheEntry{}
+		if s, fetchedAt, ok := loadPersistentSnapshot(providerID); ok {
+			e.snapshot = &s
+			e.result = &s
+			e.fetchedAt = fetchedAt
+			cacheLog("cache[%s] restored persisted snapshot (age=%ds)",
+				providerID, int(time.Since(fetchedAt).Seconds()))
+		}
 		entries[providerID] = e
 	}
 	return e
@@ -238,6 +268,8 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 	})
 
 	e.mu.Lock()
+	persist := false
+	persistedAt := time.Time{}
 	if fetchErr != nil {
 		msg := fetchErr.Error()
 		retryAt := retryAfterFromError(fetchErr)
@@ -267,6 +299,8 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 		}
 		e.snapshot = &snapshot
 		e.fetchedAt = time.Now()
+		persist = shouldPersistSnapshot(snapshot)
+		persistedAt = e.fetchedAt
 		hadError := e.lastError != nil
 		e.lastError = nil
 		ids := metricIDs(snapshot)
@@ -283,6 +317,10 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 	close(ch) // wake all coalesced waiters
 	e.mu.Unlock()
 
+	if persist {
+		persistSnapshot(p.ID(), snapshot, persistedAt)
+	}
+
 	return snapshot
 }
 
@@ -291,12 +329,10 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 // stale/error faces produced on the last fetch are preserved across
 // minute redraws; falls back to e.snapshot when no fetch has run.
 func PeekSnapshotState(providerID string) (*Snapshot, time.Time) {
-	cacheMu.Lock()
-	e, ok := entries[providerID]
-	cacheMu.Unlock()
-	if !ok {
+	if providerID == "" {
 		return nil, time.Time{}
 	}
+	e := getEntry(providerID)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.result != nil {
@@ -308,12 +344,13 @@ func PeekSnapshotState(providerID string) (*Snapshot, time.Time) {
 // ClearCache removes cached data for a provider (or all if id is "").
 func ClearCache(providerID string) {
 	cacheMu.Lock()
-	defer cacheMu.Unlock()
 	if providerID == "" {
 		entries = map[string]*cacheEntry{}
 	} else {
 		delete(entries, providerID)
 	}
+	cacheMu.Unlock()
+	clearPersistentCache(providerID)
 }
 
 // markStale returns a deep-enough copy of s with every metric marked
@@ -384,4 +421,150 @@ func boolStr(cond bool, t, f string) string {
 		return t
 	}
 	return f
+}
+
+// defaultPersistentCacheDir resolves the cross-platform cache directory.
+func defaultPersistentCacheDir() (string, error) {
+	base, err := os.UserCacheDir()
+	if err != nil || base == "" {
+		base, err = os.UserConfigDir()
+		if err != nil || base == "" {
+			return "", err
+		}
+	}
+	return filepath.Join(base, "UsageButtons", "provider-cache"), nil
+}
+
+// persistentSnapshotPath returns the path for providerID's persisted
+// snapshot file.
+func persistentSnapshotPath(providerID string) (string, error) {
+	dir, err := persistentCacheDir()
+	if err != nil || dir == "" {
+		return "", err
+	}
+	return filepath.Join(dir, safeCacheFilename(providerID)+".json"), nil
+}
+
+// safeCacheFilename maps provider IDs onto a conservative filename subset.
+func safeCacheFilename(providerID string) string {
+	if providerID == "" {
+		return "unknown"
+	}
+	out := make([]rune, 0, len(providerID))
+	for _, r := range providerID {
+		switch {
+		case r >= 'a' && r <= 'z':
+			out = append(out, r)
+		case r >= 'A' && r <= 'Z':
+			out = append(out, r)
+		case r >= '0' && r <= '9':
+			out = append(out, r)
+		case r == '-' || r == '_':
+			out = append(out, r)
+		default:
+			out = append(out, '_')
+		}
+	}
+	return string(out)
+}
+
+// shouldPersistSnapshot reports whether a snapshot is worth restoring
+// after a restart.
+func shouldPersistSnapshot(s Snapshot) bool {
+	return s.Error == "" && len(s.Metrics) > 0
+}
+
+// persistSnapshot writes a successful provider snapshot to disk. Failures
+// are logged but do not affect the live button update path.
+func persistSnapshot(providerID string, s Snapshot, fetchedAt time.Time) {
+	path, err := persistentSnapshotPath(providerID)
+	if err != nil || path == "" {
+		cacheLog("cache[%s] persist skipped: %v", providerID, err)
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		cacheLog("cache[%s] persist mkdir: %v", providerID, err)
+		return
+	}
+	payload := persistentSnapshot{
+		Version:    persistentCacheVersion,
+		ProviderID: providerID,
+		FetchedAt:  fetchedAt,
+		Snapshot:   s,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		cacheLog("cache[%s] persist marshal: %v", providerID, err)
+		return
+	}
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		cacheLog("cache[%s] persist write: %v", providerID, err)
+	}
+}
+
+// loadPersistentSnapshot reads a restart-surviving snapshot, rejecting
+// incompatible, mismatched, or overly old cache entries.
+func loadPersistentSnapshot(providerID string) (Snapshot, time.Time, bool) {
+	path, err := persistentSnapshotPath(providerID)
+	if err != nil || path == "" {
+		return Snapshot{}, time.Time{}, false
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return Snapshot{}, time.Time{}, false
+	}
+	var payload persistentSnapshot
+	if err := json.Unmarshal(body, &payload); err != nil {
+		cacheLog("cache[%s] persisted snapshot invalid: %v", providerID, err)
+		_ = os.Remove(path)
+		return Snapshot{}, time.Time{}, false
+	}
+	if payload.Version != persistentCacheVersion ||
+		payload.ProviderID != providerID ||
+		payload.Snapshot.ProviderID != providerID ||
+		payload.FetchedAt.IsZero() ||
+		!shouldPersistSnapshot(payload.Snapshot) {
+		_ = os.Remove(path)
+		return Snapshot{}, time.Time{}, false
+	}
+	age := time.Since(payload.FetchedAt)
+	if age < 0 || age > PersistentTTL {
+		_ = os.Remove(path)
+		return Snapshot{}, time.Time{}, false
+	}
+	s := payload.Snapshot
+	if age >= MinTTL {
+		s = markMetricsStale(s)
+	}
+	return s, payload.FetchedAt, true
+}
+
+// clearPersistentCache removes one provider snapshot, or the full persisted
+// cache directory when providerID is empty.
+func clearPersistentCache(providerID string) {
+	if providerID == "" {
+		dir, err := persistentCacheDir()
+		if err == nil && dir != "" {
+			_ = os.RemoveAll(dir)
+		}
+		return
+	}
+	path, err := persistentSnapshotPath(providerID)
+	if err == nil && path != "" {
+		_ = os.Remove(path)
+	}
+}
+
+// markMetricsStale returns a copy of s with every metric dimmed, without
+// setting Snapshot.Error. Used for restored disk snapshots so the tile can
+// look like last-known data without triggering an error banner.
+func markMetricsStale(s Snapshot) Snapshot {
+	out := s
+	out.Metrics = make([]MetricValue, len(s.Metrics))
+	copy(out.Metrics, s.Metrics)
+	for i := range out.Metrics {
+		t := true
+		out.Metrics[i].Stale = &t
+	}
+	return out
 }

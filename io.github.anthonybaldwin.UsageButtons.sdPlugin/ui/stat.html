@@ -748,6 +748,8 @@
         ["opus-pace",                 "Opus pace (7d burn rate)",       "pace"],
         ["weekly-design-percent",     "Claude Design % remaining (weekly)", "pct"],
         ["design-pace",               "Claude Design pace (7d burn rate)",  "pace"],
+        ["weekly-routines-percent",   "Daily Routines % remaining (weekly)", "pct"],
+        ["routines-pace",             "Daily Routines pace (7d burn rate)",  "pace"],
         ["extra-usage-enabled",       "Extra usage — ON / OFF",         "toggle",     "browser"],
         ["extra-usage-percent",       "Extra usage headroom %",         "pct",        "browser"],
         ["extra-usage-limit",         "Extra usage monthly limit ($)",  "ref-dollar", "browser"],
@@ -789,6 +791,7 @@
         ["auto-percent",    "Auto / Composer usage remaining %",  "pct",      "browser"],
         ["api-percent",     "API / Named model usage remaining %","pct",      "browser"],
         ["ondemand-spent",  "On-demand spend ($)",                "dollar-m", "browser"],
+        ["team-ondemand-spent", "Team on-demand spend ($)",        "dollar-m", "browser"],
       ],
       openrouter: [
         ["credits-balance", "Credit balance ($)",  "ref-dollar"],
@@ -802,6 +805,7 @@
       ],
       zai: [
         ["tokens-percent",  "Token usage remaining %", "pct"],
+        ["tokens-session-percent", "5-hour token usage remaining %", "pct"],
         ["mcp-percent",     "MCP usage remaining %",   "pct"],
       ],
       "kimi-k2": [
@@ -809,19 +813,18 @@
       ],
     };
 
-    // CodexBar brand colors — keep in sync with
-    // src/providers/brand-colors.ts so the Fill color picker shows
-    // sensible defaults per provider.
+    // Provider brand colors — keep in sync with the Go providers so the
+    // Fill color picker shows the same defaults as live buttons.
     const BRAND_COLORS = {
       claude:     "#cc7c5e",
-      codex:      "#49a3b0",
-      copilot:    "#a855f7",
-      ollama:     "#888888",
-      cursor:     "#00bfa5",
+      codex:      "#3941FF",
+      copilot:    "#8534F3",
+      ollama:     "#f7f7f7",
+      cursor:     "#F54E00",
       openrouter: "#6467f2",
-      warp:       "#938bb4",
-      zai:        "#e85a6a",
-      "kimi-k2":  "#4c00ff",
+      warp:       "#01A4FF",
+      zai:        "#ffffff",
+      "kimi-k2":  "#0071e3",
     };
 
 // Per-provider brand background colors. Kept in sync with each

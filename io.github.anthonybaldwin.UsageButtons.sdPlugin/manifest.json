@@ -29,7 +29,7 @@
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.claude",
       "Name": "Claude",
-      "Tooltip": "Claude usage stats — session %, weekly %, Sonnet %, extras, costs.",
+      "Tooltip": "Claude usage stats — session %, weekly %, Sonnet %, Opus %, Design, Routines, extras, costs.",
       "Icon": "assets/action-claude",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
@@ -37,7 +37,7 @@
       "States": [
         {
           "Image": "assets/action-claude-key",
-          "ShowTitle": false,
+          "ShowTitle": true,
           "TitleAlignment": "top"
         }
       ]
@@ -53,7 +53,7 @@
       "States": [
         {
           "Image": "assets/action-codex-key",
-          "ShowTitle": false,
+          "ShowTitle": true,
           "TitleAlignment": "top"
         }
       ]
@@ -69,7 +69,7 @@
       "States": [
         {
           "Image": "assets/action-copilot-key",
-          "ShowTitle": false,
+          "ShowTitle": true,
           "TitleAlignment": "top"
         }
       ]
@@ -77,7 +77,7 @@
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.cursor",
       "Name": "Cursor",
-      "Tooltip": "Cursor usage stats — total %, auto %, API %, on-demand spend.",
+      "Tooltip": "Cursor usage stats — total %, auto %, API %, individual and team on-demand spend.",
       "Icon": "assets/action-cursor",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
@@ -85,7 +85,7 @@
       "States": [
         {
           "Image": "assets/action-cursor-key",
-          "ShowTitle": false,
+          "ShowTitle": true,
           "TitleAlignment": "top"
         }
       ]
@@ -101,7 +101,7 @@
       "States": [
         {
           "Image": "assets/action-ollama-key",
-          "ShowTitle": false,
+          "ShowTitle": true,
           "TitleAlignment": "top"
         }
       ]
@@ -117,7 +117,7 @@
       "States": [
         {
           "Image": "assets/action-openrouter-key",
-          "ShowTitle": false,
+          "ShowTitle": true,
           "TitleAlignment": "top"
         }
       ]
@@ -133,7 +133,7 @@
       "States": [
         {
           "Image": "assets/action-warp-key",
-          "ShowTitle": false,
+          "ShowTitle": true,
           "TitleAlignment": "top"
         }
       ]
@@ -141,7 +141,7 @@
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.zai",
       "Name": "z.ai",
-      "Tooltip": "z.ai usage stats — token usage %, MCP usage %.",
+      "Tooltip": "z.ai usage stats — token usage %, 5-hour token usage %, MCP usage %.",
       "Icon": "assets/action-zai",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
@@ -149,7 +149,7 @@
       "States": [
         {
           "Image": "assets/action-zai-key",
-          "ShowTitle": false,
+          "ShowTitle": true,
           "TitleAlignment": "top"
         }
       ]
@@ -165,7 +165,7 @@
       "States": [
         {
           "Image": "assets/action-kimi-k2-key",
-          "ShowTitle": false,
+          "ShowTitle": true,
           "TitleAlignment": "top"
         }
       ]

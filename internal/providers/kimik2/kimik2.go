@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
@@ -65,11 +66,15 @@ func dig(obj any, path []string) (float64, bool) {
 var consumedPaths = [][]string{
 	{"total_credits_consumed"},
 	{"totalCreditsConsumed"},
+	{"total_credits_used"},
+	{"totalCreditsUsed"},
 	{"credits_consumed"},
 	{"creditsConsumed"},
 	{"consumedCredits"},
 	{"usedCredits"},
 	{"total"},
+	{"usage", "total"},
+	{"usage", "consumed"},
 	{"consumed"},
 }
 
@@ -83,7 +88,29 @@ var remainingPaths = [][]string{
 	{"availableCredits"},
 	{"credits_left"},
 	{"creditsLeft"},
+	{"usage", "credits_remaining"},
+	{"usage", "remaining"},
 	{"remaining"},
+}
+
+// averageTokenPaths lists optional average-token-per-request fields.
+var averageTokenPaths = [][]string{
+	{"average_tokens_per_request"},
+	{"averageTokensPerRequest"},
+	{"average_tokens"},
+	{"averageTokens"},
+	{"avg_tokens"},
+	{"avgTokens"},
+}
+
+// timestampPaths lists optional updated-at fields.
+var timestampPaths = [][]string{
+	{"updated_at"},
+	{"updatedAt"},
+	{"timestamp"},
+	{"time"},
+	{"last_update"},
+	{"lastUpdated"},
 }
 
 // contexts returns every nested map worth searching. Mirrors CodexBar's
@@ -149,6 +176,71 @@ func extractCredits(body map[string]any) (consumed float64, consumedOk bool, rem
 	return cFallback, cFallbackOK, rFallback, rFallbackOK
 }
 
+// findDate returns the first timestamp value found under paths.
+func findDate(body map[string]any, paths [][]string) *time.Time {
+	for _, ctx := range contexts(body) {
+		for _, path := range paths {
+			if raw, ok := digAny(ctx, path); ok {
+				if t, ok := parseDate(raw); ok {
+					return &t
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// digAny traverses a nested object path and returns the raw value.
+func digAny(obj any, path []string) (any, bool) {
+	current := obj
+	for _, key := range path {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		current = m[key]
+		if current == nil {
+			return nil, false
+		}
+	}
+	return current, true
+}
+
+// parseDate parses ISO or epoch-second/millisecond timestamps.
+func parseDate(raw any) (time.Time, bool) {
+	switch v := raw.(type) {
+	case float64:
+		return dateFromNumeric(v)
+	case json.Number:
+		f, err := v.Float64()
+		if err != nil {
+			return time.Time{}, false
+		}
+		return dateFromNumeric(f)
+	case string:
+		if n, err := strconv.ParseFloat(v, 64); err == nil {
+			return dateFromNumeric(n)
+		}
+		for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+			if t, err := time.Parse(layout, v); err == nil {
+				return t, true
+			}
+		}
+	}
+	return time.Time{}, false
+}
+
+// dateFromNumeric parses epoch seconds or milliseconds.
+func dateFromNumeric(v float64) (time.Time, bool) {
+	if v <= 0 {
+		return time.Time{}, false
+	}
+	if v > 1_000_000_000_000 {
+		return time.UnixMilli(int64(v)), true
+	}
+	return time.Unix(int64(v), 0), true
+}
+
 // Provider fetches Kimi K2 usage data.
 type Provider struct{}
 
@@ -206,6 +298,10 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	consumed, consumedOk, remaining, remainingOk := extractCredits(body)
 	var metrics []providers.MetricValue
 	now := time.Now().UTC().Format(time.RFC3339)
+	if t := findDate(body, timestampPaths); t != nil {
+		now = t.UTC().Format(time.RFC3339)
+	}
+	averageTokens, _ := firstInContexts(body, averageTokenPaths)
 
 	if consumedOk || remainingOk {
 		c := consumed
@@ -238,6 +334,9 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 				RawMax:       &rm,
 				UpdatedAt:    now,
 			})
+			if averageTokens > 0 {
+				metrics[len(metrics)-1].Caption = fmt.Sprintf("%.0f avg tokens", averageTokens)
+			}
 		} else if r > 0 {
 			metrics = append(metrics, providers.MetricValue{
 				ID:              "credits-balance",
@@ -250,6 +349,9 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 				Caption:         "Available",
 				UpdatedAt:       now,
 			})
+			if averageTokens > 0 {
+				metrics[len(metrics)-1].Caption = fmt.Sprintf("%.0f avg tokens", averageTokens)
+			}
 		}
 	}
 
@@ -260,6 +362,16 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		Metrics:      metrics,
 		Status:       "operational",
 	}, nil
+}
+
+// firstInContexts returns the first numeric value found under paths.
+func firstInContexts(body map[string]any, paths [][]string) (float64, bool) {
+	for _, ctx := range contexts(body) {
+		if v, ok := findFirst(ctx, paths); ok {
+			return v, true
+		}
+	}
+	return 0, false
 }
 
 // init registers the Kimi K2 provider with the package registry.

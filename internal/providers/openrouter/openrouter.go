@@ -60,13 +60,13 @@ func baseURL() string {
 	)
 }
 
-// creditsURL returns the full URL of the /auth/credits endpoint.
-func creditsURL() string { return baseURL() + "/auth/credits" }
+// creditsURL returns the full URL of the /credits endpoint.
+func creditsURL() string { return baseURL() + "/credits" }
 
-// keyURL returns the full URL of the /auth/key endpoint.
-func keyURL() string { return baseURL() + "/auth/key" }
+// keyURL returns the full URL of the /key endpoint.
+func keyURL() string { return baseURL() + "/key" }
 
-// fetchKeyInfo calls /auth/key with a tight timeout so a slow or absent
+// fetchKeyInfo calls /key with a tight timeout so a slow or absent
 // endpoint can't delay the credits update. Any failure returns nil.
 func fetchKeyInfo(apiKey string) *keyResponse {
 	var resp keyResponse

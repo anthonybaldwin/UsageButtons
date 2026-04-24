@@ -2,6 +2,8 @@ package codex
 
 import "testing"
 
+// TestUsagePathMatchesCodexBarEndpointSelection verifies usage-path selection
+// for backend-api-style and Codex-API-style base URLs.
 func TestUsagePathMatchesCodexBarEndpointSelection(t *testing.T) {
 	tests := []struct {
 		name string

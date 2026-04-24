@@ -209,11 +209,14 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		if m := quotaMetric("tokens-percent", "TOKENS", "Token usage remaining", primary, now); m != nil {
 			metrics = append(metrics, *m)
 		}
-		if len(tokenLimits) > 1 {
-			session := tokenLimits[0]
-			if m := quotaMetric("tokens-session-percent", "5-HOUR", "5-hour token usage remaining", session, now); m != nil {
+		for _, limit := range tokenLimits {
+			if windowMinutes(limit) != 5*60 {
+				continue
+			}
+			if m := quotaMetric("tokens-session-percent", "5-HOUR", "5-hour token usage remaining", limit, now); m != nil {
 				metrics = append(metrics, *m)
 			}
+			break
 		}
 	}
 	for _, limit := range otherLimits {
@@ -275,7 +278,7 @@ func windowMinutes(limit quotaLimit) int {
 }
 
 // quotaUsedAndCap resolves used and cap from the API's several quota field shapes.
-func quotaUsedAndCap(limit quotaLimit) (used float64, cap float64, ok bool) {
+func quotaUsedAndCap(limit quotaLimit) (used float64, cap float64, rawCounts bool, ok bool) {
 	if limit.Limit != nil && *limit.Limit > 0 {
 		cap = *limit.Limit
 	} else if limit.Usage != nil && *limit.Usage > 0 {
@@ -290,17 +293,17 @@ func quotaUsedAndCap(limit quotaLimit) (used float64, cap float64, ok bool) {
 	}
 	if cap <= 0 && limit.Percentage != nil {
 		usedPct := math.Max(0, math.Min(100, *limit.Percentage))
-		return usedPct, 100, true
+		return usedPct, 100, false, true
 	}
 	if cap <= 0 {
-		return 0, 0, false
+		return 0, 0, false, false
 	}
-	return math.Max(0, math.Min(cap, used)), cap, true
+	return math.Max(0, math.Min(cap, used)), cap, true, true
 }
 
 // quotaMetric converts one z.ai quota lane to a remaining-percent metric.
 func quotaMetric(id, label, name string, limit quotaLimit, now string) *providers.MetricValue {
-	used, cap, ok := quotaUsedAndCap(limit)
+	used, cap, rawCounts, ok := quotaUsedAndCap(limit)
 	if !ok {
 		return nil
 	}
@@ -323,9 +326,11 @@ func quotaMetric(id, label, name string, limit quotaLimit, now string) *provider
 		Unit:         "%",
 		Ratio:        &ratio,
 		Direction:    "up",
-		RawCount:     &remaining,
-		RawMax:       &capInt,
 		UpdatedAt:    now,
+	}
+	if rawCounts {
+		m.RawCount = &remaining
+		m.RawMax = &capInt
 	}
 	if caption := windowCaption(limit); caption != "" {
 		m.Caption = caption

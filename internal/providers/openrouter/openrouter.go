@@ -1,7 +1,7 @@
 // Package openrouter implements the OpenRouter API usage provider.
 //
 // Auth: Property Inspector settings field or OPENROUTER_API_KEY env var.
-// Endpoint: {base}/auth/credits where base comes from the PI settings
+// Endpoint: {base}/credits where base comes from the PI settings
 // override, the OPENROUTER_API_URL env var, or the default public URL.
 package openrouter
 
@@ -19,11 +19,11 @@ import (
 const (
 	// defaultBaseURL is the public OpenRouter API base when no override is set.
 	defaultBaseURL = "https://openrouter.ai/api/v1"
-	// keyFetchTimeout bounds the optional /auth/key enrichment call.
+	// keyFetchTimeout bounds the optional /key enrichment call.
 	keyFetchTimeout = 1 * time.Second
 )
 
-// creditsResponse mirrors /auth/credits.
+// creditsResponse mirrors /credits.
 type creditsResponse struct {
 	Data *struct {
 		TotalCredits *float64 `json:"total_credits"`
@@ -31,7 +31,7 @@ type creditsResponse struct {
 	} `json:"data"`
 }
 
-// keyResponse mirrors /auth/key; carries the key-specific quota and rate limit.
+// keyResponse mirrors /key; carries the key-specific quota and rate limit.
 type keyResponse struct {
 	Data *struct {
 		Limit     *float64 `json:"limit"`

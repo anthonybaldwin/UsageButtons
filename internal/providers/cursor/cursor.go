@@ -389,7 +389,8 @@ func fetchLegacyUsage(ctx context.Context) *legacyModelUsage {
 	if err := cookies.FetchJSON(ctx, endpoint, nil, &usage); err != nil {
 		return nil
 	}
-	if usage.GPT4 == nil || usage.GPT4.MaxRequestUsage == nil || usage.GPT4.NumRequests == nil {
+	if usage.GPT4 == nil || usage.GPT4.MaxRequestUsage == nil ||
+		(usage.GPT4.NumRequests == nil && usage.GPT4.NumRequestsTotal == nil) {
 		return nil
 	}
 	return usage.GPT4

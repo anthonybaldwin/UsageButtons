@@ -1486,7 +1486,7 @@ var (
 	// that specifically need the Chrome extension (cookie-gated
 	// providers) rather than an API key.
 	extensionNeededRe = regexp.MustCompile(`(?i)Install the Usage Buttons|Paste a Cookie|Helper Chrome extension`)
-	networkRe         = regexp.MustCompile(`(?i)network error|dial tcp|connection refused|timeout|ETIMEDOUT`)
+	networkRe         = regexp.MustCompile(`(?i)network error|dial tcp|connection refused|i/o timeout|context deadline exceeded|ETIMEDOUT`)
 	serverErrRe       = regexp.MustCompile(`(?i)server error|HTTP [5]\d\d`)
 )
 

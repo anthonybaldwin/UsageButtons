@@ -1004,10 +1004,10 @@ func anyStaleResetWindow(resp usageResponse, now time.Time) bool {
 	return false
 }
 
-// firstWindow returns the first non-nil usage window from windows.
+// firstWindow returns the first populated usage window from windows.
 func firstWindow(windows ...*usageWindow) *usageWindow {
 	for _, w := range windows {
-		if w != nil {
+		if w != nil && (w.Utilization != nil || (w.ResetsAt != nil && *w.ResetsAt != "")) {
 			return w
 		}
 	}

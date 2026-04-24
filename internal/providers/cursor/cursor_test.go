@@ -2,6 +2,7 @@ package cursor
 
 import "testing"
 
+// TestLegacyCursorUsagePrefersTotalRequests verifies legacy total request precedence.
 func TestLegacyCursorUsagePrefersTotalRequests(t *testing.T) {
 	current := 100
 	total := 140
@@ -10,6 +11,7 @@ func TestLegacyCursorUsagePrefersTotalRequests(t *testing.T) {
 	}
 }
 
+// TestRemainingPercentClampsInput verifies remainingPercent clamps used percentages.
 func TestRemainingPercentClampsInput(t *testing.T) {
 	if got := remainingPercent(135); got != 0 {
 		t.Fatalf("remainingPercent(135) = %.0f, want 0", got)

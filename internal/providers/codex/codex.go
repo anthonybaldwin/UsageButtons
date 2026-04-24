@@ -304,9 +304,11 @@ func refreshOAuthToken(creds codexCreds) (codexCreds, error) {
 	if err := json.Unmarshal(respBody, &decoded); err != nil {
 		return creds, fmt.Errorf("Codex OAuth token refresh parse error: %w", err)
 	}
-	if strings.TrimSpace(decoded.AccessToken) != "" {
-		creds.accessToken = strings.TrimSpace(decoded.AccessToken)
+	newAccessToken := strings.TrimSpace(decoded.AccessToken)
+	if newAccessToken == "" {
+		return creds, fmt.Errorf("Codex OAuth token refresh parse error: missing access_token")
 	}
+	creds.accessToken = newAccessToken
 	if strings.TrimSpace(decoded.RefreshToken) != "" {
 		creds.refreshToken = strings.TrimSpace(decoded.RefreshToken)
 	}
@@ -748,9 +750,10 @@ func fetchUsageOAuth() (usageResponse, string, string, error) {
 	if err != nil {
 		return usageResponse{}, "", "", err
 	}
-	creds, err = refreshOAuthToken(creds)
-	if err != nil {
-		return usageResponse{}, "", "", err
+	if refreshed, refreshErr := refreshOAuthToken(creds); refreshErr == nil {
+		creds = refreshed
+	} else if creds.accessToken == "" {
+		return usageResponse{}, "", "", refreshErr
 	}
 
 	headers := map[string]string{
@@ -769,7 +772,7 @@ func fetchUsageOAuth() (usageResponse, string, string, error) {
 		if errors.As(err, &httpErr) {
 			if httpErr.Status == 401 || httpErr.Status == 403 {
 				return usageResponse{}, "", "", fmt.Errorf(
-					"Codex OAuth request unauthorized. Run `codex` to re-authenticate. (Token refresh is not yet implemented in this plugin.)")
+					"Codex OAuth request unauthorized. Run `codex` to re-authenticate.")
 			}
 			return usageResponse{}, "", "", fmt.Errorf("Codex OAuth server error: HTTP %d", httpErr.Status)
 		}

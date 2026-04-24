@@ -8,27 +8,35 @@ import (
 	"time"
 )
 
+// cacheTestProvider is a deterministic provider used by cache persistence tests.
 type cacheTestProvider struct {
 	id       string
 	snapshot Snapshot
 	fetches  int
 }
 
+// ID returns the configured test provider ID.
 func (p *cacheTestProvider) ID() string { return p.id }
 
+// Name returns the display name for cache test snapshots.
 func (p *cacheTestProvider) Name() string { return "Test Provider" }
 
+// BrandColor returns a stable foreground color for test rendering metadata.
 func (p *cacheTestProvider) BrandColor() string { return "#ffffff" }
 
+// BrandBg returns a stable background color for test rendering metadata.
 func (p *cacheTestProvider) BrandBg() string { return "#000000" }
 
+// MetricIDs returns the single metric emitted by the cache test provider.
 func (p *cacheTestProvider) MetricIDs() []string { return []string{"session-percent"} }
 
+// Fetch records a fetch and returns the configured snapshot.
 func (p *cacheTestProvider) Fetch(_ FetchContext) (Snapshot, error) {
 	p.fetches++
 	return p.snapshot, nil
 }
 
+// TestPersistentCacheHydratesPeek verifies cache-only reads restore from disk.
 func TestPersistentCacheHydratesPeek(t *testing.T) {
 	withTempPersistentCache(t)
 	p := newCacheTestProvider("test-provider")
@@ -70,6 +78,7 @@ func TestPersistentCacheHydratesPeek(t *testing.T) {
 	}
 }
 
+// TestPersistentCacheStaleMarksRestoredMetrics verifies old disk snapshots dim metrics.
 func TestPersistentCacheStaleMarksRestoredMetrics(t *testing.T) {
 	withTempPersistentCache(t)
 	p := newCacheTestProvider("test-stale-provider")
@@ -109,6 +118,67 @@ func TestPersistentCacheStaleMarksRestoredMetrics(t *testing.T) {
 	}
 }
 
+// TestPersistentCacheRejectsFingerprintMismatch verifies config changes reject disk snapshots.
+func TestPersistentCacheRejectsFingerprintMismatch(t *testing.T) {
+	withTempPersistentCache(t)
+	p := newCacheTestProvider("test-fingerprint-provider")
+	_ = GetSnapshot(p, GetSnapshotOptions{})
+
+	path, err := persistentSnapshotPath(p.id)
+	if err != nil {
+		t.Fatalf("persistentSnapshotPath: %v", err)
+	}
+	var payload persistentSnapshot
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read persisted snapshot: %v", err)
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("unmarshal persisted snapshot: %v", err)
+	}
+	payload.ConfigFingerprint = "different-config"
+	body, err = json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal persisted snapshot: %v", err)
+	}
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatalf("rewrite persisted snapshot: %v", err)
+	}
+
+	clearMemoryCache()
+	snapshot, _ := PeekSnapshotState(p.id)
+	if snapshot != nil {
+		t.Fatalf("PeekSnapshotState restored mismatched snapshot: %#v", snapshot)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("mismatched persisted snapshot still exists: %v", err)
+	}
+}
+
+// TestClearRuntimeCachePreservesPersistentSnapshot verifies startup clears stay disk-backed.
+func TestClearRuntimeCachePreservesPersistentSnapshot(t *testing.T) {
+	withTempPersistentCache(t)
+	p := newCacheTestProvider("test-runtime-clear-provider")
+	_ = GetSnapshot(p, GetSnapshotOptions{})
+
+	path, err := persistentSnapshotPath(p.id)
+	if err != nil {
+		t.Fatalf("persistentSnapshotPath: %v", err)
+	}
+	ClearRuntimeCache(p.id)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("persisted snapshot missing after ClearRuntimeCache: %v", err)
+	}
+	snapshot, _ := PeekSnapshotState(p.id)
+	if snapshot == nil {
+		t.Fatal("PeekSnapshotState returned nil after runtime-only clear")
+	}
+	if p.fetches != 1 {
+		t.Fatalf("runtime-only restore fetched upstream; fetches = %d, want 1", p.fetches)
+	}
+}
+
+// TestClearCacheRemovesPersistentSnapshot verifies full clears remove disk state.
 func TestClearCacheRemovesPersistentSnapshot(t *testing.T) {
 	withTempPersistentCache(t)
 	p := newCacheTestProvider("test-clear-provider")
@@ -124,6 +194,7 @@ func TestClearCacheRemovesPersistentSnapshot(t *testing.T) {
 	}
 }
 
+// newCacheTestProvider returns a provider with one successful metric.
 func newCacheTestProvider(id string) *cacheTestProvider {
 	return &cacheTestProvider{
 		id: id,
@@ -141,6 +212,7 @@ func newCacheTestProvider(id string) *cacheTestProvider {
 	}
 }
 
+// withTempPersistentCache redirects persistent cache writes to a temp directory.
 func withTempPersistentCache(t *testing.T) {
 	t.Helper()
 	oldDir := persistentCacheDir
@@ -155,6 +227,7 @@ func withTempPersistentCache(t *testing.T) {
 	})
 }
 
+// clearMemoryCache resets the process-local provider cache map.
 func clearMemoryCache() {
 	cacheMu.Lock()
 	entries = map[string]*cacheEntry{}

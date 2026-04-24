@@ -64,6 +64,12 @@ var (
 	autoRegisterOnce sync.Once
 )
 
+func globalSettingsLoaded() bool {
+	mu.Lock()
+	defer mu.Unlock()
+	return globalSettingsSeen
+}
+
 func main() {
 	args := streamdeck.ParseArgs()
 	conn, err := streamdeck.Connect(args)
@@ -120,6 +126,10 @@ func displayRefreshLoop(conn *streamdeck.Connection) {
 }
 
 func scheduleDueKeys(conn *streamdeck.Connection) {
+	if !globalSettingsLoaded() {
+		return
+	}
+
 	// Update check — no-ops internally unless the 6h cache expired.
 	if !settings.SkipUpdateCheckEnabled() {
 		update.Check()
@@ -204,6 +214,10 @@ func refreshOrRedrawVisible(conn *streamdeck.Connection) {
 }
 
 func redrawAllVisible(conn *streamdeck.Connection) {
+	if !globalSettingsLoaded() {
+		return
+	}
+
 	mu.Lock()
 	contexts := make([]string, 0, len(visibleKeys))
 	for ctx := range visibleKeys {
@@ -334,8 +348,13 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	// Try to render from cache immediately (avoid loading flash). Route
 	// through renderSnapshotForKey so cached error faces, stale markers,
 	// and reset-timer aging behave identically to the minute redraw.
-	snapshot, fetchedAt := providers.PeekSnapshotState(providerID)
 	prov := providers.Get(providerID)
+	var snapshot *providers.Snapshot
+	var fetchedAt time.Time
+	settingsLoaded := globalSettingsLoaded()
+	if settingsLoaded {
+		snapshot, fetchedAt = providers.PeekSnapshotState(providerID)
+	}
 	if snapshot != nil && prov != nil {
 		if metric := findMetric(snapshot.Metrics, metricID); metric != nil {
 			metricLabel := strings.ToUpper(metric.Label)
@@ -397,7 +416,11 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	}
 	setTitleForKey(conn, ev.Context, customTitle, title)
 	conn.Logf("key appeared, no cache (now tracking %d visible key(s))", countVisible())
-	go refreshKey(conn, ev.Context, false)
+	if settingsLoaded {
+		go refreshKey(conn, ev.Context, false)
+	} else {
+		conn.Logf("key appeared before global settings; waiting to refresh")
+	}
 }
 
 func handleWillDisappear(conn *streamdeck.Connection, ev streamdeck.Event) {
@@ -488,8 +511,11 @@ func handleDidReceiveGlobalSettings(conn *streamdeck.Connection, ev streamdeck.E
 		raw, _ := json.Marshal(gs)
 		conn.SetGlobalSettings(raw)
 	}
-	if !firstGlobalSettings {
-		for _, id := range settings.ChangedProviderIDs(prevKeys, gs.ProviderKeys) {
+	for _, id := range settings.ChangedProviderIDs(prevKeys, gs.ProviderKeys) {
+		if firstGlobalSettings {
+			providers.ClearRuntimeCache(id)
+			conn.Logf("provider config loaded — cleared runtime cache for %s", id)
+		} else {
 			providers.ClearCache(id)
 			conn.Logf("provider config changed — cleared cache for %s", id)
 		}
@@ -693,7 +719,10 @@ func replyProviderStatus(conn *streamdeck.Connection, ctxStr, action string) {
 	if prov == nil {
 		return
 	}
-	snapshot, _ := providers.PeekSnapshotState(providerID)
+	var snapshot *providers.Snapshot
+	if globalSettingsLoaded() {
+		snapshot, _ = providers.PeekSnapshotState(providerID)
+	}
 	errText := ""
 	if snapshot != nil {
 		errText = snapshot.Error
@@ -807,6 +836,10 @@ func showUpdateFace(conn *streamdeck.Connection) {
 }
 
 func refreshKey(conn *streamdeck.Connection, context string, force bool) {
+	if !globalSettingsLoaded() {
+		return
+	}
+
 	mu.Lock()
 	key, ok := visibleKeys[context]
 	if !ok {
@@ -854,6 +887,10 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 }
 
 func redrawKeyFromCache(conn *streamdeck.Connection, context string) {
+	if !globalSettingsLoaded() {
+		return
+	}
+
 	mu.Lock()
 	key, ok := visibleKeys[context]
 	if !ok {

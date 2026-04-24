@@ -1,13 +1,18 @@
 package providers
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
 const (
@@ -143,10 +148,11 @@ var persistentCacheDir = defaultPersistentCacheDir
 // persistentSnapshot is the on-disk representation of one cached provider
 // snapshot.
 type persistentSnapshot struct {
-	Version    int       `json:"version"`
-	ProviderID string    `json:"providerId"`
-	FetchedAt  time.Time `json:"fetchedAt"`
-	Snapshot   Snapshot  `json:"snapshot"`
+	Version           int       `json:"version"`
+	ProviderID        string    `json:"providerId"`
+	ConfigFingerprint string    `json:"configFingerprint"`
+	FetchedAt         time.Time `json:"fetchedAt"`
+	Snapshot          Snapshot  `json:"snapshot"`
 }
 
 var (
@@ -344,13 +350,25 @@ func PeekSnapshotState(providerID string) (*Snapshot, time.Time) {
 // ClearCache removes cached data for a provider (or all if id is "").
 func ClearCache(providerID string) {
 	cacheMu.Lock()
+	defer cacheMu.Unlock()
 	if providerID == "" {
 		entries = map[string]*cacheEntry{}
 	} else {
 		delete(entries, providerID)
 	}
-	cacheMu.Unlock()
 	clearPersistentCache(providerID)
+}
+
+// ClearRuntimeCache removes only in-memory cached data for a provider
+// (or all providers if id is ""), preserving restart-surviving snapshots.
+func ClearRuntimeCache(providerID string) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	if providerID == "" {
+		entries = map[string]*cacheEntry{}
+	} else {
+		delete(entries, providerID)
+	}
 }
 
 // markStale returns a deep-enough copy of s with every metric marked
@@ -487,10 +505,11 @@ func persistSnapshot(providerID string, s Snapshot, fetchedAt time.Time) {
 		return
 	}
 	payload := persistentSnapshot{
-		Version:    persistentCacheVersion,
-		ProviderID: providerID,
-		FetchedAt:  fetchedAt,
-		Snapshot:   s,
+		Version:           persistentCacheVersion,
+		ProviderID:        providerID,
+		ConfigFingerprint: providerConfigFingerprint(providerID),
+		FetchedAt:         fetchedAt,
+		Snapshot:          s,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -521,6 +540,7 @@ func loadPersistentSnapshot(providerID string) (Snapshot, time.Time, bool) {
 	}
 	if payload.Version != persistentCacheVersion ||
 		payload.ProviderID != providerID ||
+		payload.ConfigFingerprint != providerConfigFingerprint(providerID) ||
 		payload.Snapshot.ProviderID != providerID ||
 		payload.FetchedAt.IsZero() ||
 		!shouldPersistSnapshot(payload.Snapshot) {
@@ -537,6 +557,124 @@ func loadPersistentSnapshot(providerID string) (Snapshot, time.Time, bool) {
 		s = markMetricsStale(s)
 	}
 	return s, payload.FetchedAt, true
+}
+
+// providerConfigFingerprint returns a stable fingerprint of the credentials
+// and endpoint inputs the provider will use for upstream requests.
+func providerConfigFingerprint(providerID string) string {
+	pk := settings.ProviderKeysGet()
+	parts := []string{"provider", providerID}
+	switch providerID {
+	case "openrouter":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.OpenRouterKey, "OPENROUTER_API_KEY"),
+			"base-url", settings.ResolveEndpoint(pk.OpenRouterURL, "https://openrouter.ai/api/v1", "OPENROUTER_API_URL"),
+		)
+	case "warp":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.WarpKey, "WARP_API_KEY", "WARP_TOKEN"),
+		)
+	case "zai":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.ZaiKey, "Z_AI_API_KEY", "ZAI_API_TOKEN", "ZAI_API_KEY"),
+			"quota-url", zaiQuotaURLFingerprint(pk),
+		)
+	case "kimi-k2":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.KimiK2Key, "KIMI_K2_API_KEY", "KIMI_API_KEY", "KIMI_KEY"),
+		)
+	case "copilot":
+		parts = append(parts,
+			"token", settings.ResolveAPIKey(pk.CopilotToken, "GITHUB_TOKEN"),
+			"hosts", fileContentFingerprint(copilotHostsPath()),
+			"apps", fileContentFingerprint(copilotAppsPath()),
+		)
+	case "codex":
+		parts = append(parts,
+			"base-url", pk.CodexChatGPTBaseURL,
+			"codex-home", strings.TrimSpace(os.Getenv("CODEX_HOME")),
+			"auth", fileContentFingerprint(codexCredPath()),
+			"config", fileContentFingerprint(codexConfigPath()),
+		)
+	case "claude":
+		parts = append(parts,
+			"credentials", fileContentFingerprint(claudeCredPath()),
+		)
+	}
+	return fingerprintParts(parts...)
+}
+
+// zaiQuotaURLFingerprint mirrors the z.ai provider endpoint selection.
+func zaiQuotaURLFingerprint(pk settings.ProviderKeys) string {
+	if full := settings.ResolveEndpoint(pk.ZaiQuotaURL, "", "Z_AI_QUOTA_URL"); full != "" {
+		return full
+	}
+	host := settings.ResolveEndpoint(pk.ZaiHost, "", "Z_AI_API_HOST")
+	if host == "" {
+		host = zaiRegionHostFingerprint(pk.ZaiRegion)
+	}
+	return host + "/api/monitor/usage/quota/limit"
+}
+
+// zaiRegionHostFingerprint mirrors the z.ai region picker defaults.
+func zaiRegionHostFingerprint(region string) string {
+	switch strings.ToLower(strings.TrimSpace(region)) {
+	case "bigmodel-cn", "bigmodel", "cn", "china":
+		return "https://open.bigmodel.cn"
+	default:
+		return "https://api.z.ai"
+	}
+}
+
+// copilotHostsPath returns the GitHub Copilot hosts.json path.
+func copilotHostsPath() string {
+	return homePath(".config", "github-copilot", "hosts.json")
+}
+
+// copilotAppsPath returns the GitHub Copilot apps.json path.
+func copilotAppsPath() string {
+	return homePath(".config", "github-copilot", "apps.json")
+}
+
+// codexConfigPath returns the Codex config.toml path.
+func codexConfigPath() string {
+	if ch := strings.TrimSpace(os.Getenv("CODEX_HOME")); ch != "" {
+		return filepath.Join(ch, "config.toml")
+	}
+	return homePath(".codex", "config.toml")
+}
+
+// homePath joins path elements under the current user's home directory.
+func homePath(parts ...string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	all := append([]string{home}, parts...)
+	return filepath.Join(all...)
+}
+
+// fileContentFingerprint hashes a known config or credential file.
+func fileContentFingerprint(path string) string {
+	if strings.TrimSpace(path) == "" {
+		return "missing"
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return "missing"
+	}
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:])
+}
+
+// fingerprintParts hashes a delimited list of provider config inputs.
+func fingerprintParts(parts ...string) string {
+	h := sha256.New()
+	for _, part := range parts {
+		_, _ = h.Write([]byte(part))
+		_, _ = h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // clearPersistentCache removes one provider snapshot, or the full persisted

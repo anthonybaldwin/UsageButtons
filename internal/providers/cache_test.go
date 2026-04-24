@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
 // cacheTestProvider is a deterministic provider used by cache persistence tests.
@@ -13,6 +15,7 @@ type cacheTestProvider struct {
 	id       string
 	snapshot Snapshot
 	fetches  int
+	onFetch  func()
 }
 
 // ID returns the configured test provider ID.
@@ -33,6 +36,9 @@ func (p *cacheTestProvider) MetricIDs() []string { return []string{"session-perc
 // Fetch records a fetch and returns the configured snapshot.
 func (p *cacheTestProvider) Fetch(_ FetchContext) (Snapshot, error) {
 	p.fetches++
+	if p.onFetch != nil {
+		p.onFetch()
+	}
 	return p.snapshot, nil
 }
 
@@ -152,6 +158,53 @@ func TestPersistentCacheRejectsFingerprintMismatch(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("mismatched persisted snapshot still exists: %v", err)
+	}
+}
+
+// TestPersistentCacheUsesFetchStartFingerprint verifies in-flight config changes do not bless old data.
+func TestPersistentCacheUsesFetchStartFingerprint(t *testing.T) {
+	withTempPersistentCache(t)
+	oldSettings := settings.Get()
+	t.Cleanup(func() {
+		settings.Set(oldSettings)
+	})
+
+	settings.Set(settings.GlobalSettings{
+		ProviderKeys: settings.ProviderKeys{OpenRouterKey: "old-key"},
+	})
+	p := newCacheTestProvider("openrouter")
+	beforeFingerprint := providerConfigFingerprint(p.id)
+	p.onFetch = func() {
+		settings.Set(settings.GlobalSettings{
+			ProviderKeys: settings.ProviderKeys{OpenRouterKey: "new-key"},
+		})
+	}
+	_ = GetSnapshot(p, GetSnapshotOptions{})
+	afterFingerprint := providerConfigFingerprint(p.id)
+	if beforeFingerprint == afterFingerprint {
+		t.Fatal("test setup did not change provider fingerprint")
+	}
+
+	path, err := persistentSnapshotPath(p.id)
+	if err != nil {
+		t.Fatalf("persistentSnapshotPath: %v", err)
+	}
+	var payload persistentSnapshot
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read persisted snapshot: %v", err)
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("unmarshal persisted snapshot: %v", err)
+	}
+	if payload.ConfigFingerprint != beforeFingerprint {
+		t.Fatalf("persisted fingerprint = %q, want fetch-start %q", payload.ConfigFingerprint, beforeFingerprint)
+	}
+
+	clearMemoryCache()
+	snapshot, _ := PeekSnapshotState(p.id)
+	if snapshot != nil {
+		t.Fatalf("PeekSnapshotState restored snapshot from old config: %#v", snapshot)
 	}
 }
 

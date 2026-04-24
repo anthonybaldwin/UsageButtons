@@ -259,6 +259,7 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 
 	ch := make(chan struct{})
 	e.inflight = ch
+	fetchConfigFingerprint := providerConfigFingerprint(p.ID())
 
 	forceStr := ""
 	if opts.Force {
@@ -324,7 +325,7 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 	e.mu.Unlock()
 
 	if persist {
-		persistSnapshot(p.ID(), snapshot, persistedAt)
+		persistSnapshot(p.ID(), fetchConfigFingerprint, snapshot, persistedAt)
 	}
 
 	return snapshot
@@ -492,9 +493,10 @@ func shouldPersistSnapshot(s Snapshot) bool {
 	return s.Error == "" && len(s.Metrics) > 0
 }
 
-// persistSnapshot writes a successful provider snapshot to disk. Failures
-// are logged but do not affect the live button update path.
-func persistSnapshot(providerID string, s Snapshot, fetchedAt time.Time) {
+// persistSnapshot writes a successful provider snapshot to disk with the
+// config fingerprint captured at fetch start. Failures are logged but do not
+// affect the live button update path.
+func persistSnapshot(providerID, configFingerprint string, s Snapshot, fetchedAt time.Time) {
 	path, err := persistentSnapshotPath(providerID)
 	if err != nil || path == "" {
 		cacheLog("cache[%s] persist skipped: %v", providerID, err)
@@ -507,7 +509,7 @@ func persistSnapshot(providerID string, s Snapshot, fetchedAt time.Time) {
 	payload := persistentSnapshot{
 		Version:           persistentCacheVersion,
 		ProviderID:        providerID,
-		ConfigFingerprint: providerConfigFingerprint(providerID),
+		ConfigFingerprint: configFingerprint,
 		FetchedAt:         fetchedAt,
 		Snapshot:          s,
 	}

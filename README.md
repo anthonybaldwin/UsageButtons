@@ -154,7 +154,3 @@ a Firefox port is on the roadmap.
 ## License
 
 [MIT](LICENSE) · [Third-party licenses](THIRD_PARTY_LICENSES.md)
-
----
-
-![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/anthonybaldwin/UsageButtons?utm_source=oss&utm_medium=github&utm_campaign=anthonybaldwin%2FUsageButtons&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)

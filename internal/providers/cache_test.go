@@ -208,6 +208,78 @@ func TestPersistentCacheUsesFetchStartFingerprint(t *testing.T) {
 	}
 }
 
+// TestPersistentCacheSkipsUnfingerprintedBrowserSnapshots verifies browser-only
+// snapshots are not written to disk.
+func TestPersistentCacheSkipsUnfingerprintedBrowserSnapshots(t *testing.T) {
+	cases := []struct {
+		name     string
+		id       string
+		source   string
+		wantDisk bool
+	}{
+		{name: "cursor", id: "cursor", source: "cookie"},
+		{name: "ollama", id: "ollama", source: "cookie"},
+		{name: "claude-cookie", id: "claude", source: "cookie"},
+		{name: "codex-cookie", id: "codex", source: "cookie"},
+		{name: "codex-oauth", id: "codex", source: "oauth", wantDisk: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			withTempPersistentCache(t)
+			p := newCacheTestProvider(tc.id)
+			p.snapshot.Source = tc.source
+
+			_ = GetSnapshot(p, GetSnapshotOptions{})
+
+			path, err := persistentSnapshotPath(p.id)
+			if err != nil {
+				t.Fatalf("persistentSnapshotPath: %v", err)
+			}
+			_, err = os.Stat(path)
+			if tc.wantDisk {
+				if err != nil {
+					t.Fatalf("persisted snapshot missing: %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("unfingerprinted snapshot persisted: %v", err)
+			}
+
+			clearMemoryCache()
+			snapshot, _ := PeekSnapshotState(p.id)
+			if snapshot != nil {
+				t.Fatalf("PeekSnapshotState restored unfingerprinted snapshot: %#v", snapshot)
+			}
+		})
+	}
+}
+
+// TestPersistentCacheRejectsUnfingerprintedBrowserSnapshot verifies old disk
+// entries for browser-session snapshots are invalidated on load.
+func TestPersistentCacheRejectsUnfingerprintedBrowserSnapshot(t *testing.T) {
+	withTempPersistentCache(t)
+	p := newCacheTestProvider("cursor")
+	p.snapshot.Source = "cookie"
+
+	fetchedAt := time.Now()
+	persistSnapshot(p.id, providerConfigFingerprint(p.id), p.snapshot, fetchedAt)
+	path, err := persistentSnapshotPath(p.id)
+	if err != nil {
+		t.Fatalf("persistentSnapshotPath: %v", err)
+	}
+
+	clearMemoryCache()
+	snapshot, _ := PeekSnapshotState(p.id)
+	if snapshot != nil {
+		t.Fatalf("PeekSnapshotState restored unfingerprinted snapshot: %#v", snapshot)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unfingerprinted persisted snapshot still exists: %v", err)
+	}
+}
+
 // TestClearRuntimeCachePreservesPersistentSnapshot verifies startup clears stay disk-backed.
 func TestClearRuntimeCachePreservesPersistentSnapshot(t *testing.T) {
 	withTempPersistentCache(t)

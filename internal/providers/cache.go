@@ -306,7 +306,7 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 		}
 		e.snapshot = &snapshot
 		e.fetchedAt = time.Now()
-		persist = shouldPersistSnapshot(snapshot)
+		persist = shouldPersistProviderSnapshot(p.ID(), snapshot)
 		persistedAt = e.fetchedAt
 		hadError := e.lastError != nil
 		e.lastError = nil
@@ -487,10 +487,29 @@ func safeCacheFilename(providerID string) string {
 	return string(out)
 }
 
-// shouldPersistSnapshot reports whether a snapshot is worth restoring
+// shouldPersistSnapshot reports whether a snapshot has useful data to restore
 // after a restart.
 func shouldPersistSnapshot(s Snapshot) bool {
 	return s.Error == "" && len(s.Metrics) > 0
+}
+
+// shouldPersistProviderSnapshot reports whether a provider snapshot is safe to
+// restore after a restart without revalidating upstream account identity.
+func shouldPersistProviderSnapshot(providerID string, s Snapshot) bool {
+	return shouldPersistSnapshot(s) && !usesUnfingerprintedBrowserSession(providerID, s)
+}
+
+// usesUnfingerprintedBrowserSession reports whether the snapshot depends on a
+// browser session that providerConfigFingerprint cannot validate at startup.
+func usesUnfingerprintedBrowserSession(providerID string, s Snapshot) bool {
+	switch providerID {
+	case "cursor", "ollama":
+		return true
+	case "claude", "codex":
+		return s.Source == "cookie"
+	default:
+		return false
+	}
 }
 
 // persistSnapshot writes a successful provider snapshot to disk with the
@@ -545,7 +564,7 @@ func loadPersistentSnapshot(providerID string) (Snapshot, time.Time, bool) {
 		payload.ConfigFingerprint != providerConfigFingerprint(providerID) ||
 		payload.Snapshot.ProviderID != providerID ||
 		payload.FetchedAt.IsZero() ||
-		!shouldPersistSnapshot(payload.Snapshot) {
+		!shouldPersistProviderSnapshot(providerID, payload.Snapshot) {
 		_ = os.Remove(path)
 		return Snapshot{}, time.Time{}, false
 	}

@@ -164,6 +164,12 @@ async function handleFetch(msg) {
     const init = {
       method: msg.method || "GET",
       credentials: "include",
+      // Bypass Chrome's HTTP cache. The plugin's own provider cache
+      // (MinTTL floor, see internal/providers/cache.go) is the single
+      // source of poll-rate control; letting Chrome cache on top of
+      // that silently pins pre-reset values when claude.ai resets a
+      // usage window earlier than the cached resets_at claimed.
+      cache: "no-store",
       // Only pass user-declared headers. The browser refuses to set
       // forbidden headers (Cookie, Host, Origin, Referer, ...); we
       // rely on credentials:"include" and the browser's own defaults

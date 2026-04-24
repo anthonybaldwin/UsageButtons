@@ -42,6 +42,10 @@ const (
 	// nearLimitPct is the utilization threshold that switches extras to
 	// the active refresh cadence.
 	nearLimitPct = 80.0
+	// staleResetGrace is how far a window's resets_at may lag "now"
+	// before the snapshot is treated as stale data. Covers clock skew
+	// and request latency without flagging a freshly-reset window.
+	staleResetGrace = 90 * time.Second
 )
 
 // LogSink is wired by the plugin for debug logging.
@@ -789,6 +793,17 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 		}
 	}
 
+	// Stale-snapshot detection: if any window's resets_at is in the
+	// past beyond staleResetGrace, the upstream path served cached
+	// data (typically Chrome's HTTP cache via the Helper extension's
+	// service worker — or a flaky OAuth response). Mark only the
+	// window/pace metrics built above; extras and cost metrics come
+	// from separate sources and stay untouched.
+	if anyStaleResetWindow(resp, time.Now()) {
+		applyStaleWindowMarker(metrics, source)
+		logf("stale snapshot: a window's resets_at is in the past (source=%s)", source)
+	}
+
 	// Extra usage resolution: OAuth first (when the plan's extras are
 	// enabled) and fall through to the browser path (extension) if
 	// not. No user toggle — the metric itself determines whether
@@ -937,6 +952,46 @@ func ptrStr(p *string) string {
 		return *p
 	}
 	return ""
+}
+
+// anyStaleResetWindow reports whether any non-nil window in resp has a
+// resets_at more than staleResetGrace in the past, which signals the
+// upstream path is serving pre-reset data.
+func anyStaleResetWindow(resp usageResponse, now time.Time) bool {
+	for _, w := range []*usageWindow{
+		resp.FiveHour, resp.SevenDay,
+		resp.SevenDaySonnet, resp.SevenDayOpus, resp.SevenDayDesign,
+	} {
+		if w == nil || w.ResetsAt == nil {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, *w.ResetsAt)
+		if err != nil {
+			continue
+		}
+		if now.Sub(t) > staleResetGrace {
+			return true
+		}
+	}
+	return false
+}
+
+// applyStaleWindowMarker dims every window/pace metric and replaces
+// its countdown with an actionable caption so the user can tell the
+// displayed numbers are from before the upstream window reset.
+func applyStaleWindowMarker(metrics []providers.MetricValue, source string) {
+	caption := "Stale data"
+	if source == "cookie" {
+		caption = "Reload Helper"
+	}
+	t := true
+	for i := range metrics {
+		metrics[i].Stale = &t
+		metrics[i].Caption = caption
+		// Suppress "0s" countdown so the caption wins the subvalue slot
+		// (see cmd/plugin/main.go subvalue priority).
+		metrics[i].ResetInSeconds = nil
+	}
 }
 
 // init registers the Claude provider with the package registry.

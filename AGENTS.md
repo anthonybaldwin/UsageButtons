@@ -270,8 +270,11 @@ Rules:
    committed.
 3. Keep the subject <= 72 chars, imperative mood ("add", not "added").
 4. Put the *why* in the body when the change is non-obvious.
-5. Never use `git commit --amend` on anything that has been pushed.
-6. Never use `--no-verify` to skip hooks.
+5. Every agent-authored commit must include that agent's appropriate
+   `Co-authored-by:` trailer. Codex uses
+   `Co-authored-by: Codex <codex@openai.com>`.
+6. Never use `git commit --amend` on anything that has been pushed.
+7. Never use `--no-verify` to skip hooks.
 
 ## What NOT to do
 

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
@@ -32,8 +33,8 @@ const (
 // planUsage captures the plan-level usage block of a usage-summary response.
 type planUsage struct {
 	Enabled          *bool    `json:"enabled"`
-	Used             *float64 `json:"used"`     // cents
-	Limit            *float64 `json:"limit"`    // cents
+	Used             *float64 `json:"used"`  // cents
+	Limit            *float64 `json:"limit"` // cents
 	Remaining        *float64 `json:"remaining"`
 	TotalPercentUsed *float64 `json:"totalPercentUsed"`
 	AutoPercentUsed  *float64 `json:"autoPercentUsed"`
@@ -47,8 +48,9 @@ type authMeResponse struct {
 
 // legacyModelUsage is one model's quota in the legacy usage response.
 type legacyModelUsage struct {
-	NumRequests     *int `json:"numRequests"`
-	MaxRequestUsage *int `json:"maxRequestUsage"`
+	NumRequests      *int `json:"numRequests"`
+	NumRequestsTotal *int `json:"numRequestsTotal"`
+	MaxRequestUsage  *int `json:"maxRequestUsage"`
 }
 
 // legacyUsageResponse is the wrapper returned by /api/usage.
@@ -73,6 +75,9 @@ type usageSummaryResponse struct {
 		Plan     *planUsage     `json:"plan"`
 		OnDemand *onDemandUsage `json:"onDemand"`
 	} `json:"individualUsage"`
+	TeamUsage *struct {
+		OnDemand *onDemandUsage `json:"onDemand"`
+	} `json:"teamUsage"`
 }
 
 // resetFromCycleEnd parses a billing-cycle-end string into a delta in
@@ -118,7 +123,7 @@ func (Provider) BrandBg() string { return "#1a0e06" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
-	return []string{"total-percent", "auto-percent", "api-percent", "ondemand-spent"}
+	return []string{"total-percent", "auto-percent", "api-percent", "ondemand-spent", "team-ondemand-spent"}
 }
 
 // Fetch returns the latest Cursor usage snapshot.
@@ -171,7 +176,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	if legacy != nil {
 		// Legacy plan owns the TOTAL lane — plan.totalPercentUsed from
 		// usage-summary is unreliable for these accounts.
-		used := *legacy.NumRequests
+		used := firstIntPtr(legacy.NumRequestsTotal, legacy.NumRequests)
 		limit := *legacy.MaxRequestUsage
 		usedPct := 0.0
 		if limit > 0 {
@@ -213,7 +218,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		// Total plan usage — skipped on legacy plans where the legacy path
 		// already emitted total-percent above.
 		if plan.TotalPercentUsed != nil && legacy == nil {
-			remaining := 100 - *plan.TotalPercentUsed
+			remaining := remainingPercent(*plan.TotalPercentUsed)
 			ratio := remaining / 100
 			m := providers.MetricValue{
 				ID:           "total-percent",
@@ -235,7 +240,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 
 		// Auto / Composer usage
 		if plan.AutoPercentUsed != nil {
-			remaining := 100 - *plan.AutoPercentUsed
+			remaining := remainingPercent(*plan.AutoPercentUsed)
 			ratio := remaining / 100
 			m := providers.MetricValue{
 				ID:           "auto-percent",
@@ -257,7 +262,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 
 		// API / Named model usage
 		if plan.APIPercentUsed != nil {
-			remaining := 100 - *plan.APIPercentUsed
+			remaining := remainingPercent(*plan.APIPercentUsed)
 			ratio := remaining / 100
 			m := providers.MetricValue{
 				ID:           "api-percent",
@@ -281,38 +286,19 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	// On-demand spend
 	if resp.IndividualUsage != nil && resp.IndividualUsage.OnDemand != nil {
 		od := resp.IndividualUsage.OnDemand
-		if od.Enabled != nil && *od.Enabled && od.Used != nil {
-			spentDollars := *od.Used / 100
-			m := providers.MetricValue{
-				ID:              "ondemand-spent",
-				Label:           "ON-DEMAND",
-				Name:            "On-demand spend",
-				Value:           fmt.Sprintf("$%.2f", spentDollars),
-				NumericValue:    &spentDollars,
-				NumericUnit:     "dollars",
-				NumericGoodWhen: "low",
-				UpdatedAt:       now,
-			}
-			if od.Limit != nil {
-				limitDollars := *od.Limit / 100
-				if limitDollars > 0 {
-					ratio := math.Min(1, spentDollars/limitDollars)
-					m.NumericMax = &limitDollars
-					m.Ratio = &ratio
-					m.Direction = "up"
-				}
-				m.Caption = fmt.Sprintf("of $%.0f", limitDollars)
-			} else {
-				m.Caption = "Unlimited"
-			}
-			metrics = append(metrics, m)
+		if m := onDemandMetric("ondemand-spent", "ON-DEMAND", "On-demand spend", od, now); m != nil {
+			metrics = append(metrics, *m)
+		}
+	}
+	if resp.TeamUsage != nil && resp.TeamUsage.OnDemand != nil {
+		if m := onDemandMetric("team-ondemand-spent", "TEAM", "Team on-demand spend", resp.TeamUsage.OnDemand, now); m != nil {
+			metrics = append(metrics, *m)
 		}
 	}
 
 	planLabel := "Cursor"
 	if resp.MembershipType != nil && *resp.MembershipType != "" {
-		mt := *resp.MembershipType
-		planLabel = "Cursor " + upperFirst(mt)
+		planLabel = formatMembershipType(*resp.MembershipType)
 	}
 
 	return providers.Snapshot{
@@ -322,6 +308,68 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		Metrics:      metrics,
 		Status:       "operational",
 	}, nil
+}
+
+// remainingPercent clamps an upstream used percentage and returns its remaining percentage.
+func remainingPercent(used float64) float64 {
+	return 100 - math.Max(0, math.Min(100, used))
+}
+
+// firstIntPtr returns the first non-nil int pointer value from vals.
+func firstIntPtr(vals ...*int) int {
+	for _, v := range vals {
+		if v != nil {
+			return *v
+		}
+	}
+	return 0
+}
+
+// onDemandMetric converts a Cursor on-demand usage block to a dollar metric.
+func onDemandMetric(id, label, name string, od *onDemandUsage, now string) *providers.MetricValue {
+	if od == nil || od.Enabled == nil || !*od.Enabled || od.Used == nil {
+		return nil
+	}
+	spentDollars := *od.Used / 100
+	m := providers.MetricValue{
+		ID:              id,
+		Label:           label,
+		Name:            name,
+		Value:           fmt.Sprintf("$%.2f", spentDollars),
+		NumericValue:    &spentDollars,
+		NumericUnit:     "dollars",
+		NumericGoodWhen: "low",
+		UpdatedAt:       now,
+	}
+	if od.Limit != nil {
+		limitDollars := *od.Limit / 100
+		if limitDollars > 0 {
+			ratio := math.Min(1, spentDollars/limitDollars)
+			m.NumericMax = &limitDollars
+			m.Ratio = &ratio
+			m.Direction = "up"
+		}
+		m.Caption = fmt.Sprintf("of $%.0f", limitDollars)
+	} else {
+		m.Caption = "Unlimited"
+	}
+	return &m
+}
+
+// formatMembershipType returns Cursor's display label for a membership type.
+func formatMembershipType(mt string) string {
+	switch strings.ToLower(mt) {
+	case "enterprise":
+		return "Cursor Enterprise"
+	case "pro":
+		return "Cursor Pro"
+	case "hobby":
+		return "Cursor Hobby"
+	case "team":
+		return "Cursor Team"
+	default:
+		return "Cursor " + upperFirst(mt)
+	}
 }
 
 // fetchLegacyUsage returns the legacy gpt-4 request counts when the account
@@ -341,7 +389,8 @@ func fetchLegacyUsage(ctx context.Context) *legacyModelUsage {
 	if err := cookies.FetchJSON(ctx, endpoint, nil, &usage); err != nil {
 		return nil
 	}
-	if usage.GPT4 == nil || usage.GPT4.MaxRequestUsage == nil || usage.GPT4.NumRequests == nil {
+	if usage.GPT4 == nil || usage.GPT4.MaxRequestUsage == nil ||
+		(usage.GPT4.NumRequests == nil && usage.GPT4.NumRequestsTotal == nil) {
 		return nil
 	}
 	return usage.GPT4

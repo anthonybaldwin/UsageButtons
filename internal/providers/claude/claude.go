@@ -191,15 +191,20 @@ type extraUsageRaw struct {
 // usageResponse is the top-level shape returned by both the OAuth
 // usage endpoint and the cookie-authenticated organization usage endpoint.
 type usageResponse struct {
-	FiveHour       *usageWindow   `json:"five_hour"`
-	SevenDay       *usageWindow   `json:"seven_day"`
-	SevenDaySonnet *usageWindow   `json:"seven_day_sonnet"`
-	SevenDayOpus   *usageWindow   `json:"seven_day_opus"`
+	FiveHour       *usageWindow `json:"five_hour"`
+	SevenDay       *usageWindow `json:"seven_day"`
+	SevenDaySonnet *usageWindow `json:"seven_day_sonnet"`
+	SevenDayOpus   *usageWindow `json:"seven_day_opus"`
 	// seven_day_omelette is Anthropic's internal codename for the
 	// Claude Design weekly bucket (surfaced in the claude.ai UI as
 	// "Claude Design" alongside "Sonnet only" and "All models").
-	SevenDayDesign *usageWindow   `json:"seven_day_omelette"`
-	ExtraUsage     *extraUsageRaw `json:"extra_usage"`
+	SevenDayDesign         *usageWindow   `json:"seven_day_omelette"`
+	SevenDayDesignNamed    *usageWindow   `json:"seven_day_design"`
+	SevenDayClaudeDesign   *usageWindow   `json:"seven_day_claude_design"`
+	SevenDayRoutines       *usageWindow   `json:"seven_day_cowork"`
+	SevenDayRoutinesNamed  *usageWindow   `json:"seven_day_routines"`
+	SevenDayClaudeRoutines *usageWindow   `json:"seven_day_claude_routines"`
+	ExtraUsage             *extraUsageRaw `json:"extra_usage"`
 }
 
 // --- Extra usage source (unified shape from OAuth or Web) ---
@@ -286,19 +291,19 @@ type overageResponse struct {
 	IsEnabled          *bool    `json:"is_enabled"`
 	MonthlyCreditLimit *float64 `json:"monthly_credit_limit"`
 	UsedCredits        *float64 `json:"used_credits"`
-	Currency           string `json:"currency"`
-	AccountEmail       string `json:"account_email"`
-	OutOfCredits       *bool  `json:"out_of_credits"`
-	SeatTier           string `json:"seat_tier"`
-	DisabledReason     string `json:"disabled_reason"`
-	DisabledUntil      string `json:"disabled_until"`
+	Currency           string   `json:"currency"`
+	AccountEmail       string   `json:"account_email"`
+	OutOfCredits       *bool    `json:"out_of_credits"`
+	SeatTier           string   `json:"seat_tier"`
+	DisabledReason     string   `json:"disabled_reason"`
+	DisabledUntil      string   `json:"disabled_until"`
 }
 
 // prepaidCreditsResponse mirrors the claude.ai prepaid/credits endpoint.
 type prepaidCreditsResponse struct {
 	Amount             *float64 `json:"amount"`
-	Currency           string `json:"currency"`
-	AutoReloadSettings any    `json:"auto_reload_settings"`
+	Currency           string   `json:"currency"`
+	AutoReloadSettings any      `json:"auto_reload_settings"`
 }
 
 var (
@@ -584,7 +589,7 @@ func extraUsageMetrics(extra *extraUsageSource) []providers.MetricValue {
 		},
 		providers.MetricValue{
 			ID: "extra-usage-limit", Label: "LIMIT",
-			Name: fmt.Sprintf("Extra usage monthly limit (%s)", extra.currency),
+			Name:  fmt.Sprintf("Extra usage monthly limit (%s)", extra.currency),
 			Value: fmt.Sprintf("$%.2f", limit), NumericValue: &limit,
 			NumericUnit: "dollars", NumericGoodWhen: "high",
 			Caption: "Monthly",
@@ -616,7 +621,7 @@ func (Provider) MetricIDs() []string {
 	return []string{
 		"session-percent", "session-pace", "weekly-percent", "weekly-pace",
 		"weekly-sonnet-percent", "sonnet-pace", "weekly-opus-percent", "opus-pace",
-		"weekly-design-percent", "design-pace",
+		"weekly-design-percent", "design-pace", "weekly-routines-percent", "routines-pace",
 		"extra-usage-percent", "extra-usage-limit", "extra-usage-spent",
 		"extra-usage-enabled", "extra-usage-balance", "extra-usage-auto-reload",
 		"cost-today", "cost-30d",
@@ -774,18 +779,39 @@ func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
 		}
 	}
 
-	if resp.SevenDayDesign != nil {
-		if md := remainingMetric("weekly-design-percent", "DESIGN", "Weekly Claude Design remaining", resp.SevenDayDesign); md != nil {
+	designWindow := firstWindow(resp.SevenDayDesign, resp.SevenDayDesignNamed, resp.SevenDayClaudeDesign)
+	if designWindow != nil {
+		if md := remainingMetric("weekly-design-percent", "DESIGN", "Weekly Claude Design remaining", designWindow); md != nil {
 			if md.ResetInSeconds == nil && weekly != nil && weekly.ResetInSeconds != nil {
 				md.ResetInSeconds = weekly.ResetInSeconds
 			}
 			metrics = append(metrics, *md)
 		}
-		if resp.SevenDayDesign.Utilization != nil && resp.SevenDayDesign.ResetsAt != nil {
-			if t, err := time.Parse(time.RFC3339, *resp.SevenDayDesign.ResetsAt); err == nil {
+		if designWindow.Utilization != nil && designWindow.ResetsAt != nil {
+			if t, err := time.Parse(time.RFC3339, *designWindow.ResetsAt); err == nil {
 				if p := providers.PaceMetric(providers.PaceInput{
 					MetricID: "design-pace", Label: "DESIGN", Name: "Claude Design pace (7d)",
-					UsedPercent: *resp.SevenDayDesign.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
+					UsedPercent: *designWindow.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
+				}); p != nil {
+					metrics = append(metrics, *p)
+				}
+			}
+		}
+	}
+
+	routinesWindow := firstWindow(resp.SevenDayRoutines, resp.SevenDayRoutinesNamed, resp.SevenDayClaudeRoutines)
+	if routinesWindow != nil {
+		if mr := remainingMetric("weekly-routines-percent", "ROUTINES", "Weekly Daily Routines remaining", routinesWindow); mr != nil {
+			if mr.ResetInSeconds == nil && weekly != nil && weekly.ResetInSeconds != nil {
+				mr.ResetInSeconds = weekly.ResetInSeconds
+			}
+			metrics = append(metrics, *mr)
+		}
+		if routinesWindow.Utilization != nil && routinesWindow.ResetsAt != nil {
+			if t, err := time.Parse(time.RFC3339, *routinesWindow.ResetsAt); err == nil {
+				if p := providers.PaceMetric(providers.PaceInput{
+					MetricID: "routines-pace", Label: "ROUTINES", Name: "Daily Routines pace (7d)",
+					UsedPercent: *routinesWindow.Utilization, WindowDuration: 7 * 24 * time.Hour, ResetIn: time.Until(t),
 				}); p != nil {
 					metrics = append(metrics, *p)
 				}
@@ -960,7 +986,9 @@ func ptrStr(p *string) string {
 func anyStaleResetWindow(resp usageResponse, now time.Time) bool {
 	for _, w := range []*usageWindow{
 		resp.FiveHour, resp.SevenDay,
-		resp.SevenDaySonnet, resp.SevenDayOpus, resp.SevenDayDesign,
+		resp.SevenDaySonnet, resp.SevenDayOpus,
+		firstWindow(resp.SevenDayDesign, resp.SevenDayDesignNamed, resp.SevenDayClaudeDesign),
+		firstWindow(resp.SevenDayRoutines, resp.SevenDayRoutinesNamed, resp.SevenDayClaudeRoutines),
 	} {
 		if w == nil || w.ResetsAt == nil {
 			continue
@@ -974,6 +1002,16 @@ func anyStaleResetWindow(resp usageResponse, now time.Time) bool {
 		}
 	}
 	return false
+}
+
+// firstWindow returns the first populated usage window from windows.
+func firstWindow(windows ...*usageWindow) *usageWindow {
+	for _, w := range windows {
+		if w != nil && (w.Utilization != nil || (w.ResetsAt != nil && *w.ResetsAt != "")) {
+			return w
+		}
+	}
+	return nil
 }
 
 // applyStaleWindowMarker dims every window/pace metric and replaces

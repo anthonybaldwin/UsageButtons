@@ -8,12 +8,15 @@
 package codex
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -29,6 +32,12 @@ import (
 const (
 	// defaultChatGPTBaseURL is the fallback ChatGPT backend base URL.
 	defaultChatGPTBaseURL = "https://chatgpt.com/backend-api"
+	// codexUsagePath is the usage path for Codex API-compatible base URLs.
+	codexUsagePath = "/api/codex/usage"
+	// oauthRefreshURL is the OpenAI OAuth token refresh endpoint used by Codex.
+	oauthRefreshURL = "https://auth.openai.com/oauth/token"
+	// oauthClientID is the public client ID used by the Codex CLI.
+	oauthClientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 	// userAgent is the User-Agent header sent to chatgpt.com endpoints.
 	userAgent = "UsageButtons/0.0.1"
 
@@ -36,6 +45,10 @@ const (
 	sessionWindowSeconds = 5 * 60 * 60 // 18000
 	// weeklyWindowSeconds is the length of the 7-day usage window.
 	weeklyWindowSeconds = 7 * 24 * 60 * 60 // 604800
+	// refreshAfter is the credential age after which CodexBar refreshes OAuth tokens.
+	refreshAfter = 8 * 24 * time.Hour
+	// refreshRetryAfter is how long to wait before retrying a failed OAuth refresh.
+	refreshRetryAfter = 30 * time.Minute
 )
 
 // chatGPTBaseURL resolves the ChatGPT/OpenAI backend base in this
@@ -43,6 +56,7 @@ const (
 //  1. Property Inspector override (settings.ProviderKeys.CodexChatGPTBaseURL)
 //  2. chatgpt_base_url = "..." in ~/.codex/config.toml (or $CODEX_HOME)
 //  3. defaultChatGPTBaseURL
+//
 // Normalizes trailing slashes and appends /backend-api when a bare
 // chatgpt.com / chat.openai.com host is supplied.
 func chatGPTBaseURL() string {
@@ -57,7 +71,16 @@ func chatGPTBaseURL() string {
 
 // usageURL returns the fully qualified Codex usage endpoint.
 func usageURL() string {
-	return chatGPTBaseURL() + "/wham/usage"
+	base := chatGPTBaseURL()
+	return base + usagePath(base)
+}
+
+// usagePath returns the usage path expected by the configured API base.
+func usagePath(base string) string {
+	if strings.Contains(base, "/backend-api") {
+		return "/wham/usage"
+	}
+	return codexUsagePath
 }
 
 // codexConfigPath returns the filesystem path to the Codex config.toml.
@@ -144,14 +167,18 @@ type authFile struct {
 	Tokens        *authTokens `json:"tokens"`
 	LastRefresh   string      `json:"last_refresh"`
 	LastRefreshC  string      `json:"lastRefresh"`
+	LastAttempt   string      `json:"usage_buttons_last_refresh_attempt"`
 }
 
 // codexCreds is the resolved credential used by Fetch.
 type codexCreds struct {
-	accessToken string
-	accountID   string
-	idToken     string
-	isAPIKey    bool
+	accessToken  string
+	refreshToken string
+	accountID    string
+	idToken      string
+	isAPIKey     bool
+	lastRefresh  *time.Time
+	lastAttempt  *time.Time
 }
 
 // authPath returns the filesystem path to the Codex auth.json.
@@ -199,11 +226,203 @@ func loadCredentials() (codexCreds, error) {
 	}
 
 	return codexCreds{
-		accessToken: strings.TrimSpace(accessToken),
-		accountID:   firstNonEmpty(t.AccountID, t.AccountIDC),
-		idToken:     firstNonEmpty(t.IDToken, t.IDTokenC),
-		isAPIKey:    false,
+		accessToken:  strings.TrimSpace(accessToken),
+		refreshToken: strings.TrimSpace(firstNonEmpty(t.RefreshToken, t.RefreshTokenC)),
+		accountID:    firstNonEmpty(t.AccountID, t.AccountIDC),
+		idToken:      firstNonEmpty(t.IDToken, t.IDTokenC),
+		isAPIKey:     false,
+		lastRefresh:  parseRefreshTime(firstNonEmpty(f.LastRefresh, f.LastRefreshC)),
+		lastAttempt:  parseRefreshTime(f.LastAttempt),
 	}, nil
+}
+
+// parseRefreshTime parses the Codex auth.json last_refresh timestamp.
+func parseRefreshTime(raw string) *time.Time {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return &t
+		}
+	}
+	return nil
+}
+
+// needsRefresh reports whether OAuth credentials should be refreshed before use.
+func (c codexCreds) needsRefresh() bool {
+	if c.isAPIKey || c.refreshToken == "" {
+		return false
+	}
+	if c.lastAttempt != nil && time.Since(*c.lastAttempt) < refreshRetryAfter {
+		return false
+	}
+	if c.lastRefresh == nil {
+		return true
+	}
+	return time.Since(*c.lastRefresh) > refreshAfter
+}
+
+// refreshResponse is the OpenAI OAuth token response shape.
+type refreshResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	IDToken      string `json:"id_token"`
+}
+
+// refreshOAuthToken exchanges the refresh token for fresh OAuth tokens.
+func refreshOAuthToken(creds codexCreds) (codexCreds, error) {
+	if !creds.needsRefresh() {
+		return creds, nil
+	}
+	body, err := json.Marshal(map[string]string{
+		"client_id":     oauthClientID,
+		"grant_type":    "refresh_token",
+		"refresh_token": creds.refreshToken,
+		"scope":         "openid profile email",
+	})
+	if err != nil {
+		return creds, err
+	}
+	req, err := http.NewRequest(http.MethodPost, oauthRefreshURL, bytes.NewReader(body))
+	if err != nil {
+		return creds, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return recordRefreshAttempt(creds, fmt.Errorf("Codex OAuth token refresh network error: %w", err))
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return recordRefreshAttempt(creds, fmt.Errorf("Codex OAuth token refresh read error: %w", err))
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		return recordRefreshAttempt(creds, fmt.Errorf("Codex OAuth refresh token expired or revoked. Run `codex` to re-authenticate."))
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return recordRefreshAttempt(creds, fmt.Errorf("Codex OAuth token refresh failed: HTTP %d", resp.StatusCode))
+	}
+
+	var decoded refreshResponse
+	if err := json.Unmarshal(respBody, &decoded); err != nil {
+		return recordRefreshAttempt(creds, fmt.Errorf("Codex OAuth token refresh parse error: %w", err))
+	}
+	newAccessToken := strings.TrimSpace(decoded.AccessToken)
+	if newAccessToken == "" {
+		return recordRefreshAttempt(creds, fmt.Errorf("Codex OAuth token refresh parse error: missing access_token"))
+	}
+	creds.accessToken = newAccessToken
+	if strings.TrimSpace(decoded.RefreshToken) != "" {
+		creds.refreshToken = strings.TrimSpace(decoded.RefreshToken)
+	}
+	if strings.TrimSpace(decoded.IDToken) != "" {
+		creds.idToken = strings.TrimSpace(decoded.IDToken)
+	}
+	now := time.Now().UTC()
+	creds.lastRefresh = &now
+	if err := saveCredentials(creds, now); err != nil {
+		return creds, fmt.Errorf("save refreshed Codex credentials: %w", err)
+	}
+	return creds, nil
+}
+
+// recordRefreshAttempt persists a failed refresh attempt timestamp and returns err.
+func recordRefreshAttempt(creds codexCreds, err error) (codexCreds, error) {
+	now := time.Now().UTC()
+	creds.lastAttempt = &now
+	if saveErr := saveRefreshAttempt(now); saveErr != nil {
+		return creds, errors.Join(err, fmt.Errorf("save Codex refresh attempt: %w", saveErr))
+	}
+	return creds, err
+}
+
+// saveRefreshAttempt records when Usage Buttons last attempted an OAuth refresh.
+func saveRefreshAttempt(attemptedAt time.Time) error {
+	path := authPath()
+	var root map[string]any
+	if data, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(data, &root)
+	}
+	if root == nil {
+		root = map[string]any{}
+	}
+	root["usage_buttons_last_refresh_attempt"] = attemptedAt.Format(time.RFC3339Nano)
+	return writeCredentialsRoot(path, root)
+}
+
+// saveCredentials updates auth.json with refreshed OAuth tokens while
+// preserving unrelated fields.
+func saveCredentials(creds codexCreds, refreshedAt time.Time) error {
+	path := authPath()
+	var root map[string]any
+	if data, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(data, &root)
+	}
+	if root == nil {
+		root = map[string]any{}
+	}
+	tokens := map[string]any{
+		"access_token":  creds.accessToken,
+		"refresh_token": creds.refreshToken,
+	}
+	if creds.idToken != "" {
+		tokens["id_token"] = creds.idToken
+	}
+	if creds.accountID != "" {
+		tokens["account_id"] = creds.accountID
+	}
+	root["tokens"] = tokens
+	root["last_refresh"] = refreshedAt.Format(time.RFC3339Nano)
+	delete(root, "usage_buttons_last_refresh_attempt")
+	return writeCredentialsRoot(path, root)
+}
+
+// writeCredentialsRoot persists the auth.json root object with atomic replace semantics.
+func writeCredentialsRoot(path string, root map[string]any) error {
+	data, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := replaceFileAtomic(tmpPath, path); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
 }
 
 // --- API response types ---
@@ -237,7 +456,7 @@ type usageResponse struct {
 	RateLimit *rateLimitBlock `json:"rate_limit"`
 	// Code Review (codex /review) quota — same primary/secondary shape
 	// as rate_limit. Null when the user hasn't used Code Review yet.
-	CodeReviewRateLimit *rateLimitBlock       `json:"code_review_rate_limit"`
+	CodeReviewRateLimit  *rateLimitBlock       `json:"code_review_rate_limit"`
 	AdditionalRateLimits []additionalRateLimit `json:"additional_rate_limits"`
 	Credits              *struct {
 		HasCredits *bool `json:"has_credits"`
@@ -600,6 +819,13 @@ func fetchUsageOAuth() (usageResponse, string, string, error) {
 	if err != nil {
 		return usageResponse{}, "", "", err
 	}
+	if refreshed, refreshErr := refreshOAuthToken(creds); refreshErr == nil {
+		creds = refreshed
+	} else if refreshed.accessToken != "" {
+		creds = refreshed
+	} else if creds.accessToken == "" {
+		return usageResponse{}, "", "", refreshErr
+	}
 
 	headers := map[string]string{
 		"Authorization": "Bearer " + creds.accessToken,
@@ -617,7 +843,7 @@ func fetchUsageOAuth() (usageResponse, string, string, error) {
 		if errors.As(err, &httpErr) {
 			if httpErr.Status == 401 || httpErr.Status == 403 {
 				return usageResponse{}, "", "", fmt.Errorf(
-					"Codex OAuth request unauthorized. Run `codex` to re-authenticate. (Token refresh is not yet implemented in this plugin.)")
+					"Codex OAuth request unauthorized. Run `codex` to re-authenticate.")
 			}
 			return usageResponse{}, "", "", fmt.Errorf("Codex OAuth server error: HTTP %d", httpErr.Status)
 		}

@@ -18,8 +18,8 @@ import (
 
 	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
 	"github.com/anthonybaldwin/UsageButtons/internal/icons"
-	"github.com/anthonybaldwin/UsageButtons/internal/providers/claude"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/providers/claude"
 	"github.com/anthonybaldwin/UsageButtons/internal/render"
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 	"github.com/anthonybaldwin/UsageButtons/internal/streamdeck"
@@ -272,8 +272,8 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 			latest = "?"
 		}
 		conn.SetImage(ev.Context, render.RenderButton(render.ButtonInput{
-			Label: "UPDATE",
-			Value: "v" + latest,
+			Label:    "UPDATE",
+			Value:    "v" + latest,
 			Subvalue: "New Version", Fill: "#f59e0b", ValueSize: "medium",
 		}))
 		conn.SetTitle(ev.Context, "")
@@ -321,11 +321,11 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	// No cache — first fetch.
 	mu.Lock()
 	visibleKeys[ev.Context] = &visibleKey{
-		context:   ev.Context,
-		action:    ev.Action,
-		settings:  ks,
-		showTitle: showTitle,
-		customTitle: customTitle,
+		context:       ev.Context,
+		action:        ev.Action,
+		settings:      ks,
+		showTitle:     showTitle,
+		customTitle:   customTitle,
 		lastAutoTitle: lastAutoTitle,
 	}
 	mu.Unlock()
@@ -764,9 +764,9 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 	prov := providers.Get(providerID)
 	if prov == nil {
 		conn.SetImage(context, render.RenderButton(render.ButtonInput{
-			Value: "?",
+			Value:    "?",
 			Subvalue: providerID,
-			Stale: boolPtr(true),
+			Stale:    boolPtr(true),
 		}))
 		conn.SetTitle(context, "ERR")
 		return
@@ -774,10 +774,10 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 
 	snapshot := providers.GetSnapshot(prov, providers.GetSnapshotOptions{Force: force})
 	renderSnapshotForKey(conn, visibleKey{
-		context: context,
-		action: action,
-		settings: ks,
-		showTitle: showTitle,
+		context:     context,
+		action:      action,
+		settings:    ks,
+		showTitle:   showTitle,
 		customTitle: customTitle,
 	}, prov, snapshot, 0)
 }
@@ -1380,52 +1380,60 @@ func formatValue(v any, unit string) string {
 }
 
 var knownLabels = map[string]string{
-	"session-percent":        "SESSION",
-	"session-pace":           "SESSION",
-	"weekly-percent":         "WEEKLY",
-	"weekly-pace":            "WEEKLY",
-	"weekly-sonnet-percent":  "SONNET",
-	"weekly-opus-percent":    "OPUS",
-	"weekly-design-percent":  "DESIGN",
-	"sonnet-pace":            "SONNET",
-	"opus-pace":              "OPUS",
-	"design-pace":            "DESIGN",
-	"extra-usage-percent":    "EXTRA USAGE",
-	"extra-usage-limit":      "LIMIT",
-	"extra-usage-remaining":  "LEFT",
-	"extra-usage-spent":      "SPENT",
-	"extra-usage-balance":    "BALANCE",
-	"extra-usage-enabled":    "EXTRA USAGE",
+	"session-percent":         "SESSION",
+	"session-pace":            "SESSION",
+	"weekly-percent":          "WEEKLY",
+	"weekly-pace":             "WEEKLY",
+	"weekly-sonnet-percent":   "SONNET",
+	"weekly-opus-percent":     "OPUS",
+	"weekly-design-percent":   "DESIGN",
+	"weekly-routines-percent": "ROUTINES",
+	"sonnet-pace":             "SONNET",
+	"opus-pace":               "OPUS",
+	"design-pace":             "DESIGN",
+	"routines-pace":           "ROUTINES",
+	"extra-usage-percent":     "EXTRA USAGE",
+	"extra-usage-limit":       "LIMIT",
+	"extra-usage-remaining":   "LEFT",
+	"extra-usage-spent":       "SPENT",
+	"extra-usage-balance":     "BALANCE",
+	"extra-usage-enabled":     "EXTRA USAGE",
 	"extra-usage-auto-reload": "RELOAD",
-	"credits-balance":        "CREDITS",
-	"credits":                "CREDITS",
-	"cost-today":             "TODAY",
-	"cost-30d":               "30 DAYS",
+	"credits-balance":         "CREDITS",
+	"credits":                 "CREDITS",
+	"cost-today":              "TODAY",
+	"cost-30d":                "30 DAYS",
+	"tokens-session-percent":  "5-HOUR",
+	"team-ondemand-spent":     "TEAM",
 }
 
 // metricCaptionForPlaceholder returns a short caption for dashed-out
 // placeholder buttons (no data yet) so the user knows what the button
 // is for even when the glyph is the only visual.
 var knownCaptions = map[string]string{
-	"session-percent":        "Remaining",
-	"session-pace":           "Pace",
-	"weekly-percent":         "Remaining",
-	"weekly-pace":            "Pace",
-	"weekly-sonnet-percent":  "Remaining",
-	"weekly-opus-percent":    "Remaining",
-	"weekly-design-percent":  "Remaining",
-	"sonnet-pace":            "Pace",
-	"opus-pace":              "Pace",
-	"design-pace":            "Pace",
-	"extra-usage-percent":    "Remaining",
-	"extra-usage-limit":      "Monthly",
-	"extra-usage-spent":      "Account total",
-	"extra-usage-balance":    "Prepaid",
-	"extra-usage-enabled":    "Toggle",
+	"session-percent":         "Remaining",
+	"session-pace":            "Pace",
+	"weekly-percent":          "Remaining",
+	"weekly-pace":             "Pace",
+	"weekly-sonnet-percent":   "Remaining",
+	"weekly-opus-percent":     "Remaining",
+	"weekly-design-percent":   "Remaining",
+	"weekly-routines-percent": "Remaining",
+	"sonnet-pace":             "Pace",
+	"opus-pace":               "Pace",
+	"design-pace":             "Pace",
+	"routines-pace":           "Pace",
+	"extra-usage-percent":     "Remaining",
+	"extra-usage-limit":       "Monthly",
+	"extra-usage-spent":       "Account total",
+	"extra-usage-balance":     "Prepaid",
+	"extra-usage-enabled":     "Toggle",
 	"extra-usage-auto-reload": "Auto-reload",
-	"credits-balance":        "Balance",
-	"cost-today":             "Cost (local)",
-	"cost-30d":               "Cost (local)",
+	"credits-balance":         "Balance",
+	"cost-today":              "Cost (local)",
+	"cost-30d":                "Cost (local)",
+	"tokens-session-percent":  "Remaining",
+	"team-ondemand-spent":     "Team spend",
 }
 
 func metricCaptionForPlaceholder(metricID string) string {
@@ -1478,8 +1486,8 @@ var (
 	// that specifically need the Chrome extension (cookie-gated
 	// providers) rather than an API key.
 	extensionNeededRe = regexp.MustCompile(`(?i)Install the Usage Buttons|Paste a Cookie|Helper Chrome extension`)
-	networkRe          = regexp.MustCompile(`(?i)network error|dial tcp|connection refused|timeout|ETIMEDOUT`)
-	serverErrRe        = regexp.MustCompile(`(?i)server error|HTTP [5]\d\d`)
+	networkRe         = regexp.MustCompile(`(?i)network error|dial tcp|connection refused|i/o timeout|context deadline exceeded|ETIMEDOUT`)
+	serverErrRe       = regexp.MustCompile(`(?i)server error|HTTP [5]\d\d`)
 )
 
 func isRateLimit(msg string) bool        { return rateLimitRe.MatchString(msg) }

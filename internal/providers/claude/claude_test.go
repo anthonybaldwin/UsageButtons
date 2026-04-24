@@ -7,6 +7,8 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 )
 
+// TestAnyStaleResetWindow exercises the past-reset detection across a
+// mix of future, freshly-reset, and clearly-stale window timestamps.
 func TestAnyStaleResetWindow(t *testing.T) {
 	now := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
 	rfc := func(at time.Time) *string {
@@ -79,6 +81,8 @@ func TestAnyStaleResetWindow(t *testing.T) {
 	}
 }
 
+// TestApplyStaleWindowMarker verifies that the stale marker sets Stale,
+// clears ResetInSeconds, and branches Caption on source (cookie vs oauth).
 func TestApplyStaleWindowMarker(t *testing.T) {
 	reset := 1234.0
 	makeMetrics := func() []providers.MetricValue {

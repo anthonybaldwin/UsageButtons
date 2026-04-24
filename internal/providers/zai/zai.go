@@ -38,7 +38,7 @@ type quotaLimit struct {
 	Used          *float64 `json:"used"`
 	Limit         *float64 `json:"limit"`
 	ResetAt       *string  `json:"resetAt"`
-	Unit          *int     `json:"unit"`   // 1=Days, 3=Hours, 5=Minutes
+	Unit          *int     `json:"unit"`   // 1=Days, 3=Hours, 5=Minutes, 6=Weeks
 	Number        *int     `json:"number"` // multiplier for unit
 	Usage         *float64 `json:"usage"`
 	CurrentValue  *float64 `json:"currentValue"`
@@ -290,6 +290,8 @@ func quotaUsedAndCap(limit quotaLimit) (used float64, cap float64, rawCounts boo
 		used = *limit.CurrentValue
 	} else if limit.Remaining != nil && cap > 0 {
 		used = cap - *limit.Remaining
+	} else if limit.Usage != nil && limit.Limit != nil {
+		used = *limit.Usage
 	}
 	if cap <= 0 && limit.Percentage != nil {
 		usedPct := math.Max(0, math.Min(100, *limit.Percentage))

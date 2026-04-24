@@ -21,6 +21,24 @@ func TestQuotaUsedAndCapMatchesCodexBarFields(t *testing.T) {
 	}
 }
 
+// TestQuotaUsedAndCapFallsBackToUsageConsumed verifies legacy limit/usage payloads keep usage as consumed.
+func TestQuotaUsedAndCapFallsBackToUsageConsumed(t *testing.T) {
+	limitValue := 1000.0
+	usage := 250.0
+	limit := quotaLimit{Limit: &limitValue, Usage: &usage}
+
+	used, cap, rawCounts, ok := quotaUsedAndCap(limit)
+	if !ok {
+		t.Fatal("quotaUsedAndCap returned !ok")
+	}
+	if !rawCounts {
+		t.Fatal("quotaUsedAndCap returned rawCounts=false, want true")
+	}
+	if used != 250 || cap != 1000 {
+		t.Fatalf("quotaUsedAndCap = used %.0f cap %.0f, want 250/1000", used, cap)
+	}
+}
+
 // TestQuotaUsedAndCapPercentageOnlySuppressesRawCounts verifies percent-only quotas do not fake counts.
 func TestQuotaUsedAndCapPercentageOnlySuppressesRawCounts(t *testing.T) {
 	pct := 63.0

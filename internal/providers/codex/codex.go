@@ -350,10 +350,41 @@ func saveCredentials(creds codexCreds, refreshedAt time.Time) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
 }
 
 // --- API response types ---
@@ -751,6 +782,8 @@ func fetchUsageOAuth() (usageResponse, string, string, error) {
 		return usageResponse{}, "", "", err
 	}
 	if refreshed, refreshErr := refreshOAuthToken(creds); refreshErr == nil {
+		creds = refreshed
+	} else if refreshed.accessToken != "" {
 		creds = refreshed
 	} else if creds.accessToken == "" {
 		return usageResponse{}, "", "", refreshErr

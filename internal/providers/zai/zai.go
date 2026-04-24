@@ -205,7 +205,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	if len(tokenLimits) > 0 {
-		primary := tokenLimits[len(tokenLimits)-1]
+		primary, _ := primaryTokenLimit(tokenLimits)
 		if m := quotaMetric("tokens-percent", "TOKENS", "Token usage remaining", primary, now); m != nil {
 			metrics = append(metrics, *m)
 		}
@@ -238,6 +238,20 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		Metrics:      metrics,
 		Status:       "operational",
 	}, nil
+}
+
+// primaryTokenLimit returns the largest known token window, falling back to the last lane.
+func primaryTokenLimit(tokenLimits []quotaLimit) (quotaLimit, bool) {
+	if len(tokenLimits) == 0 {
+		return quotaLimit{}, false
+	}
+	primary := tokenLimits[len(tokenLimits)-1]
+	for i := len(tokenLimits) - 1; i >= 0; i-- {
+		if windowMinutes(tokenLimits[i]) != math.MaxInt {
+			return tokenLimits[i], true
+		}
+	}
+	return primary, true
 }
 
 // limitType classifies a z.ai quota lane into provider-facing buckets.
@@ -298,6 +312,10 @@ func quotaUsedAndCap(limit quotaLimit) (used float64, cap float64, rawCounts boo
 		return usedPct, 100, false, true
 	}
 	if cap <= 0 {
+		return 0, 0, false, false
+	}
+	if used == 0 && limit.Used == nil && limit.CurrentValue == nil && limit.Remaining == nil &&
+		!(limit.Usage != nil && limit.Limit != nil) {
 		return 0, 0, false, false
 	}
 	return math.Max(0, math.Min(cap, used)), cap, true, true

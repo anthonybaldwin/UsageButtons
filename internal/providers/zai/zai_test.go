@@ -1,6 +1,9 @@
 package zai
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 // TestQuotaUsedAndCapMatchesCodexBarFields verifies CodexBar-compatible quota field mapping.
 func TestQuotaUsedAndCapMatchesCodexBarFields(t *testing.T) {
@@ -39,6 +42,16 @@ func TestQuotaUsedAndCapFallsBackToUsageConsumed(t *testing.T) {
 	}
 }
 
+// TestQuotaUsedAndCapSkipsIncompleteUsageOnlyRows verifies cap-only usage rows do not fake remaining.
+func TestQuotaUsedAndCapSkipsIncompleteUsageOnlyRows(t *testing.T) {
+	usage := 1000.0
+
+	_, _, _, ok := quotaUsedAndCap(quotaLimit{Usage: &usage})
+	if ok {
+		t.Fatal("quotaUsedAndCap returned ok=true for usage-only row")
+	}
+}
+
 // TestQuotaUsedAndCapPercentageOnlySuppressesRawCounts verifies percent-only quotas do not fake counts.
 func TestQuotaUsedAndCapPercentageOnlySuppressesRawCounts(t *testing.T) {
 	pct := 63.0
@@ -51,6 +64,38 @@ func TestQuotaUsedAndCapPercentageOnlySuppressesRawCounts(t *testing.T) {
 	}
 	if used != 63 || cap != 100 {
 		t.Fatalf("quotaUsedAndCap = used %.0f cap %.0f, want 63/100", used, cap)
+	}
+}
+
+// TestPrimaryTokenLimitPrefersLargestKnownWindow verifies unknown windows do not shadow known lanes.
+func TestPrimaryTokenLimitPrefersLargestKnownWindow(t *testing.T) {
+	hours := 3
+	five := 5
+	days := 1
+	seven := 7
+	known := quotaLimit{Unit: &days, Number: &seven}
+	short := quotaLimit{Unit: &hours, Number: &five}
+	unknown := quotaLimit{}
+
+	got, ok := primaryTokenLimit([]quotaLimit{short, known, unknown})
+	if !ok {
+		t.Fatal("primaryTokenLimit returned !ok")
+	}
+	if windowMinutes(got) != 7*24*60 {
+		t.Fatalf("primaryTokenLimit window = %d, want weekly", windowMinutes(got))
+	}
+}
+
+// TestPrimaryTokenLimitFallsBackToUnknownWindow verifies unknown-only lanes can still emit.
+func TestPrimaryTokenLimitFallsBackToUnknownWindow(t *testing.T) {
+	unknown := quotaLimit{}
+
+	got, ok := primaryTokenLimit([]quotaLimit{unknown})
+	if !ok {
+		t.Fatal("primaryTokenLimit returned !ok")
+	}
+	if windowMinutes(got) != math.MaxInt {
+		t.Fatalf("primaryTokenLimit window = %d, want unknown", windowMinutes(got))
 	}
 }
 

@@ -380,7 +380,7 @@ func saveCredentials(creds codexCreds, refreshedAt time.Time) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := replaceFileAtomic(tmpPath, path); err != nil {
 		return err
 	}
 	cleanup = false

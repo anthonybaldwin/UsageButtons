@@ -1,10 +1,18 @@
 package providers
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
 const (
@@ -27,6 +35,13 @@ const (
 	// expired cookie) stops carrying forward stale data so the button
 	// can show a setup/error state instead.
 	StaleTTL = 30 * time.Minute
+
+	// PersistentTTL bounds how long a snapshot survives process restarts.
+	// This smooths normal Stream Deck / computer restarts without showing
+	// week-old usage after a long absence.
+	PersistentTTL = 24 * time.Hour
+
+	persistentCacheVersion = 1
 )
 
 // LogSink is called for cache observability. Set by the plugin at init.
@@ -114,16 +129,30 @@ func (e *cacheError) cooldownUntil() time.Time {
 // cacheEntry is the per-provider cache slot tracking the last snapshot,
 // the last error, and the in-flight fetch promise used for coalescing.
 type cacheEntry struct {
-	snapshot  *Snapshot
-	fetchedAt time.Time
-	lastError *cacheError
+	snapshot    *Snapshot
+	fetchedAt   time.Time
+	lastError   *cacheError
 	lastForceAt time.Time
 
 	// mu protects the inflight promise pattern.
-	mu       sync.Mutex
-	inflight chan struct{} // non-nil when a fetch is in progress
-	result   *Snapshot     // set when inflight completes
+	mu        sync.Mutex
+	inflight  chan struct{} // non-nil when a fetch is in progress
+	result    *Snapshot     // set when inflight completes
 	resultErr error
+}
+
+// persistentCacheDir returns the directory used for restart-surviving
+// provider snapshots. Tests replace it with a temp directory.
+var persistentCacheDir = defaultPersistentCacheDir
+
+// persistentSnapshot is the on-disk representation of one cached provider
+// snapshot.
+type persistentSnapshot struct {
+	Version           int       `json:"version"`
+	ProviderID        string    `json:"providerId"`
+	ConfigFingerprint string    `json:"configFingerprint"`
+	FetchedAt         time.Time `json:"fetchedAt"`
+	Snapshot          Snapshot  `json:"snapshot"`
 }
 
 var (
@@ -140,6 +169,13 @@ func getEntry(providerID string) *cacheEntry {
 	e, ok := entries[providerID]
 	if !ok {
 		e = &cacheEntry{}
+		if s, fetchedAt, ok := loadPersistentSnapshot(providerID); ok {
+			e.snapshot = &s
+			e.result = &s
+			e.fetchedAt = fetchedAt
+			cacheLog("cache[%s] restored persisted snapshot (age=%ds)",
+				providerID, int(time.Since(fetchedAt).Seconds()))
+		}
 		entries[providerID] = e
 	}
 	return e
@@ -223,6 +259,7 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 
 	ch := make(chan struct{})
 	e.inflight = ch
+	fetchConfigFingerprint := providerConfigFingerprint(p.ID())
 
 	forceStr := ""
 	if opts.Force {
@@ -238,6 +275,8 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 	})
 
 	e.mu.Lock()
+	persist := false
+	persistedAt := time.Time{}
 	if fetchErr != nil {
 		msg := fetchErr.Error()
 		retryAt := retryAfterFromError(fetchErr)
@@ -267,6 +306,8 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 		}
 		e.snapshot = &snapshot
 		e.fetchedAt = time.Now()
+		persist = shouldPersistProviderSnapshot(p.ID(), snapshot)
+		persistedAt = e.fetchedAt
 		hadError := e.lastError != nil
 		e.lastError = nil
 		ids := metricIDs(snapshot)
@@ -283,6 +324,10 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 	close(ch) // wake all coalesced waiters
 	e.mu.Unlock()
 
+	if persist {
+		persistSnapshot(p.ID(), fetchConfigFingerprint, snapshot, persistedAt)
+	}
+
 	return snapshot
 }
 
@@ -291,12 +336,10 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 // stale/error faces produced on the last fetch are preserved across
 // minute redraws; falls back to e.snapshot when no fetch has run.
 func PeekSnapshotState(providerID string) (*Snapshot, time.Time) {
-	cacheMu.Lock()
-	e, ok := entries[providerID]
-	cacheMu.Unlock()
-	if !ok {
+	if providerID == "" {
 		return nil, time.Time{}
 	}
+	e := getEntry(providerID)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.result != nil {
@@ -307,6 +350,19 @@ func PeekSnapshotState(providerID string) (*Snapshot, time.Time) {
 
 // ClearCache removes cached data for a provider (or all if id is "").
 func ClearCache(providerID string) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	if providerID == "" {
+		entries = map[string]*cacheEntry{}
+	} else {
+		delete(entries, providerID)
+	}
+	clearPersistentCache(providerID)
+}
+
+// ClearRuntimeCache removes only in-memory cached data for a provider
+// (or all providers if id is ""), preserving restart-surviving snapshots.
+func ClearRuntimeCache(providerID string) {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
 	if providerID == "" {
@@ -384,4 +440,308 @@ func boolStr(cond bool, t, f string) string {
 		return t
 	}
 	return f
+}
+
+// defaultPersistentCacheDir resolves the cross-platform cache directory.
+func defaultPersistentCacheDir() (string, error) {
+	base, err := os.UserCacheDir()
+	if err != nil || base == "" {
+		base, err = os.UserConfigDir()
+		if err != nil || base == "" {
+			return "", err
+		}
+	}
+	return filepath.Join(base, "UsageButtons", "provider-cache"), nil
+}
+
+// persistentSnapshotPath returns the path for providerID's persisted
+// snapshot file.
+func persistentSnapshotPath(providerID string) (string, error) {
+	dir, err := persistentCacheDir()
+	if err != nil || dir == "" {
+		return "", err
+	}
+	return filepath.Join(dir, safeCacheFilename(providerID)+".json"), nil
+}
+
+// safeCacheFilename maps provider IDs onto a conservative filename subset.
+func safeCacheFilename(providerID string) string {
+	if providerID == "" {
+		return "unknown"
+	}
+	out := make([]rune, 0, len(providerID))
+	for _, r := range providerID {
+		switch {
+		case r >= 'a' && r <= 'z':
+			out = append(out, r)
+		case r >= 'A' && r <= 'Z':
+			out = append(out, r)
+		case r >= '0' && r <= '9':
+			out = append(out, r)
+		case r == '-' || r == '_':
+			out = append(out, r)
+		default:
+			out = append(out, '_')
+		}
+	}
+	return string(out)
+}
+
+// shouldPersistSnapshot reports whether a snapshot has useful data to restore
+// after a restart.
+func shouldPersistSnapshot(s Snapshot) bool {
+	return s.Error == "" && len(s.Metrics) > 0
+}
+
+// shouldPersistProviderSnapshot reports whether a provider snapshot is safe to
+// restore after a restart without revalidating upstream account identity.
+func shouldPersistProviderSnapshot(providerID string, s Snapshot) bool {
+	return shouldPersistSnapshot(s) && !usesUnfingerprintedBrowserSession(providerID, s)
+}
+
+// usesUnfingerprintedBrowserSession reports whether the snapshot depends on a
+// browser session that providerConfigFingerprint cannot validate at startup.
+func usesUnfingerprintedBrowserSession(providerID string, s Snapshot) bool {
+	switch providerID {
+	case "cursor", "ollama":
+		return true
+	case "claude", "codex":
+		return s.Source == "cookie"
+	default:
+		return false
+	}
+}
+
+// persistSnapshot writes a successful provider snapshot to disk with the
+// config fingerprint captured at fetch start. Failures are logged but do not
+// affect the live button update path.
+func persistSnapshot(providerID, configFingerprint string, s Snapshot, fetchedAt time.Time) {
+	path, err := persistentSnapshotPath(providerID)
+	if err != nil || path == "" {
+		cacheLog("cache[%s] persist skipped: %v", providerID, err)
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		cacheLog("cache[%s] persist mkdir: %v", providerID, err)
+		return
+	}
+	payload := persistentSnapshot{
+		Version:           persistentCacheVersion,
+		ProviderID:        providerID,
+		ConfigFingerprint: configFingerprint,
+		FetchedAt:         fetchedAt,
+		Snapshot:          s,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		cacheLog("cache[%s] persist marshal: %v", providerID, err)
+		return
+	}
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		cacheLog("cache[%s] persist write: %v", providerID, err)
+	}
+}
+
+// loadPersistentSnapshot reads a restart-surviving snapshot, rejecting
+// incompatible, mismatched, or overly old cache entries.
+func loadPersistentSnapshot(providerID string) (Snapshot, time.Time, bool) {
+	path, err := persistentSnapshotPath(providerID)
+	if err != nil || path == "" {
+		return Snapshot{}, time.Time{}, false
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return Snapshot{}, time.Time{}, false
+	}
+	var payload persistentSnapshot
+	if err := json.Unmarshal(body, &payload); err != nil {
+		cacheLog("cache[%s] persisted snapshot invalid: %v", providerID, err)
+		_ = os.Remove(path)
+		return Snapshot{}, time.Time{}, false
+	}
+	if payload.Version != persistentCacheVersion ||
+		payload.ProviderID != providerID ||
+		payload.ConfigFingerprint != providerConfigFingerprint(providerID) ||
+		payload.Snapshot.ProviderID != providerID ||
+		payload.FetchedAt.IsZero() ||
+		!shouldPersistProviderSnapshot(providerID, payload.Snapshot) {
+		_ = os.Remove(path)
+		return Snapshot{}, time.Time{}, false
+	}
+	age := time.Since(payload.FetchedAt)
+	if age < 0 || age > PersistentTTL {
+		_ = os.Remove(path)
+		return Snapshot{}, time.Time{}, false
+	}
+	s := payload.Snapshot
+	if age >= MinTTL {
+		s = markMetricsStale(s)
+	}
+	return s, payload.FetchedAt, true
+}
+
+// providerConfigFingerprint returns a stable fingerprint of the credentials
+// and endpoint inputs the provider will use for upstream requests.
+func providerConfigFingerprint(providerID string) string {
+	pk := settings.ProviderKeysGet()
+	parts := []string{"provider", providerID}
+	switch providerID {
+	case "openrouter":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.OpenRouterKey, "OPENROUTER_API_KEY"),
+			"base-url", settings.ResolveEndpoint(pk.OpenRouterURL, "https://openrouter.ai/api/v1", "OPENROUTER_API_URL"),
+		)
+	case "warp":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.WarpKey, "WARP_API_KEY", "WARP_TOKEN"),
+		)
+	case "zai":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.ZaiKey, "Z_AI_API_KEY", "ZAI_API_TOKEN", "ZAI_API_KEY"),
+			"quota-url", zaiQuotaURLFingerprint(pk),
+		)
+	case "kimi-k2":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.KimiK2Key, "KIMI_K2_API_KEY", "KIMI_API_KEY", "KIMI_KEY"),
+		)
+	case "copilot":
+		parts = append(parts,
+			"token", settings.ResolveAPIKey(pk.CopilotToken, "GITHUB_TOKEN"),
+			"hosts", fileContentFingerprint(copilotHostsPath()),
+			"apps", fileContentFingerprint(copilotAppsPath()),
+		)
+	case "codex":
+		parts = append(parts,
+			"base-url", pk.CodexChatGPTBaseURL,
+			"codex-home", strings.TrimSpace(os.Getenv("CODEX_HOME")),
+			"auth", fileContentFingerprint(codexCredPath()),
+			"config", fileContentFingerprint(codexConfigPath()),
+		)
+	case "claude":
+		parts = append(parts,
+			"credentials", claudeCredentialsFingerprint(),
+		)
+	}
+	return fingerprintParts(parts...)
+}
+
+// zaiQuotaURLFingerprint mirrors the z.ai provider endpoint selection.
+func zaiQuotaURLFingerprint(pk settings.ProviderKeys) string {
+	if full := settings.ResolveEndpoint(pk.ZaiQuotaURL, "", "Z_AI_QUOTA_URL"); full != "" {
+		return full
+	}
+	host := settings.ResolveEndpoint(pk.ZaiHost, "", "Z_AI_API_HOST")
+	if host == "" {
+		host = zaiRegionHostFingerprint(pk.ZaiRegion)
+	}
+	return host + "/api/monitor/usage/quota/limit"
+}
+
+// zaiRegionHostFingerprint mirrors the z.ai region picker defaults.
+func zaiRegionHostFingerprint(region string) string {
+	switch strings.ToLower(strings.TrimSpace(region)) {
+	case "bigmodel-cn", "bigmodel", "cn", "china":
+		return "https://open.bigmodel.cn"
+	default:
+		return "https://api.z.ai"
+	}
+}
+
+// copilotHostsPath returns the GitHub Copilot hosts.json path.
+func copilotHostsPath() string {
+	return homePath(".config", "github-copilot", "hosts.json")
+}
+
+// copilotAppsPath returns the GitHub Copilot apps.json path.
+func copilotAppsPath() string {
+	return homePath(".config", "github-copilot", "apps.json")
+}
+
+// codexConfigPath returns the Codex config.toml path.
+func codexConfigPath() string {
+	if ch := strings.TrimSpace(os.Getenv("CODEX_HOME")); ch != "" {
+		return filepath.Join(ch, "config.toml")
+	}
+	return homePath(".codex", "config.toml")
+}
+
+// claudeCredentialsFingerprint mirrors Claude credential source precedence.
+func claudeCredentialsFingerprint() string {
+	path := claudeCredPath()
+	body, err := os.ReadFile(path)
+	if err == nil {
+		return "file:" + contentFingerprint(body)
+	}
+	if !os.IsNotExist(err) {
+		return "file-error"
+	}
+	return "keychain:" + claudeKeychainCredentialFingerprint()
+}
+
+// homePath joins path elements under the current user's home directory.
+func homePath(parts ...string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	all := append([]string{home}, parts...)
+	return filepath.Join(all...)
+}
+
+// fileContentFingerprint hashes a known config or credential file.
+func fileContentFingerprint(path string) string {
+	if strings.TrimSpace(path) == "" {
+		return "missing"
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return "missing"
+	}
+	return contentFingerprint(body)
+}
+
+// contentFingerprint hashes a credential or config blob.
+func contentFingerprint(body []byte) string {
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:])
+}
+
+// fingerprintParts hashes a delimited list of provider config inputs.
+func fingerprintParts(parts ...string) string {
+	h := sha256.New()
+	for _, part := range parts {
+		_, _ = h.Write([]byte(part))
+		_, _ = h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// clearPersistentCache removes one provider snapshot, or the full persisted
+// cache directory when providerID is empty.
+func clearPersistentCache(providerID string) {
+	if providerID == "" {
+		dir, err := persistentCacheDir()
+		if err == nil && dir != "" {
+			_ = os.RemoveAll(dir)
+		}
+		return
+	}
+	path, err := persistentSnapshotPath(providerID)
+	if err == nil && path != "" {
+		_ = os.Remove(path)
+	}
+}
+
+// markMetricsStale returns a copy of s with every metric dimmed, without
+// setting Snapshot.Error. Used for restored disk snapshots so the tile can
+// look like last-known data without triggering an error banner.
+func markMetricsStale(s Snapshot) Snapshot {
+	out := s
+	out.Metrics = make([]MetricValue, len(s.Metrics))
+	copy(out.Metrics, s.Metrics)
+	for i := range out.Metrics {
+		t := true
+		out.Metrics[i].Stale = &t
+	}
+	return out
 }

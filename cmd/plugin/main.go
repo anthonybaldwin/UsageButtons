@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"math"
 	"os"
@@ -37,9 +38,10 @@ import (
 )
 
 const (
-	schedulerTick  = 30 * time.Second
-	displayRefresh = 60 * time.Second
-	defaultMetric  = "session-percent"
+	schedulerTick      = 30 * time.Second
+	displayRefresh     = 60 * time.Second
+	refreshJitterRatio = 0.20
+	defaultMetric      = "session-percent"
 )
 
 // visibleKey tracks a key currently on-screen.
@@ -48,17 +50,25 @@ type visibleKey struct {
 	action        string
 	settings      settings.KeySettings
 	lastPollAt    time.Time
+	nextPollAt    time.Time
 	showTitle     bool   // true when user has enabled the native SD title
 	customTitle   bool   // true when the user has overridden the native title text
 	lastAutoTitle string // last title value written by the plugin
 }
 
 var (
-	mu          sync.Mutex
-	visibleKeys = map[string]*visibleKey{}
+	mu                 sync.Mutex
+	visibleKeys        = map[string]*visibleKey{}
+	globalSettingsSeen bool
 
 	autoRegisterOnce sync.Once
 )
+
+func globalSettingsLoaded() bool {
+	mu.Lock()
+	defer mu.Unlock()
+	return globalSettingsSeen
+}
 
 func main() {
 	args := streamdeck.ParseArgs()
@@ -116,6 +126,10 @@ func displayRefreshLoop(conn *streamdeck.Connection) {
 }
 
 func scheduleDueKeys(conn *streamdeck.Connection) {
+	if !globalSettingsLoaded() {
+		return
+	}
+
 	// Update check — no-ops internally unless the 6h cache expired.
 	if !settings.SkipUpdateCheckEnabled() {
 		update.Check()
@@ -131,7 +145,10 @@ func scheduleDueKeys(conn *streamdeck.Connection) {
 	for ctx, key := range visibleKeys {
 		providerID := streamdeck.ProviderIDFromAction(key.action)
 		interval := time.Duration(settings.ResolveRefreshMs(key.settings, providerID)) * time.Millisecond
-		if now.Sub(key.lastPollAt) >= interval {
+		if key.nextPollAt.IsZero() && !key.lastPollAt.IsZero() {
+			key.nextPollAt = nextPollTime(key.lastPollAt, interval, ctx, providerID)
+		}
+		if key.lastPollAt.IsZero() || (!key.nextPollAt.IsZero() && !now.Before(key.nextPollAt)) {
 			due = append(due, ctx)
 		}
 	}
@@ -140,6 +157,23 @@ func scheduleDueKeys(conn *streamdeck.Connection) {
 	for _, ctx := range due {
 		refreshKey(conn, ctx, false)
 	}
+}
+
+func nextPollTime(from time.Time, interval time.Duration, context, providerID string) time.Time {
+	if from.IsZero() || interval <= 0 {
+		return from
+	}
+	return from.Add(interval + refreshJitter(interval, providerID+"|"+context))
+}
+
+func refreshJitter(interval time.Duration, seed string) time.Duration {
+	max := time.Duration(float64(interval) * refreshJitterRatio)
+	if max <= 0 {
+		return 0
+	}
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(seed))
+	return time.Duration(h.Sum64() % uint64(max+1))
 }
 
 func refreshAllVisible(conn *streamdeck.Connection) {
@@ -155,7 +189,49 @@ func refreshAllVisible(conn *streamdeck.Connection) {
 	}
 }
 
+func refreshOrRedrawVisible(conn *streamdeck.Connection) {
+	type visibleContext struct {
+		context    string
+		providerID string
+	}
+	mu.Lock()
+	contexts := make([]visibleContext, 0, len(visibleKeys))
+	for ctx, key := range visibleKeys {
+		contexts = append(contexts, visibleContext{
+			context:    ctx,
+			providerID: streamdeck.ProviderIDFromAction(key.action),
+		})
+	}
+	mu.Unlock()
+
+	for _, item := range contexts {
+		if snapshot, _ := providers.PeekSnapshotState(item.providerID); snapshot != nil {
+			stampCacheRedrawPollTime(item.context, item.providerID)
+			redrawKeyFromCache(conn, item.context)
+			continue
+		}
+		refreshKey(conn, item.context, false)
+	}
+}
+
+func stampCacheRedrawPollTime(context, providerID string) {
+	mu.Lock()
+	defer mu.Unlock()
+	key, ok := visibleKeys[context]
+	if !ok {
+		return
+	}
+	now := time.Now()
+	interval := time.Duration(settings.ResolveRefreshMs(key.settings, providerID)) * time.Millisecond
+	key.lastPollAt = now
+	key.nextPollAt = nextPollTime(now, interval, context, providerID)
+}
+
 func redrawAllVisible(conn *streamdeck.Connection) {
+	if !globalSettingsLoaded() {
+		return
+	}
+
 	mu.Lock()
 	contexts := make([]string, 0, len(visibleKeys))
 	for ctx := range visibleKeys {
@@ -260,10 +336,11 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 
 	// If an update is pending, show the update face.
 	if !settings.SkipUpdateCheckEnabled() && update.IsAvailable() {
+		now := time.Now()
 		mu.Lock()
 		visibleKeys[ev.Context] = &visibleKey{
 			context: ev.Context, action: ev.Action,
-			settings: ks, lastPollAt: time.Now(),
+			settings: ks, lastPollAt: now,
 			showTitle: showTitle,
 		}
 		mu.Unlock()
@@ -285,8 +362,13 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	// Try to render from cache immediately (avoid loading flash). Route
 	// through renderSnapshotForKey so cached error faces, stale markers,
 	// and reset-timer aging behave identically to the minute redraw.
-	snapshot, fetchedAt := providers.PeekSnapshotState(providerID)
 	prov := providers.Get(providerID)
+	var snapshot *providers.Snapshot
+	var fetchedAt time.Time
+	settingsLoaded := globalSettingsLoaded()
+	if settingsLoaded {
+		snapshot, fetchedAt = providers.PeekSnapshotState(providerID)
+	}
 	if snapshot != nil && prov != nil {
 		if metric := findMetric(snapshot.Metrics, metricID); metric != nil {
 			metricLabel := strings.ToUpper(metric.Label)
@@ -297,11 +379,14 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 			lastAutoTitle = metricLabel
 		}
 		mu.Lock()
+		now := time.Now()
+		interval := time.Duration(settings.ResolveRefreshMs(ks, providerID)) * time.Millisecond
 		visibleKeys[ev.Context] = &visibleKey{
 			context:       ev.Context,
 			action:        ev.Action,
 			settings:      ks,
-			lastPollAt:    time.Now(),
+			lastPollAt:    now,
+			nextPollAt:    nextPollTime(now, interval, ev.Context, providerID),
 			showTitle:     showTitle,
 			customTitle:   customTitle,
 			lastAutoTitle: lastAutoTitle,
@@ -345,7 +430,11 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	}
 	setTitleForKey(conn, ev.Context, customTitle, title)
 	conn.Logf("key appeared, no cache (now tracking %d visible key(s))", countVisible())
-	go refreshKey(conn, ev.Context, false)
+	if settingsLoaded {
+		go refreshKey(conn, ev.Context, false)
+	} else {
+		conn.Logf("key appeared before global settings; waiting to refresh")
+	}
 }
 
 func handleWillDisappear(conn *streamdeck.Connection, ev streamdeck.Event) {
@@ -389,6 +478,7 @@ func handleDidReceiveSettings(conn *streamdeck.Connection, ev streamdeck.Event) 
 	if ok {
 		key.settings = ks
 		key.lastPollAt = time.Time{} // reset so scheduler picks it up
+		key.nextPollAt = time.Time{}
 	}
 	mu.Unlock()
 
@@ -403,6 +493,11 @@ func handleDidReceiveGlobalSettings(conn *streamdeck.Connection, ev streamdeck.E
 
 	var gs settings.GlobalSettings
 	json.Unmarshal(payload.Settings, &gs)
+
+	mu.Lock()
+	firstGlobalSettings := !globalSettingsSeen
+	globalSettingsSeen = true
+	mu.Unlock()
 
 	// Migrate away from legacy sentinel plugin-tier colors. Earlier
 	// builds persisted the color-picker's default value on every save
@@ -431,12 +526,21 @@ func handleDidReceiveGlobalSettings(conn *streamdeck.Connection, ev streamdeck.E
 		conn.SetGlobalSettings(raw)
 	}
 	for _, id := range settings.ChangedProviderIDs(prevKeys, gs.ProviderKeys) {
-		providers.ClearCache(id)
-		conn.Logf("provider config changed — cleared cache for %s", id)
+		if firstGlobalSettings {
+			providers.ClearRuntimeCache(id)
+			conn.Logf("provider config loaded — cleared runtime cache for %s", id)
+		} else {
+			providers.ClearCache(id)
+			conn.Logf("provider config changed — cleared cache for %s", id)
+		}
 	}
 
 	conn.Logf("global settings updated")
-	go refreshAllVisible(conn)
+	if firstGlobalSettings {
+		go refreshOrRedrawVisible(conn)
+	} else {
+		go refreshAllVisible(conn)
+	}
 
 	// Auto-register the native-messaging host on the first global
 	// settings event (i.e. plugin startup), unless the user has
@@ -629,11 +733,18 @@ func replyProviderStatus(conn *streamdeck.Connection, ctxStr, action string) {
 	if prov == nil {
 		return
 	}
-	snapshot := providers.GetSnapshot(prov, providers.GetSnapshotOptions{})
+	var snapshot *providers.Snapshot
+	if globalSettingsLoaded() {
+		snapshot, _ = providers.PeekSnapshotState(providerID)
+	}
+	errText := ""
+	if snapshot != nil {
+		errText = snapshot.Error
+	}
 	conn.SendToPropertyInspector(ctxStr, action, map[string]any{
 		"action":     "providerStatus",
 		"providerId": providerID,
-		"error":      snapshot.Error,
+		"error":      errText,
 	})
 }
 
@@ -739,20 +850,27 @@ func showUpdateFace(conn *streamdeck.Connection) {
 }
 
 func refreshKey(conn *streamdeck.Connection, context string, force bool) {
+	if !globalSettingsLoaded() {
+		return
+	}
+
 	mu.Lock()
 	key, ok := visibleKeys[context]
 	if !ok {
 		mu.Unlock()
 		return
 	}
-	key.lastPollAt = time.Now()
+	now := time.Now()
 	action := key.action
 	ks := key.settings
+	providerID := streamdeck.ProviderIDFromAction(action)
+	interval := time.Duration(settings.ResolveRefreshMs(ks, providerID)) * time.Millisecond
+	key.lastPollAt = now
+	key.nextPollAt = nextPollTime(now, interval, context, providerID)
 	showTitle := key.showTitle
 	customTitle := key.customTitle
 	mu.Unlock()
 
-	providerID := streamdeck.ProviderIDFromAction(action)
 	metricID := ks.MetricID
 	if metricID == "" {
 		metricID = defaultMetric
@@ -783,6 +901,10 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 }
 
 func redrawKeyFromCache(conn *streamdeck.Connection, context string) {
+	if !globalSettingsLoaded() {
+		return
+	}
+
 	mu.Lock()
 	key, ok := visibleKeys[context]
 	if !ok {
@@ -831,6 +953,7 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 			mu.Lock()
 			if k, ok := visibleKeys[context]; ok {
 				k.lastPollAt = time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
+				k.nextPollAt = k.lastPollAt
 			}
 			mu.Unlock()
 		}

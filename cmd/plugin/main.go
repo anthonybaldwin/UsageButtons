@@ -206,11 +206,25 @@ func refreshOrRedrawVisible(conn *streamdeck.Connection) {
 
 	for _, item := range contexts {
 		if snapshot, _ := providers.PeekSnapshotState(item.providerID); snapshot != nil {
+			stampCacheRedrawPollTime(item.context, item.providerID)
 			redrawKeyFromCache(conn, item.context)
 			continue
 		}
 		refreshKey(conn, item.context, false)
 	}
+}
+
+func stampCacheRedrawPollTime(context, providerID string) {
+	mu.Lock()
+	defer mu.Unlock()
+	key, ok := visibleKeys[context]
+	if !ok {
+		return
+	}
+	now := time.Now()
+	interval := time.Duration(settings.ResolveRefreshMs(key.settings, providerID)) * time.Millisecond
+	key.lastPollAt = now
+	key.nextPollAt = nextPollTime(now, interval, context, providerID)
 }
 
 func redrawAllVisible(conn *streamdeck.Connection) {

@@ -77,7 +77,7 @@ func TestPrimaryTokenLimitPrefersLargestKnownWindow(t *testing.T) {
 	short := quotaLimit{Unit: &hours, Number: &five}
 	unknown := quotaLimit{}
 
-	got, ok := primaryTokenLimit([]quotaLimit{short, known, unknown})
+	got, ok := primaryTokenLimit([]quotaLimit{known, unknown, short})
 	if !ok {
 		t.Fatal("primaryTokenLimit returned !ok")
 	}

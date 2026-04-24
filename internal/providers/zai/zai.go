@@ -245,13 +245,20 @@ func primaryTokenLimit(tokenLimits []quotaLimit) (quotaLimit, bool) {
 	if len(tokenLimits) == 0 {
 		return quotaLimit{}, false
 	}
-	primary := tokenLimits[len(tokenLimits)-1]
-	for i := len(tokenLimits) - 1; i >= 0; i-- {
-		if windowMinutes(tokenLimits[i]) != math.MaxInt {
-			return tokenLimits[i], true
+	fallback := tokenLimits[len(tokenLimits)-1]
+	var primary quotaLimit
+	bestWindow := -1
+	for _, limit := range tokenLimits {
+		window := windowMinutes(limit)
+		if window != math.MaxInt && window > bestWindow {
+			primary = limit
+			bestWindow = window
 		}
 	}
-	return primary, true
+	if bestWindow >= 0 {
+		return primary, true
+	}
+	return fallback, true
 }
 
 // limitType classifies a z.ai quota lane into provider-facing buckets.

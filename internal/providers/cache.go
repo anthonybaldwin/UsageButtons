@@ -600,7 +600,7 @@ func providerConfigFingerprint(providerID string) string {
 		)
 	case "claude":
 		parts = append(parts,
-			"credentials", fileContentFingerprint(claudeCredPath()),
+			"credentials", claudeCredentialsFingerprint(),
 		)
 	}
 	return fingerprintParts(parts...)
@@ -646,6 +646,19 @@ func codexConfigPath() string {
 	return homePath(".codex", "config.toml")
 }
 
+// claudeCredentialsFingerprint mirrors Claude credential source precedence.
+func claudeCredentialsFingerprint() string {
+	path := claudeCredPath()
+	body, err := os.ReadFile(path)
+	if err == nil {
+		return "file:" + contentFingerprint(body)
+	}
+	if !os.IsNotExist(err) {
+		return "file-error"
+	}
+	return "keychain:" + claudeKeychainCredentialFingerprint()
+}
+
 // homePath joins path elements under the current user's home directory.
 func homePath(parts ...string) string {
 	home, err := os.UserHomeDir()
@@ -665,6 +678,11 @@ func fileContentFingerprint(path string) string {
 	if err != nil {
 		return "missing"
 	}
+	return contentFingerprint(body)
+}
+
+// contentFingerprint hashes a credential or config blob.
+func contentFingerprint(body []byte) string {
 	sum := sha256.Sum256(body)
 	return hex.EncodeToString(sum[:])
 }

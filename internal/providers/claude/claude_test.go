@@ -113,6 +113,12 @@ func TestApplyStaleWindowMarker(t *testing.T) {
 			if mv.Caption != "Stale data" {
 				t.Errorf("%s: caption = %q, want Stale data", mv.ID, mv.Caption)
 			}
+			if mv.Stale == nil || !*mv.Stale {
+				t.Errorf("%s: Stale not set", mv.ID)
+			}
+			if mv.ResetInSeconds != nil {
+				t.Errorf("%s: ResetInSeconds = %v, want nil", mv.ID, *mv.ResetInSeconds)
+			}
 		}
 	})
 }

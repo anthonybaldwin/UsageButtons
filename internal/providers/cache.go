@@ -505,7 +505,7 @@ func usesUnfingerprintedBrowserSession(providerID string, s Snapshot) bool {
 	switch providerID {
 	case "abacus", "alibaba", "cursor", "ollama", "amp", "perplexity", "opencode", "opencodego":
 		return true
-	case "claude", "codex", "augment", "kimi", "minimax", "mistral":
+	case "claude", "codex", "augment", "factory", "kimi", "minimax", "mistral":
 		return s.Source == "cookie"
 	default:
 		return false
@@ -634,6 +634,11 @@ func providerConfigFingerprint(providerID string) string {
 			"region", settings.ResolveAPIKey(pk.AlibabaRegion, "ALIBABA_CODING_PLAN_REGION"),
 			"host", settings.ResolveEndpoint(pk.AlibabaHost, "", "ALIBABA_CODING_PLAN_HOST"),
 			"quota-url", settings.ResolveEndpoint(pk.AlibabaQuotaURL, "", "ALIBABA_CODING_PLAN_QUOTA_URL"),
+		)
+	case "factory":
+		parts = append(parts,
+			"token", settings.ResolveAPIKey(pk.FactoryToken, "FACTORY_TOKEN"),
+			"base-url", settings.ResolveEndpoint(pk.FactoryBaseURL, "", "FACTORY_BASE_URL"),
 		)
 	case "codex":
 		parts = append(parts,

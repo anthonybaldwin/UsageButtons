@@ -137,11 +137,11 @@ project scope, update ALL of these in the same commit or PR:**
 This is a hard rule, not a nice-to-have. Stale metadata confuses
 users and search engines.
 
-Current topics: `go`, `golang`, `stream-deck`, `stream-deck-plugin`,
-`elgato`, `ai-tools`, `usage-monitoring`, `ai-coding`, `ai-usage`,
-`claude`, `openai-codex`, `copilot`, `cursor`, `gemini`,
-`vertex-ai`, `ollama`, `openrouter`, `warp`, `llm-tools`,
-`developer-tools`.
+Current topics (GitHub caps this list at 20): `stream-deck`,
+`stream-deck-plugin`, `claude`, `openai-codex`, `cursor`, `gemini`,
+`vertex-ai`, `openrouter`, `abacus`, `alibaba`, `kilo`, `kiro`,
+`antigravity`, `augment`, `amp`, `mistral`, `minimax`, `kimi`,
+`perplexity`, `opencode`.
 
 ## Stream Deck plugin notes
 

@@ -222,6 +222,8 @@ func TestPersistentCacheSkipsUnfingerprintedBrowserSnapshots(t *testing.T) {
 		{name: "claude-cookie", id: "claude", source: "cookie"},
 		{name: "codex-cookie", id: "codex", source: "cookie"},
 		{name: "codex-oauth", id: "codex", source: "oauth", wantDisk: true},
+		{name: "factory-cookie", id: "factory", source: "cookie"},
+		{name: "factory-token", id: "factory", source: "token", wantDisk: true},
 	}
 
 	for _, tc := range cases {
@@ -277,6 +279,39 @@ func TestPersistentCacheRejectsUnfingerprintedBrowserSnapshot(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("unfingerprinted persisted snapshot still exists: %v", err)
+	}
+}
+
+// TestProviderConfigFingerprintIncludesFactorySettings verifies Factory token
+// and endpoint changes invalidate restart-surviving snapshots.
+func TestProviderConfigFingerprintIncludesFactorySettings(t *testing.T) {
+	oldSettings := settings.Get()
+	t.Cleanup(func() {
+		settings.Set(oldSettings)
+	})
+	t.Setenv("FACTORY_TOKEN", "")
+	t.Setenv("FACTORY_BASE_URL", "")
+
+	settings.Set(settings.GlobalSettings{})
+	base := providerConfigFingerprint("factory")
+
+	settings.Set(settings.GlobalSettings{
+		ProviderKeys: settings.ProviderKeys{FactoryToken: "token-one"},
+	})
+	withToken := providerConfigFingerprint("factory")
+	if withToken == base {
+		t.Fatal("factory token change did not change provider fingerprint")
+	}
+
+	settings.Set(settings.GlobalSettings{
+		ProviderKeys: settings.ProviderKeys{
+			FactoryToken:   "token-one",
+			FactoryBaseURL: "https://factory.example.test",
+		},
+	})
+	withBaseURL := providerConfigFingerprint("factory")
+	if withBaseURL == withToken {
+		t.Fatal("factory base URL change did not change provider fingerprint")
 	}
 }
 

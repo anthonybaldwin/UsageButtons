@@ -11,6 +11,7 @@ import (
 )
 
 var providerColors = map[string]string{
+	"abacus":     "#38bdf8",
 	"amp":        "#dc2626",
 	"augment":    "#6366f1",
 	"claude":     "#cc7c5e",

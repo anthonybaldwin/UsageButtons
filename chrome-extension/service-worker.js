@@ -20,6 +20,7 @@
 const HOST_NAME = "io.github.anthonybaldwin.usagebuttons";
 
 const ALLOWED = [
+  "abacus.ai",
   "claude.ai",
   "cursor.com",
   "ollama.com",

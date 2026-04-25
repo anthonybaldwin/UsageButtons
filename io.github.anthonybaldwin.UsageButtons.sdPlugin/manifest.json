@@ -91,6 +91,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.abacus",
+      "Name": "Abacus AI",
+      "Tooltip": "Abacus AI usage stats — monthly compute credits.",
+      "Icon": "assets/action-abacus",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-abacus-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.augment",
       "Name": "Augment",
       "Tooltip": "Augment usage stats — credits remaining.",

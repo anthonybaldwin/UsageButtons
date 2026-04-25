@@ -10,6 +10,7 @@ import (
 // service worker and in manifest.json host_permissions. Changes here
 // require a coordinated extension release.
 var Allowed = []string{
+	"abacus.ai",
 	"claude.ai",
 	"cursor.com",
 	"ollama.com",

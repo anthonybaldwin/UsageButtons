@@ -317,6 +317,11 @@
       <p class="hint">Via extension.</p>
     </div>
 
+    <!-- Abacus AI auth -->
+    <div id="authConfig-abacus" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>apps.abacus.ai</code>.</p>
+    </div>
+
     <!-- Augment auth -->
     <div id="authConfig-augment" class="auth-config" style="display:none">
       <p class="hint">Uses <code>auggie account status</code> first, then the extension for <code>app.augmentcode.com</code>.</p>
@@ -888,6 +893,9 @@
         ["ondemand-spent",  "On-demand spend ($)",                "dollar-m", "browser"],
         ["team-ondemand-spent", "Team on-demand spend ($)",        "dollar-m", "browser"],
       ],
+      abacus: [
+        ["session-percent", "Monthly compute credits remaining %", "pct", "browser"],
+      ],
       augment: [
         ["session-percent", "Credits remaining %", "pct"],
       ],
@@ -953,6 +961,7 @@
       copilot:    "#a855f7",
       ollama:     "#f7f7f7",
       cursor:     "#00bfa5",
+      abacus:     "#38bdf8",
       augment:    "#6366f1",
       amp:        "#dc2626",
       opencode:   "#3b82f6",
@@ -971,7 +980,7 @@
       synthetic:  "#141414",
     };
 
-// Per-provider brand background colors. Kept in sync with each
+    // Per-provider brand background colors. Kept in sync with each
     // provider's BrandBg() in Go so the PI can pre-fill the hidden
     // bgColor picker with the actual default the tile will render.
     const BRAND_BGS = {
@@ -980,6 +989,7 @@
       copilot:    "#150d2e",
       ollama:     "#141414",
       cursor:     "#06221f",
+      abacus:     "#082033",
       augment:    "#10112f",
       amp:        "#250b0b",
       opencode:   "#081a33",
@@ -999,7 +1009,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "abacus", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -1007,6 +1017,7 @@
       codex:      "Codex",
       copilot:    "Copilot",
       cursor:     "Cursor",
+      abacus:     "Abacus AI",
       augment:    "Augment",
       amp:        "Amp",
       ollama:     "Ollama",

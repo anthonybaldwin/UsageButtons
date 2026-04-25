@@ -21,6 +21,7 @@ var providerColors = map[string]string{
 	"kiro":       "#ff9900",
 	"ollama":     "#f9fafb",
 	"opencode":   "#3b82f6",
+	"opencodego": "#3b82f6",
 	"openrouter": "#6467f2",
 	"perplexity": "#20b2aa",
 	"synthetic":  "#141414",

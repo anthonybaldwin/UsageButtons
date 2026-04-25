@@ -155,6 +155,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.opencodego",
+      "Name": "OpenCode Go",
+      "Tooltip": "OpenCode Go usage stats — five-hour, weekly, and monthly usage.",
+      "Icon": "assets/action-opencodego",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-opencodego-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.openrouter",
       "Name": "OpenRouter",
       "Tooltip": "OpenRouter usage stats — credit balance, total usage.",

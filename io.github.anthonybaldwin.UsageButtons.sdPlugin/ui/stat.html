@@ -337,6 +337,11 @@
       <p class="hint">Via extension from <code>opencode.ai</code>. Optional workspace override: <code>CODEXBAR_OPENCODE_WORKSPACE_ID</code>.</p>
     </div>
 
+    <!-- OpenCode Go auth -->
+    <div id="authConfig-opencodego" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>opencode.ai</code>. Optional workspace override: <code>CODEXBAR_OPENCODEGO_WORKSPACE_ID</code>.</p>
+    </div>
+
     <!-- Copilot auth -->
     <div id="authConfig-copilot" class="auth-config" style="display:none">
       <label for="copilotToken">GitHub token</label>
@@ -835,6 +840,11 @@
         ["session-percent", "5-hour usage remaining %", "pct"],
         ["weekly-percent",  "Weekly usage remaining %", "pct"],
       ],
+      opencodego: [
+        ["session-percent", "5-hour usage remaining %", "pct"],
+        ["weekly-percent",  "Weekly usage remaining %", "pct"],
+        ["monthly-percent", "Monthly usage remaining %", "pct"],
+      ],
       cursor: [
         ["total-percent",   "Total plan usage remaining %",       "pct",      "browser"],
         ["auto-percent",    "Auto / Composer usage remaining %",  "pct",      "browser"],
@@ -897,6 +907,7 @@
       augment:    "#6366f1",
       amp:        "#dc2626",
       opencode:   "#3b82f6",
+      opencodego: "#3b82f6",
       openrouter: "#6467f2",
       perplexity: "#20b2aa",
       warp:       "#938bb4",
@@ -919,6 +930,7 @@
       augment:    "#10112f",
       amp:        "#250b0b",
       opencode:   "#081a33",
+      opencodego: "#081a33",
       openrouter: "#101028",
       perplexity: "#082423",
       warp:       "#171521",
@@ -930,7 +942,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "amp", "ollama", "opencode", "openrouter", "perplexity", "warp", "zai", "kimi-k2", "kilo", "kiro", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi-k2", "kilo", "kiro", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -942,6 +954,7 @@
       amp:        "Amp",
       ollama:     "Ollama",
       opencode:   "OpenCode",
+      opencodego: "OpenCode Go",
       openrouter: "OpenRouter",
       perplexity: "Perplexity",
       warp:       "Warp",

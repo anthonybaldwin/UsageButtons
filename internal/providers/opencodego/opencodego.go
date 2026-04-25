@@ -1,8 +1,8 @@
-// Package opencode implements the OpenCode usage provider.
+// Package opencodego implements the OpenCode Go usage provider.
 //
 // Auth: Usage Buttons Helper extension with the user's opencode.ai browser
-// session. Endpoints: POST/GET https://opencode.ai/_server.
-package opencode
+// session. Endpoint: https://opencode.ai/workspace/{workspace}/go.
+package opencodego
 
 import (
 	"context"
@@ -10,8 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,42 +19,45 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers/cookieaux"
+	"github.com/anthonybaldwin/UsageButtons/internal/providers/opencode"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers/providerutil"
 )
 
-const (
-	baseURL              = "https://opencode.ai"
-	serverURL            = "https://opencode.ai/_server"
-	workspacesServerID   = "def39973159c7f0483d8793a822b8dbb10d067e12c65455fcb4608459ba0234f"
-	subscriptionServerID = "7abeebee372f304e050aaaf92be863f4a86490e382f8c79db68fd94040d691b4"
-)
+const baseURL = "https://opencode.ai"
 
-var workspaceIDRE = regexp.MustCompile(`id\s*:\s*\\?"(wrk_[^\\"]+)`)
-
-// usageSnapshot is OpenCode rolling and weekly usage.
+// usageSnapshot is OpenCode Go rolling, weekly, and optional monthly usage.
 type usageSnapshot struct {
+	HasMonthlyUsage     bool
 	RollingUsagePercent float64
 	WeeklyUsagePercent  float64
+	MonthlyUsagePercent float64
 	RollingResetInSec   int
 	WeeklyResetInSec    int
+	MonthlyResetInSec   int
 	UpdatedAt           time.Time
 }
 
-// windowCandidate is one parsed usage window from a flexible JSON payload.
+// windowCandidate is one parsed usage window from flexible JSON.
 type windowCandidate struct {
 	Percent    float64
 	ResetInSec int
 	PathLower  string
 }
 
-// Provider fetches OpenCode usage data.
+// parsedWindow is one quota window parsed from a JSON object.
+type parsedWindow struct {
+	Percent    float64
+	ResetInSec int
+}
+
+// Provider fetches OpenCode Go usage data.
 type Provider struct{}
 
 // ID returns the provider identifier used by the registry.
-func (Provider) ID() string { return "opencode" }
+func (Provider) ID() string { return "opencodego" }
 
 // Name returns the human-readable provider name.
-func (Provider) Name() string { return "OpenCode" }
+func (Provider) Name() string { return "OpenCode Go" }
 
 // BrandColor returns the accent color used on button faces.
 func (Provider) BrandColor() string { return "#3b82f6" }
@@ -66,17 +67,21 @@ func (Provider) BrandBg() string { return "#081a33" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
-	return []string{"session-percent", "weekly-percent"}
+	return []string{"session-percent", "weekly-percent", "monthly-percent"}
 }
 
-// Fetch returns the latest OpenCode usage snapshot.
+// Fetch returns the latest OpenCode Go usage snapshot.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if !cookies.HostAvailable(ctx) {
 		return errorSnapshot(cookieaux.MissingMessage("opencode.ai")), nil
 	}
-	usage, err := fetchUsage(ctx)
+	workspaceID, err := opencode.WorkspaceID(ctx, "CODEXBAR_OPENCODEGO_WORKSPACE_ID")
+	if err != nil {
+		return errorSnapshot(err.Error()), nil
+	}
+	text, err := fetchUsagePage(ctx, workspaceID)
 	if err != nil {
 		var httpErr *httputil.Error
 		if errors.As(err, &httpErr) && (httpErr.Status == 401 || httpErr.Status == 403) {
@@ -87,113 +92,26 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		}
 		return errorSnapshot(err.Error()), nil
 	}
+	if looksSignedOut(text) {
+		return errorSnapshot(cookieaux.StaleMessage("opencode.ai")), nil
+	}
+	usage, err := parseSubscription(text, time.Now().UTC())
+	if err != nil {
+		return errorSnapshot(err.Error()), nil
+	}
 	return snapshotFromUsage(usage), nil
 }
 
-// fetchUsage fetches workspace and subscription usage data.
-func fetchUsage(ctx context.Context) (usageSnapshot, error) {
-	workspaceID, err := workspaceID(ctx)
-	if err != nil {
-		return usageSnapshot{}, err
-	}
-	text, err := serverText(ctx, serverRequest{
-		ServerID: subscriptionServerID,
-		Args:     []any{workspaceID},
-		Method:   "GET",
-		Referer:  fmt.Sprintf("%s/workspace/%s/billing", baseURL, workspaceID),
-	})
-	if err != nil {
-		return usageSnapshot{}, err
-	}
-	if looksSignedOut(text) {
-		return usageSnapshot{}, fmt.Errorf("OpenCode session is signed out")
-	}
-	if isNullPayload(text) || !subscriptionLooksUsable(text) {
-		fallback, fallbackErr := serverText(ctx, serverRequest{
-			ServerID: subscriptionServerID,
-			Args:     []any{workspaceID},
-			Method:   "POST",
-			Referer:  fmt.Sprintf("%s/workspace/%s/billing", baseURL, workspaceID),
-		})
-		if fallbackErr == nil && !isNullPayload(fallback) {
-			text = fallback
-		}
-	}
-	return parseSubscription(text, time.Now().UTC())
-}
-
-// workspaceID returns an override or discovers the first OpenCode workspace.
-func workspaceID(ctx context.Context) (string, error) {
-	return WorkspaceID(ctx, "CODEXBAR_OPENCODE_WORKSPACE_ID")
-}
-
-// WorkspaceID returns an override or discovers the first OpenCode workspace.
-func WorkspaceID(ctx context.Context, envName string) (string, error) {
-	if override := normalizeWorkspaceID(os.Getenv(envName)); override != "" {
-		return override, nil
-	}
-	text, err := serverText(ctx, serverRequest{
-		ServerID: workspacesServerID,
-		Method:   "GET",
-		Referer:  baseURL,
-	})
-	if err != nil {
-		return "", err
-	}
-	if looksSignedOut(text) {
-		return "", fmt.Errorf("OpenCode session is signed out")
-	}
-	ids := parseWorkspaceIDs(text)
-	if len(ids) == 0 {
-		fallback, fallbackErr := serverText(ctx, serverRequest{
-			ServerID: workspacesServerID,
-			Args:     []any{},
-			Method:   "POST",
-			Referer:  baseURL,
-		})
-		if fallbackErr == nil {
-			ids = parseWorkspaceIDs(fallback)
-		}
-	}
-	if len(ids) == 0 {
-		return "", fmt.Errorf("OpenCode response missing workspace id")
-	}
-	return ids[0], nil
-}
-
-// serverRequest describes one OpenCode _server call.
-type serverRequest struct {
-	ServerID string
-	Args     []any
-	Method   string
-	Referer  string
-}
-
-// serverText calls an OpenCode _server endpoint through the Helper.
-func serverText(ctx context.Context, req serverRequest) (string, error) {
-	method := strings.ToUpper(strings.TrimSpace(req.Method))
-	if method == "" {
-		method = "GET"
-	}
-	rawURL, body, err := serverRequestURL(req.ServerID, req.Args, method)
-	if err != nil {
-		return "", err
-	}
-	headers := map[string]string{
-		"Accept":            "text/javascript, application/json;q=0.9, */*;q=0.8",
-		"Origin":            baseURL,
-		"Referer":           req.Referer,
-		"X-Server-Id":       req.ServerID,
-		"X-Server-Instance": "server-fn:usage-buttons",
-	}
-	if method != "GET" {
-		headers["Content-Type"] = "application/json"
-	}
+// fetchUsagePage fetches the workspace Go usage page.
+func fetchUsagePage(ctx context.Context, workspaceID string) (string, error) {
+	rawURL := fmt.Sprintf("%s/workspace/%s/go", baseURL, workspaceID)
 	resp, err := cookies.Fetch(ctx, cookies.Request{
-		URL:     rawURL,
-		Method:  method,
-		Headers: headers,
-		Body:    body,
+		URL:    rawURL,
+		Method: "GET",
+		Headers: map[string]string{
+			"Accept":     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+			"User-Agent": httputil.DefaultUserAgent,
+		},
 	})
 	if err != nil {
 		return "", err
@@ -209,30 +127,7 @@ func serverText(ctx context.Context, req serverRequest) (string, error) {
 	return string(resp.Body), nil
 }
 
-// serverRequestURL builds the _server URL and optional JSON body.
-func serverRequestURL(serverID string, args []any, method string) (string, []byte, error) {
-	if method != "GET" {
-		body, err := json.Marshal(args)
-		return serverURL, body, err
-	}
-	u, err := url.Parse(serverURL)
-	if err != nil {
-		return "", nil, err
-	}
-	q := u.Query()
-	q.Set("id", serverID)
-	if len(args) > 0 {
-		body, err := json.Marshal(args)
-		if err != nil {
-			return "", nil, err
-		}
-		q.Set("args", string(body))
-	}
-	u.RawQuery = q.Encode()
-	return u.String(), nil, nil
-}
-
-// parseSubscription parses rolling and weekly usage from text or JSON.
+// parseSubscription parses rolling, weekly, and optional monthly usage.
 func parseSubscription(text string, now time.Time) (usageSnapshot, error) {
 	if usage, ok := parseSubscriptionJSON(text, now); ok {
 		return usage, nil
@@ -242,15 +137,25 @@ func parseSubscription(text string, now time.Time) (usageSnapshot, error) {
 	weeklyPercent := extractFloat(`weeklyUsage[^}]*?usagePercent\s*:\s*([0-9]+(?:\.[0-9]+)?)`, text)
 	weeklyReset := extractInt(`weeklyUsage[^}]*?resetInSec\s*:\s*([0-9]+)`, text)
 	if rollingPercent == nil || rollingReset == nil || weeklyPercent == nil || weeklyReset == nil {
-		return usageSnapshot{}, fmt.Errorf("OpenCode parse error: missing usage fields")
+		return usageSnapshot{}, fmt.Errorf("OpenCode Go parse error: missing usage fields")
 	}
-	return usageSnapshot{
+	monthlyPercent := extractFloat(`monthlyUsage[^}]*?usagePercent\s*:\s*([0-9]+(?:\.[0-9]+)?)`, text)
+	monthlyReset := extractInt(`monthlyUsage[^}]*?resetInSec\s*:\s*([0-9]+)`, text)
+	usage := usageSnapshot{
+		HasMonthlyUsage:     monthlyPercent != nil || monthlyReset != nil,
 		RollingUsagePercent: clampPercent(*rollingPercent),
 		WeeklyUsagePercent:  clampPercent(*weeklyPercent),
 		RollingResetInSec:   *rollingReset,
 		WeeklyResetInSec:    *weeklyReset,
 		UpdatedAt:           now,
-	}, nil
+	}
+	if monthlyPercent != nil {
+		usage.MonthlyUsagePercent = clampPercent(*monthlyPercent)
+	}
+	if monthlyReset != nil {
+		usage.MonthlyResetInSec = *monthlyReset
+	}
+	return usage, nil
 }
 
 // parseSubscriptionJSON parses flexible JSON usage payloads.
@@ -266,6 +171,7 @@ func parseSubscriptionJSON(text string, now time.Time) (usageSnapshot, bool) {
 	}
 	rolling := pickWindow(candidates, true, "rolling", "hour", "5h", "5-hour")
 	weekly := pickWindow(candidates, false, "weekly", "week")
+	monthly := pickWindow(candidates, false, "monthly", "month")
 	if rolling == nil {
 		rolling = pickAnyWindow(candidates, true, nil)
 	}
@@ -275,13 +181,19 @@ func parseSubscriptionJSON(text string, now time.Time) (usageSnapshot, bool) {
 	if rolling == nil || weekly == nil {
 		return usageSnapshot{}, false
 	}
-	return usageSnapshot{
+	usage := usageSnapshot{
+		HasMonthlyUsage:     monthly != nil,
 		RollingUsagePercent: rolling.Percent,
 		WeeklyUsagePercent:  weekly.Percent,
 		RollingResetInSec:   rolling.ResetInSec,
 		WeeklyResetInSec:    weekly.ResetInSec,
 		UpdatedAt:           now,
-	}, true
+	}
+	if monthly != nil {
+		usage.MonthlyUsagePercent = monthly.Percent
+		usage.MonthlyResetInSec = monthly.ResetInSec
+	}
+	return usage, true
 }
 
 // collectWindowCandidates finds quota-like objects in arbitrary JSON.
@@ -305,28 +217,12 @@ func collectWindowCandidates(value any, now time.Time, path []string, out *[]win
 	}
 }
 
-// parsedWindow is one quota window parsed from a JSON object.
-type parsedWindow struct {
-	Percent    float64
-	ResetInSec int
-}
-
 // parseWindow extracts percent and reset data from a JSON object.
 func parseWindow(m map[string]any, now time.Time) (parsedWindow, bool) {
-	percentKeys := []string{
+	percent, ok := providerutil.FirstFloat(m,
 		"usagePercent", "usedPercent", "percentUsed", "percent",
 		"usage_percent", "used_percent", "utilization",
-		"utilizationPercent", "utilization_percent", "usage",
-	}
-	resetInKeys := []string{
-		"resetInSec", "resetInSeconds", "resetSeconds", "reset_sec",
-		"reset_in_sec", "resetsInSec", "resetsInSeconds", "resetIn", "resetSec",
-	}
-	resetAtKeys := []string{
-		"resetAt", "resetsAt", "reset_at", "resets_at",
-		"nextReset", "next_reset", "renewAt", "renew_at",
-	}
-	percent, ok := providerutil.FirstFloat(m, percentKeys...)
+		"utilizationPercent", "utilization_percent", "usage")
 	if !ok {
 		used, usedOK := providerutil.FirstFloat(m, "used", "usage", "consumed", "count", "usedTokens")
 		limit, limitOK := providerutil.FirstFloat(m, "limit", "total", "quota", "max", "cap", "tokenLimit")
@@ -338,9 +234,13 @@ func parseWindow(m map[string]any, now time.Time) (parsedWindow, bool) {
 	if !ok {
 		return parsedWindow{}, false
 	}
-	reset, resetOK := providerutil.FirstFloat(m, resetInKeys...)
+	reset, resetOK := providerutil.FirstFloat(m,
+		"resetInSec", "resetInSeconds", "resetSeconds", "reset_sec",
+		"reset_in_sec", "resetsInSec", "resetsInSeconds", "resetIn", "resetSec")
 	if !resetOK {
-		if resetAt, ok := providerutil.FirstTime(m, resetAtKeys...); ok {
+		if resetAt, ok := providerutil.FirstTime(m,
+			"resetAt", "resetsAt", "reset_at", "resets_at",
+			"nextReset", "next_reset", "renewAt", "renew_at"); ok {
 			reset = math.Max(0, resetAt.Sub(now).Seconds())
 			resetOK = true
 		}
@@ -391,23 +291,26 @@ func pickAnyWindow(candidates []windowCandidate, pickShorter bool, excluding *wi
 	return picked
 }
 
-// snapshotFromUsage maps parsed OpenCode usage into Stream Deck metrics.
+// snapshotFromUsage maps parsed OpenCode Go usage into Stream Deck metrics.
 func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	now := usage.UpdatedAt.UTC().Format(time.RFC3339)
 	metrics := []providers.MetricValue{
-		percentMetric("session-percent", "5-HOUR", "OpenCode five-hour usage remaining", usage.RollingUsagePercent, usage.RollingResetInSec, "5h window", now),
-		percentMetric("weekly-percent", "WEEKLY", "OpenCode weekly usage remaining", usage.WeeklyUsagePercent, usage.WeeklyResetInSec, "7d window", now),
+		percentMetric("session-percent", "5-HOUR", "OpenCode Go five-hour usage remaining", usage.RollingUsagePercent, usage.RollingResetInSec, "5h window", now),
+		percentMetric("weekly-percent", "WEEKLY", "OpenCode Go weekly usage remaining", usage.WeeklyUsagePercent, usage.WeeklyResetInSec, "7d window", now),
+	}
+	if usage.HasMonthlyUsage {
+		metrics = append(metrics, percentMetric("monthly-percent", "MONTHLY", "OpenCode Go monthly usage remaining", usage.MonthlyUsagePercent, usage.MonthlyResetInSec, "30d window", now))
 	}
 	return providers.Snapshot{
-		ProviderID:   "opencode",
-		ProviderName: "OpenCode",
+		ProviderID:   "opencodego",
+		ProviderName: "OpenCode Go",
 		Source:       "cookie",
 		Metrics:      metrics,
 		Status:       "operational",
 	}
 }
 
-// percentMetric builds a remaining-percent OpenCode metric.
+// percentMetric builds a remaining-percent OpenCode Go metric.
 func percentMetric(id, label, name string, usedPct float64, resetSeconds int, caption string, now string) providers.MetricValue {
 	var resetAt *time.Time
 	if resetSeconds > 0 {
@@ -415,91 +318,6 @@ func percentMetric(id, label, name string, usedPct float64, resetSeconds int, ca
 		resetAt = &t
 	}
 	return providerutil.PercentRemainingMetric(id, label, name, usedPct, resetAt, caption, now)
-}
-
-// parseWorkspaceIDs finds workspace IDs in serialized text or JSON.
-func parseWorkspaceIDs(text string) []string {
-	found := uniqueStrings(workspaceIDRE.FindAllStringSubmatch(text, -1))
-	if len(found) > 0 {
-		return found
-	}
-	var raw any
-	if err := json.Unmarshal([]byte(strings.TrimSpace(text)), &raw); err != nil {
-		return nil
-	}
-	var out []string
-	collectWorkspaceIDs(raw, &out)
-	return out
-}
-
-// collectWorkspaceIDs walks arbitrary JSON looking for wrk_ strings.
-func collectWorkspaceIDs(value any, out *[]string) {
-	switch v := value.(type) {
-	case string:
-		if strings.HasPrefix(v, "wrk_") && !containsString(*out, v) {
-			*out = append(*out, v)
-		}
-	case []any:
-		for _, item := range v {
-			collectWorkspaceIDs(item, out)
-		}
-	case map[string]any:
-		for _, item := range v {
-			collectWorkspaceIDs(item, out)
-		}
-	}
-}
-
-// uniqueStrings returns regex capture group 1 values without duplicates.
-func uniqueStrings(matches [][]string) []string {
-	var out []string
-	for _, match := range matches {
-		if len(match) > 1 && !containsString(out, match[1]) {
-			out = append(out, match[1])
-		}
-	}
-	return out
-}
-
-// containsString reports whether values contains needle.
-func containsString(values []string, needle string) bool {
-	for _, value := range values {
-		if value == needle {
-			return true
-		}
-	}
-	return false
-}
-
-// normalizeWorkspaceID extracts a wrk_ identifier from text or URL.
-func normalizeWorkspaceID(raw string) string {
-	trimmed := strings.TrimSpace(raw)
-	if strings.HasPrefix(trimmed, "wrk_") {
-		return trimmed
-	}
-	if u, err := url.Parse(trimmed); err == nil {
-		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-		for i, part := range parts {
-			if part == "workspace" && i+1 < len(parts) && strings.HasPrefix(parts[i+1], "wrk_") {
-				return parts[i+1]
-			}
-		}
-	}
-	re := regexp.MustCompile(`wrk_[A-Za-z0-9]+`)
-	return re.FindString(trimmed)
-}
-
-// subscriptionLooksUsable reports whether text likely contains usage data.
-func subscriptionLooksUsable(text string) bool {
-	return strings.Contains(text, "rollingUsage") ||
-		strings.Contains(text, "weeklyUsage") ||
-		strings.Contains(text, "usagePercent")
-}
-
-// isNullPayload reports explicit null responses.
-func isNullPayload(text string) bool {
-	trimmed := strings.TrimSpace(text)
-	return strings.EqualFold(trimmed, "null")
 }
 
 // looksSignedOut reports whether text is an auth/login response.
@@ -548,11 +366,11 @@ func clampPercent(value float64) float64 {
 	return math.Max(0, math.Min(100, value))
 }
 
-// errorSnapshot returns an OpenCode setup or auth failure snapshot.
+// errorSnapshot returns an OpenCode Go setup or auth failure snapshot.
 func errorSnapshot(message string) providers.Snapshot {
 	return providers.Snapshot{
-		ProviderID:   "opencode",
-		ProviderName: "OpenCode",
+		ProviderID:   "opencodego",
+		ProviderName: "OpenCode Go",
 		Source:       "cookie",
 		Metrics:      []providers.MetricValue{},
 		Status:       "unknown",
@@ -560,7 +378,7 @@ func errorSnapshot(message string) providers.Snapshot {
 	}
 }
 
-// init registers the OpenCode provider with the package registry.
+// init registers the OpenCode Go provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

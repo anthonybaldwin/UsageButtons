@@ -1931,6 +1931,7 @@
 
     function setCookieStatus(payload) {
       const available = !!payload.available;
+      const allowlistStale = payload.extensionAllowlistOK === false;
       const dot = document.getElementById("cookieHostStatusDot");
       const text = document.getElementById("cookieHostStatusText");
       const versionLine = document.getElementById("cookieHostVersionLine");
@@ -1939,6 +1940,9 @@
       if (available) {
         dot.style.background = "#22c55e";
         text.append("Extension connected. Browser-sourced metrics are live.");
+      } else if (allowlistStale) {
+        dot.style.background = "#f59e0b";
+        text.append("Helper connected, but its allowlist is stale. Reload the unpacked extension from this branch.");
       } else {
         dot.style.background = "#f59e0b";
         text.append("Not connected — ");
@@ -1964,6 +1968,12 @@
       versionLine.replaceChildren();
       if (payload.extensionVersion) {
         versionLine.append("Helper v" + payload.extensionVersion);
+        if (allowlistStale) {
+          const stale = document.createElement("span");
+          stale.style.cssText = "margin-left: 8px; color: #fde68a;";
+          stale.textContent = "reload required";
+          versionLine.append(stale);
+        }
         if (payload.updateAvailable && payload.latestVersion) {
           const hint = document.createElement("span");
           hint.style.cssText = "margin-left: 8px; color: #fde68a;";

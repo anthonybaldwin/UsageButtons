@@ -30,14 +30,15 @@ type Message struct {
 	// Body carries the base64-encoded request or response body,
 	// direction implied by Kind. Base64 keeps binary bytes + UTF-8
 	// text alike JSON-safe.
-	Body        string `json:"body,omitempty"`
-	Status      int    `json:"status,omitempty"`
-	StatusText  string `json:"statusText,omitempty"`
-	ContentType string `json:"contentType,omitempty"`
-	UserAgent   string `json:"userAgent,omitempty"`
-	Version     string `json:"version,omitempty"`
-	Error       string `json:"error,omitempty"`
-	Ready       bool   `json:"ready,omitempty"`
+	Body         string   `json:"body,omitempty"`
+	Status       int      `json:"status,omitempty"`
+	StatusText   string   `json:"statusText,omitempty"`
+	ContentType  string   `json:"contentType,omitempty"`
+	UserAgent    string   `json:"userAgent,omitempty"`
+	Version      string   `json:"version,omitempty"`
+	AllowedHosts []string `json:"allowedHosts,omitempty"`
+	Error        string   `json:"error,omitempty"`
+	Ready        bool     `json:"ready,omitempty"`
 }
 
 // DecodeMessage parses a native-messaging frame payload.

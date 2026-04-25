@@ -681,7 +681,9 @@ func replyCookieStatus(conn *streamdeck.Connection, ctxStr, action string) {
 
 	status, reachable, probeErr := cookies.StatusDetail(pctx)
 	latest := update.LatestVersion()
-	updateAvailable := status.Version != "" && latest != "" && status.Version != latest
+	helperAllowlistStale := status.Ready && !cookies.HelperAllowlistCurrent(status.AllowedHosts)
+	helperAvailable := status.Ready && !helperAllowlistStale
+	updateAvailable := status.Version != "" && latest != "" && update.IsNewerVersion(status.Version, latest)
 
 	// Diagnostic line for the "Not connected" failure mode. `reachable`
 	// separates "plugin couldn't dial the native-host socket" (plugin
@@ -692,19 +694,20 @@ func replyCookieStatus(conn *streamdeck.Connection, ctxStr, action string) {
 	if probeErr != nil {
 		probeErrStr = probeErr.Error()
 	}
-	conn.Logf("cookieStatus poll: ready=%v ext-version=%q reachable=%v probeErr=%q registered=%v",
-		status.Ready, status.Version, reachable, probeErrStr,
+	conn.Logf("cookieStatus poll: ready=%v allowlistCurrent=%v ext-version=%q reachable=%v probeErr=%q registered=%v",
+		status.Ready, helperAvailable, status.Version, reachable, probeErrStr,
 		cookies.IsHostRegistered(cookies.HostName))
 
 	conn.SendToPropertyInspector(ctxStr, action, map[string]any{
-		"action":           "cookieStatus",
-		"available":        status.Ready,
-		"extensionVersion": status.Version,
-		"latestVersion":    latest,
-		"updateAvailable":  updateAvailable,
-		"ipcAddress":       cookies.IPCAddress(),
-		"hostName":         cookies.HostName,
-		"hostRegistered":   cookies.IsHostRegistered(cookies.HostName),
+		"action":               "cookieStatus",
+		"available":            helperAvailable,
+		"extensionVersion":     status.Version,
+		"extensionAllowlistOK": !helperAllowlistStale,
+		"latestVersion":        latest,
+		"updateAvailable":      updateAvailable,
+		"ipcAddress":           cookies.IPCAddress(),
+		"hostName":             cookies.HostName,
+		"hostRegistered":       cookies.IsHostRegistered(cookies.HostName),
 	})
 }
 

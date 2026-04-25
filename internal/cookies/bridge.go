@@ -17,12 +17,13 @@ var pluginExtensionBudget = 20 * time.Second
 // handshake state, serializes extension writes, and correlates plugin
 // requests to extension replies by the request ID.
 type Bridge struct {
-	mu        sync.Mutex
-	ready     bool
-	userAgent string
-	version   string
-	toExt     func(Message) error
-	inflight  map[string]chan Message
+	mu           sync.Mutex
+	ready        bool
+	userAgent    string
+	version      string
+	allowedHosts []string
+	toExt        func(Message) error
+	inflight     map[string]chan Message
 }
 
 // NewBridge constructs an idle bridge. Wire it into the host by using
@@ -46,6 +47,7 @@ func (b *Bridge) Handle(ctx context.Context, m Message, send func(Message) error
 		b.ready = true
 		b.userAgent = m.UserAgent
 		b.version = m.Version
+		b.allowedHosts = append([]string(nil), m.AllowedHosts...)
 		b.mu.Unlock()
 	case "fetchResult", "error", "pong":
 		b.deliverInflight(m)
@@ -127,10 +129,11 @@ func (b *Bridge) HandlePluginConn(ctx context.Context, conn net.Conn) {
 	case "status":
 		b.mu.Lock()
 		resp := Message{
-			Kind:      "status",
-			Ready:     b.ready,
-			UserAgent: b.userAgent,
-			Version:   b.version,
+			Kind:         "status",
+			Ready:        b.ready,
+			UserAgent:    b.userAgent,
+			Version:      b.version,
+			AllowedHosts: append([]string(nil), b.allowedHosts...),
 		}
 		b.mu.Unlock()
 		_ = writeMsg(conn, resp)

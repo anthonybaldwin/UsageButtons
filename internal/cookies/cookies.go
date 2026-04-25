@@ -118,16 +118,18 @@ func FetchHTML(ctx context.Context, url string, headers map[string]string) (stri
 // is reachable AND the extension has handshaken this session. Gate
 // cookie-gated provider requests on this.
 func HostAvailable(ctx context.Context) bool {
-	return Status(ctx).Ready
+	status := Status(ctx)
+	return status.Ready && HelperAllowlistCurrent(status.AllowedHosts)
 }
 
 // StatusInfo is a richer snapshot of the bridge state. The PI uses it
 // to display the extension's reported version and drive an update
 // nudge when a newer plugin release is available.
 type StatusInfo struct {
-	Ready     bool
-	UserAgent string
-	Version   string
+	Ready        bool
+	UserAgent    string
+	Version      string
+	AllowedHosts []string
 }
 
 // Status probes the native host and reports the full handshake state.
@@ -143,6 +145,21 @@ func Status(ctx context.Context) StatusInfo {
 // attached" — two failure modes that both produce a zero StatusInfo.
 func StatusDetail(ctx context.Context) (StatusInfo, bool, error) {
 	return probeStatusDetail(ctx)
+}
+
+// HelperAllowlistCurrent reports whether the connected Helper advertises the
+// same fetch allowlist this plugin binary requires.
+func HelperAllowlistCurrent(hosts []string) bool {
+	seen := make(map[string]bool, len(hosts))
+	for _, host := range hosts {
+		seen[strings.ToLower(strings.TrimSpace(host))] = true
+	}
+	for _, host := range Allowed {
+		if !seen[strings.ToLower(strings.TrimSpace(host))] {
+			return false
+		}
+	}
+	return true
 }
 
 // validateRequest enforces URL presence and the compile-time allowlist.

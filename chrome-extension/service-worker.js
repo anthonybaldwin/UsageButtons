@@ -102,6 +102,7 @@ function connect() {
       kind: "ready",
       userAgent: navigator.userAgent,
       version: chrome.runtime.getManifest().version,
+      allowedHosts: ALLOWED,
     });
     reconnectDelay = 1000;
   } catch (e) {

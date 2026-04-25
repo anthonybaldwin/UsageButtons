@@ -105,6 +105,11 @@ func compareSemver(a, b string) int {
 	return 0
 }
 
+// IsNewerVersion reports whether candidate is newer than current.
+func IsNewerVersion(current, candidate string) bool {
+	return compareSemver(current, candidate) > 0
+}
+
 // parseSemver parses the first three dotted integer components of s; missing
 // or non-numeric components default to 0.
 func parseSemver(s string) [3]int {

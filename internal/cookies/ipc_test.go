@@ -197,13 +197,28 @@ func TestClientProbe_Ready(t *testing.T) {
 		defer conn.Close()
 		frame, _ := ReadFrame(conn)
 		req, _ := DecodeMessage(frame)
-		resp := Message{ID: req.ID, Kind: "status", Ready: true, UserAgent: "UA"}
+		resp := Message{ID: req.ID, Kind: "status", Ready: true, UserAgent: "UA", AllowedHosts: Allowed}
 		payload, _ := EncodeMessage(resp)
 		_ = WriteFrame(conn, payload)
 	})
 
 	if !HostAvailable(context.Background()) {
 		t.Fatal("HostAvailable should be true when host replies Ready=true")
+	}
+}
+
+func TestClientProbe_StaleAllowlist(t *testing.T) {
+	setupTestIPC(t, func(conn net.Conn) {
+		defer conn.Close()
+		frame, _ := ReadFrame(conn)
+		req, _ := DecodeMessage(frame)
+		resp := Message{ID: req.ID, Kind: "status", Ready: true, UserAgent: "UA"}
+		payload, _ := EncodeMessage(resp)
+		_ = WriteFrame(conn, payload)
+	})
+
+	if HostAvailable(context.Background()) {
+		t.Fatal("HostAvailable should be false when helper omits allowlist")
 	}
 }
 

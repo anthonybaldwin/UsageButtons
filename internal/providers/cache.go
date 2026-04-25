@@ -610,6 +610,10 @@ func providerConfigFingerprint(providerID string) string {
 			"hosts", fileContentFingerprint(copilotHostsPath()),
 			"apps", fileContentFingerprint(copilotAppsPath()),
 		)
+	case "synthetic":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.SyntheticKey, "SYNTHETIC_API_KEY", "SYNTHETIC_API_TOKEN"),
+		)
 	case "codex":
 		parts = append(parts,
 			"base-url", pk.CodexChatGPTBaseURL,

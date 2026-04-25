@@ -169,6 +169,22 @@
           "TitleAlignment": "top"
         }
       ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.synthetic",
+      "Name": "Synthetic",
+      "Tooltip": "Synthetic usage stats — five-hour quota, weekly tokens, search quota.",
+      "Icon": "assets/action-synthetic",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-synthetic-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
     }
   ]
 }

@@ -31,22 +31,22 @@ const (
 // GlobalSettings are shared across every key and persisted by
 // Stream Deck (survive plugin rebuilds, ride with user profiles).
 type GlobalSettings struct {
-	DefaultRefreshMinutes *int                        `json:"defaultRefreshMinutes,omitempty"`
-	DefaultValueSize      TextSize                    `json:"defaultValueSize,omitempty"`
-	DefaultSubvalueSize   TextSize                    `json:"defaultSubvalueSize,omitempty"`
-	DefaultTextColor      string                      `json:"defaultTextColor,omitempty"`
-	DefaultFillColor      string                      `json:"defaultFillColor,omitempty"`
-	DefaultBgColor        string                      `json:"defaultBgColor,omitempty"`
-	DefaultShowBorder     *bool                       `json:"defaultShowBorder,omitempty"`
-	DefaultFillDirection  string                      `json:"defaultFillDirection,omitempty"`
-	DefaultShowResetTimer *bool                       `json:"defaultShowResetTimer,omitempty"`
-	DefaultShowRawCounts  *bool                       `json:"defaultShowRawCounts,omitempty"`
-	DefaultHideSubvalue   *bool                       `json:"defaultHideSubvalue,omitempty"`
-	DefaultWarnBelow      *float64                    `json:"defaultWarnBelow,omitempty"`
-	DefaultWarnColor      string                      `json:"defaultWarnColor,omitempty"`
-	DefaultCriticalBelow  *float64                    `json:"defaultCriticalBelow,omitempty"`
-	DefaultCriticalColor  string                      `json:"defaultCriticalColor,omitempty"`
-	InvertFill            bool                        `json:"invertFill,omitempty"`
+	DefaultRefreshMinutes *int     `json:"defaultRefreshMinutes,omitempty"`
+	DefaultValueSize      TextSize `json:"defaultValueSize,omitempty"`
+	DefaultSubvalueSize   TextSize `json:"defaultSubvalueSize,omitempty"`
+	DefaultTextColor      string   `json:"defaultTextColor,omitempty"`
+	DefaultFillColor      string   `json:"defaultFillColor,omitempty"`
+	DefaultBgColor        string   `json:"defaultBgColor,omitempty"`
+	DefaultShowBorder     *bool    `json:"defaultShowBorder,omitempty"`
+	DefaultFillDirection  string   `json:"defaultFillDirection,omitempty"`
+	DefaultShowResetTimer *bool    `json:"defaultShowResetTimer,omitempty"`
+	DefaultShowRawCounts  *bool    `json:"defaultShowRawCounts,omitempty"`
+	DefaultHideSubvalue   *bool    `json:"defaultHideSubvalue,omitempty"`
+	DefaultWarnBelow      *float64 `json:"defaultWarnBelow,omitempty"`
+	DefaultWarnColor      string   `json:"defaultWarnColor,omitempty"`
+	DefaultCriticalBelow  *float64 `json:"defaultCriticalBelow,omitempty"`
+	DefaultCriticalColor  string   `json:"defaultCriticalColor,omitempty"`
+	InvertFill            bool     `json:"invertFill,omitempty"`
 	// SmartContrast is the plugin-tier *force-on* override for the
 	// renderer's dual-layer contrast auto-flip. Semantics:
 	//   nil / false -> each provider decides (built-in default or
@@ -58,11 +58,11 @@ type GlobalSettings struct {
 	// actively degrades more contrasty palettes like Claude's (white
 	// on terracotta is the borderline WCAG case that flips to black
 	// and produces a jarring half-and-half text).
-	SmartContrast         *bool                       `json:"smartContrast,omitempty"`
-	ShowGlyphs            *bool                       `json:"showGlyphs,omitempty"`
-	SkipUpdateCheck       bool                        `json:"skipUpdateCheck,omitempty"`
-	CookieHostOptedOut    bool                        `json:"cookieHostOptedOut,omitempty"`
-	ProviderKeys          ProviderKeys                `json:"providerKeys,omitempty"`
+	SmartContrast      *bool        `json:"smartContrast,omitempty"`
+	ShowGlyphs         *bool        `json:"showGlyphs,omitempty"`
+	SkipUpdateCheck    bool         `json:"skipUpdateCheck,omitempty"`
+	CookieHostOptedOut bool         `json:"cookieHostOptedOut,omitempty"`
+	ProviderKeys       ProviderKeys `json:"providerKeys,omitempty"`
 	// ProviderSettings are per-provider overrides that sit between the
 	// plugin-wide defaults above and the per-button KeySettings. Only
 	// fields that make sense at the provider tier are overridable —
@@ -98,7 +98,7 @@ type ProviderSettings struct {
 	// default (see providerDefaultSmartContrast). The plugin-tier
 	// force-on toggle (GlobalSettings.SmartContrast == true) wins
 	// over anything set here.
-	SmartContrast  *bool    `json:"smartContrast,omitempty"`
+	SmartContrast *bool `json:"smartContrast,omitempty"`
 }
 
 // providerDefaultSmartContrast is the built-in smart-contrast default
@@ -108,7 +108,8 @@ type ProviderSettings struct {
 // Consulted by SmartContrastFor when no explicit override is set at any
 // tier.
 var providerDefaultSmartContrast = map[string]bool{
-	"ollama": true,
+	"ollama":    true,
+	"synthetic": true,
 }
 
 // ProviderKeys holds user-entered credentials and endpoint overrides
@@ -123,12 +124,13 @@ type ProviderKeys struct {
 	ZaiKey        string `json:"zaiKey,omitempty"`
 	KimiK2Key     string `json:"kimiK2Key,omitempty"`
 	CopilotToken  string `json:"copilotToken,omitempty"`
+	SyntheticKey  string `json:"syntheticKey,omitempty"`
 
 	// Endpoint overrides
-	OpenRouterURL      string `json:"openRouterURL,omitempty"`
-	ZaiHost            string `json:"zaiHost,omitempty"`
-	ZaiQuotaURL        string `json:"zaiQuotaURL,omitempty"`
-	ZaiRegion          string `json:"zaiRegion,omitempty"` // "global" | "bigmodel-cn"
+	OpenRouterURL       string `json:"openRouterURL,omitempty"`
+	ZaiHost             string `json:"zaiHost,omitempty"`
+	ZaiQuotaURL         string `json:"zaiQuotaURL,omitempty"`
+	ZaiRegion           string `json:"zaiRegion,omitempty"` // "global" | "bigmodel-cn"
 	CodexChatGPTBaseURL string `json:"codexChatGPTBaseURL,omitempty"`
 }
 
@@ -136,27 +138,27 @@ type ProviderKeys struct {
 type KeySettings struct {
 	// Provider is now derived from action UUID; this field is
 	// kept for backwards compat but ignored.
-	ProviderID     string   `json:"providerId,omitempty"`
-	MetricID       string   `json:"metricId,omitempty"`
-	RefreshMinutes *int     `json:"refreshMinutes,omitempty"`
-	WarnBelow      *float64 `json:"warnBelow,omitempty"`
-	CriticalBelow  *float64 `json:"criticalBelow,omitempty"`
-	WarnColor      string   `json:"warnColor,omitempty"`
-	CriticalColor  string   `json:"criticalColor,omitempty"`
-	LabelOverride  string   `json:"labelOverride,omitempty"`
-	HideLabel      bool     `json:"hideLabel,omitempty"`
-	CaptionOverride string  `json:"captionOverride,omitempty"`
-	FillColor      string   `json:"fillColor,omitempty"`
-	BgColor        string   `json:"bgColor,omitempty"`
-	TextColor      string   `json:"textColor,omitempty"`
-	FillDirection  string   `json:"fillDirection,omitempty"`
-	ValueSize      TextSize `json:"valueSize,omitempty"`
-	SubvalueSize   TextSize `json:"subvalueSize,omitempty"`
-	ShowBorder     *bool    `json:"showBorder,omitempty"`
-	ShowGlyph      *bool    `json:"showGlyph,omitempty"`
-	ShowResetTimer *bool    `json:"showResetTimer,omitempty"`
-	ShowRawCounts  *bool    `json:"showRawCounts,omitempty"`
-	HideSubvalue   *bool    `json:"hideSubvalue,omitempty"`
+	ProviderID      string   `json:"providerId,omitempty"`
+	MetricID        string   `json:"metricId,omitempty"`
+	RefreshMinutes  *int     `json:"refreshMinutes,omitempty"`
+	WarnBelow       *float64 `json:"warnBelow,omitempty"`
+	CriticalBelow   *float64 `json:"criticalBelow,omitempty"`
+	WarnColor       string   `json:"warnColor,omitempty"`
+	CriticalColor   string   `json:"criticalColor,omitempty"`
+	LabelOverride   string   `json:"labelOverride,omitempty"`
+	HideLabel       bool     `json:"hideLabel,omitempty"`
+	CaptionOverride string   `json:"captionOverride,omitempty"`
+	FillColor       string   `json:"fillColor,omitempty"`
+	BgColor         string   `json:"bgColor,omitempty"`
+	TextColor       string   `json:"textColor,omitempty"`
+	FillDirection   string   `json:"fillDirection,omitempty"`
+	ValueSize       TextSize `json:"valueSize,omitempty"`
+	SubvalueSize    TextSize `json:"subvalueSize,omitempty"`
+	ShowBorder      *bool    `json:"showBorder,omitempty"`
+	ShowGlyph       *bool    `json:"showGlyph,omitempty"`
+	ShowResetTimer  *bool    `json:"showResetTimer,omitempty"`
+	ShowRawCounts   *bool    `json:"showRawCounts,omitempty"`
+	HideSubvalue    *bool    `json:"hideSubvalue,omitempty"`
 }
 
 // EffectiveSettings merges provider-tier overrides under per-button
@@ -304,12 +306,12 @@ func InvertFillEnabled() bool {
 
 // SmartContrastFor returns the effective smart-contrast toggle for the
 // given provider ID. Precedence:
-//   1. Plugin-tier force-on (GlobalSettings.SmartContrast == true) —
-//      overrides everything below.
-//   2. Per-provider override (ProviderSettings[id].SmartContrast) —
-//      the user's explicit yes/no for this provider.
-//   3. Built-in default (providerDefaultSmartContrast) — Ollama on,
-//      everyone else off.
+//  1. Plugin-tier force-on (GlobalSettings.SmartContrast == true) —
+//     overrides everything below.
+//  2. Per-provider override (ProviderSettings[id].SmartContrast) —
+//     the user's explicit yes/no for this provider.
+//  3. Built-in default (providerDefaultSmartContrast) — Ollama on,
+//     everyone else off.
 func SmartContrastFor(providerID string) bool {
 	mu.RLock()
 	defer mu.RUnlock()
@@ -544,6 +546,9 @@ func ChangedProviderIDs(prev, next ProviderKeys) []string {
 	if prev.CopilotToken != next.CopilotToken {
 		out = append(out, "copilot")
 	}
+	if prev.SyntheticKey != next.SyntheticKey {
+		out = append(out, "synthetic")
+	}
 	if prev.CodexChatGPTBaseURL != next.CodexChatGPTBaseURL {
 		out = append(out, "codex")
 	}
@@ -601,4 +606,3 @@ func cleanCredential(raw string) string {
 	}
 	return v
 }
-

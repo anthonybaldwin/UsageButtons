@@ -17,6 +17,7 @@ var providerColors = map[string]string{
 	"cursor":     "#00bfa5",
 	"ollama":     "#f9fafb",
 	"openrouter": "#6467f2",
+	"synthetic":  "#141414",
 	"warp":       "#938bb4",
 	"zai":        "#e85a6a",
 	"kimi-k2":    "#4c00ff",
@@ -30,21 +31,44 @@ func main() {
 			fmt.Fprintf(os.Stderr, "skip %s: no color\n", id)
 			continue
 		}
-		xf := render.ContentFitGlyphTransform(glyph, 36, 38, 72, 72)
-		body := glyphKeyMarkup(glyph, color)
-		svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144">
+		if id != "codex" {
+			xf := render.ContentFitGlyphTransform(glyph, 36, 38, 72, 72)
+			body := glyphKeyMarkup(glyph, color)
+			svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144">
   <rect width="144" height="144" rx="16" fill="#111827"/>
   <g transform="%s" opacity="0.85">
     %s
   </g>
 </svg>
 `, xf, body)
-		path := filepath.Join(dir, fmt.Sprintf("action-%s-key.svg", id))
-		if err := os.WriteFile(path, []byte(svg), 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "error writing %s: %v\n", path, err)
-		} else {
-			fmt.Printf("wrote %s\n", path)
+			writeGenerated(filepath.Join(dir, fmt.Sprintf("action-%s-key.svg", id)), svg)
 		}
+
+		menuPath := filepath.Join(dir, fmt.Sprintf("action-%s.svg", id))
+		if _, err := os.Stat(menuPath); os.IsNotExist(err) {
+			menuXf := render.ContentFitGlyphTransform(glyph, 2, 2, 16, 16)
+			menu := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+  <g transform="%s" opacity="0.9">
+    %s
+  </g>
+</svg>
+`, menuXf, glyphKeyMarkup(glyph, "#d1d5db"))
+			writeGenerated(menuPath, menu)
+		}
+	}
+}
+
+func writeGenerated(path, content string) {
+	if existing, err := os.ReadFile(path); err == nil {
+		normalized := strings.ReplaceAll(string(existing), "\r\n", "\n")
+		if normalized == content {
+			return
+		}
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing %s: %v\n", path, err)
+	} else {
+		fmt.Printf("wrote %s\n", path)
 	}
 }
 

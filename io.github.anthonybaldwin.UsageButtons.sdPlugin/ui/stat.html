@@ -386,6 +386,16 @@
       <p class="hint">Fallback: <code>KIMI_K2_API_KEY</code>.</p>
     </div>
 
+    <!-- Synthetic auth -->
+    <div id="authConfig-synthetic" class="auth-config" style="display:none">
+      <label for="syntheticKey">Synthetic API key</label>
+      <div class="key-row">
+        <input id="syntheticKey" type="password" autocomplete="off" placeholder="Synthetic API key" data-provider-key="syntheticKey">
+        <button type="button" class="reveal-btn" data-reveal-target="syntheticKey">Show</button>
+      </div>
+      <p class="hint">Fallback: <code>SYNTHETIC_API_KEY</code>.</p>
+    </div>
+
     <div class="group-heading" style="margin-top: 24px;">
       Defaults for <span id="providerOverrideNameInline">this provider</span>'s buttons
     </div>
@@ -811,6 +821,11 @@
       "kimi-k2": [
         ["credits-balance", "Credits remaining", "pct"],
       ],
+      synthetic: [
+        ["session-percent", "Five-hour quota remaining %", "pct"],
+        ["weekly-percent",  "Weekly tokens remaining %",   "pct"],
+        ["search-percent",  "Search hourly remaining %",   "pct"],
+      ],
     };
 
     // Provider brand colors — keep in sync with the Go providers so the
@@ -825,6 +840,7 @@
       warp:       "#938bb4",
       zai:        "#e85a6a",
       "kimi-k2":  "#4c00ff",
+      synthetic:  "#141414",
     };
 
 // Per-provider brand background colors. Kept in sync with each
@@ -840,10 +856,11 @@
       warp:       "#171521",
       zai:        "#211012",
       "kimi-k2":  "#0c0324",
+      synthetic:  "#f4f4f5",
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "ollama", "openrouter", "warp", "zai", "kimi-k2"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "ollama", "openrouter", "warp", "zai", "kimi-k2", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -856,6 +873,7 @@
       warp:       "Warp",
       zai:        "z.ai",
       "kimi-k2":  "Kimi K2",
+      synthetic:  "Synthetic",
     };
 
     // ---------- Provider from action UUID ----------

@@ -155,6 +155,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.perplexity",
+      "Name": "Perplexity",
+      "Tooltip": "Perplexity usage stats — recurring, bonus, and purchased credits.",
+      "Icon": "assets/action-perplexity",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-perplexity-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.warp",
       "Name": "Warp",
       "Tooltip": "Warp usage stats — credits %, bonus credits.",

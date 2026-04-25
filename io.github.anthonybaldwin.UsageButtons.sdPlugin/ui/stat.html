@@ -359,6 +359,11 @@
       <p class="hint">Fallback: <code>OPENROUTER_API_KEY</code>.</p>
     </div>
 
+    <!-- Perplexity auth -->
+    <div id="authConfig-perplexity" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>perplexity.ai</code>.</p>
+    </div>
+
     <!-- Warp auth -->
     <div id="authConfig-warp" class="auth-config" style="display:none">
       <label for="warpKey">Warp API key</label>
@@ -840,6 +845,11 @@
         ["key-percent",     "Per-key quota remaining %", "pct"],
         ["rate-limit",      "Rate limit (requests / interval)", "ref"],
       ],
+      perplexity: [
+        ["session-percent", "Recurring credits remaining %", "pct"],
+        ["weekly-percent",  "Bonus credits remaining %",     "pct"],
+        ["opus-percent",    "Purchased credits remaining %", "pct"],
+      ],
       warp: [
         ["credits-percent", "Credits remaining %",       "pct"],
         ["bonus-credits",   "Bonus credits remaining %", "pct"],
@@ -878,6 +888,7 @@
       augment:    "#6366f1",
       amp:        "#dc2626",
       openrouter: "#6467f2",
+      perplexity: "#20b2aa",
       warp:       "#938bb4",
       zai:        "#e85a6a",
       "kimi-k2":  "#4c00ff",
@@ -898,6 +909,7 @@
       augment:    "#10112f",
       amp:        "#250b0b",
       openrouter: "#101028",
+      perplexity: "#082423",
       warp:       "#171521",
       zai:        "#211012",
       "kimi-k2":  "#0c0324",
@@ -907,7 +919,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "amp", "ollama", "openrouter", "warp", "zai", "kimi-k2", "kilo", "kiro", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "amp", "ollama", "openrouter", "perplexity", "warp", "zai", "kimi-k2", "kilo", "kiro", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -919,6 +931,7 @@
       amp:        "Amp",
       ollama:     "Ollama",
       openrouter: "OpenRouter",
+      perplexity: "Perplexity",
       warp:       "Warp",
       zai:        "z.ai",
       "kimi-k2":  "Kimi K2",

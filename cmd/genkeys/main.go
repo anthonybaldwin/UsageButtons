@@ -21,6 +21,7 @@ var providerColors = map[string]string{
 	"kiro":       "#ff9900",
 	"ollama":     "#f9fafb",
 	"openrouter": "#6467f2",
+	"perplexity": "#20b2aa",
 	"synthetic":  "#141414",
 	"warp":       "#938bb4",
 	"zai":        "#e85a6a",

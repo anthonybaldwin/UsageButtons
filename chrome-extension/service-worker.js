@@ -19,7 +19,15 @@
 
 const HOST_NAME = "io.github.anthonybaldwin.usagebuttons";
 
-const ALLOWED = ["claude.ai", "cursor.com", "ollama.com", "chatgpt.com", "augmentcode.com", "ampcode.com"];
+const ALLOWED = [
+  "claude.ai",
+  "cursor.com",
+  "ollama.com",
+  "chatgpt.com",
+  "augmentcode.com",
+  "ampcode.com",
+  "perplexity.ai",
+];
 
 function originAllowed(rawURL) {
   let u;

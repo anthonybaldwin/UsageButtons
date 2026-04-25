@@ -37,6 +37,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kiro"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/ollama"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/openrouter"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/perplexity"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/synthetic"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/warp"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/zai"

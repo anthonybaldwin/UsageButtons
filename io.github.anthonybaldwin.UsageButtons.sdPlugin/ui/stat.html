@@ -396,6 +396,11 @@
       <p class="hint">Fallbacks: <code>KILO_API_KEY</code>, then <code>~/.local/share/kilo/auth.json</code>.</p>
     </div>
 
+    <!-- Kiro auth -->
+    <div id="authConfig-kiro" class="auth-config" style="display:none">
+      <p class="hint">Uses <code>kiro-cli</code>. Run <code>kiro-cli login</code> before adding Kiro buttons.</p>
+    </div>
+
     <!-- Synthetic auth -->
     <div id="authConfig-synthetic" class="auth-config" style="display:none">
       <label for="syntheticKey">Synthetic API key</label>
@@ -835,6 +840,10 @@
         ["session-percent", "Credits remaining %",   "pct"],
         ["weekly-percent",  "Kilo Pass remaining %", "pct"],
       ],
+      kiro: [
+        ["session-percent", "Monthly credits remaining %", "pct"],
+        ["weekly-percent",  "Bonus credits remaining %",   "pct"],
+      ],
       synthetic: [
         ["session-percent", "Five-hour quota remaining %", "pct"],
         ["weekly-percent",  "Weekly tokens remaining %",   "pct"],
@@ -855,6 +864,7 @@
       zai:        "#e85a6a",
       "kimi-k2":  "#4c00ff",
       kilo:       "#f27027",
+      kiro:       "#ff9900",
       synthetic:  "#141414",
     };
 
@@ -872,11 +882,12 @@
       zai:        "#211012",
       "kimi-k2":  "#0c0324",
       kilo:       "#21130a",
+      kiro:       "#241405",
       synthetic:  "#f4f4f5",
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "ollama", "openrouter", "warp", "zai", "kimi-k2", "kilo", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "ollama", "openrouter", "warp", "zai", "kimi-k2", "kilo", "kiro", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -890,6 +901,7 @@
       zai:        "z.ai",
       "kimi-k2":  "Kimi K2",
       kilo:       "Kilo",
+      kiro:       "Kiro",
       synthetic:  "Synthetic",
     };
 

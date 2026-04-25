@@ -187,6 +187,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.kiro",
+      "Name": "Kiro",
+      "Tooltip": "Kiro usage stats — monthly credits and bonus credits.",
+      "Icon": "assets/action-kiro",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-kiro-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.synthetic",
       "Name": "Synthetic",
       "Tooltip": "Synthetic usage stats — five-hour quota, weekly tokens, search quota.",

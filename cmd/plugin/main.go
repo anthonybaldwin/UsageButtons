@@ -682,7 +682,7 @@ func replyCookieStatus(conn *streamdeck.Connection, ctxStr, action string) {
 	status, reachable, probeErr := cookies.StatusDetail(pctx)
 	latest := update.LatestVersion()
 	helperAllowlistStale := status.Ready && !cookies.HelperAllowlistCurrent(status.AllowedHosts)
-	helperAvailable := status.Ready && !helperAllowlistStale
+	helperAvailable := status.Ready
 	updateAvailable := status.Version != "" && latest != "" && update.IsNewerVersion(status.Version, latest)
 
 	// Diagnostic line for the "Not connected" failure mode. `reachable`
@@ -695,7 +695,7 @@ func replyCookieStatus(conn *streamdeck.Connection, ctxStr, action string) {
 		probeErrStr = probeErr.Error()
 	}
 	conn.Logf("cookieStatus poll: ready=%v allowlistCurrent=%v ext-version=%q reachable=%v probeErr=%q registered=%v",
-		status.Ready, helperAvailable, status.Version, reachable, probeErrStr,
+		status.Ready, !helperAllowlistStale, status.Version, reachable, probeErrStr,
 		cookies.IsHostRegistered(cookies.HostName))
 
 	conn.SendToPropertyInspector(ctxStr, action, map[string]any{

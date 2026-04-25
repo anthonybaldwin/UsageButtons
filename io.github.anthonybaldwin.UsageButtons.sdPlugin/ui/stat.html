@@ -1937,7 +1937,10 @@
       const versionLine = document.getElementById("cookieHostVersionLine");
 
       text.replaceChildren();
-      if (available) {
+      if (available && allowlistStale) {
+        dot.style.background = "#f59e0b";
+        text.append("Extension connected, but its allowlist report is stale. Existing supported providers can still fetch.");
+      } else if (available) {
         dot.style.background = "#22c55e";
         text.append("Extension connected. Browser-sourced metrics are live.");
       } else if (allowlistStale) {

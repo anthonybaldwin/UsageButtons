@@ -3,6 +3,7 @@ package cookies
 import (
 	"context"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -49,6 +50,7 @@ func (b *Bridge) Handle(ctx context.Context, m Message, send func(Message) error
 		b.version = m.Version
 		b.allowedHosts = append([]string(nil), m.AllowedHosts...)
 		b.mu.Unlock()
+		logf("extension ready version=%q allowedHosts=%d [%s]", m.Version, len(m.AllowedHosts), strings.Join(m.AllowedHosts, ","))
 	case "fetchResult", "error", "pong":
 		b.deliverInflight(m)
 	}

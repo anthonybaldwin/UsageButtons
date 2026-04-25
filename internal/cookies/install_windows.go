@@ -7,14 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
-)
 
-// createNoWindow is the Win32 CREATE_NO_WINDOW process creation flag. The
-// plugin runs without a console attached, so spawning console-subsystem
-// children (reg.exe here) without this flag flashes a black console
-// window. HideWindow alone is not sufficient.
-const createNoWindow = 0x08000000
+	"github.com/anthonybaldwin/UsageButtons/internal/winutil"
+)
 
 // windowsBrowserKeys lists the HKCU registry roots under which each
 // supported browser reads native-messaging host manifests. We install
@@ -80,7 +75,7 @@ func RegisterHost(hostName, binaryPath string, allowedOrigins []string) error {
 	for _, b := range windowsBrowserKeys {
 		key := fmt.Sprintf(`HKCU\%s\%s`, b.regRoot, hostName)
 		cmd := exec.Command("reg", "add", key, "/ve", "/t", "REG_SZ", "/d", path, "/f")
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
+		winutil.HideConsoleWindow(cmd)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("reg add %s: %w (%s)", b.name, err, string(out))
@@ -108,7 +103,7 @@ func UnregisterHost(hostName string) error {
 	for _, b := range windowsBrowserKeys {
 		key := fmt.Sprintf(`HKCU\%s\%s`, b.regRoot, hostName)
 		cmd := exec.Command("reg", "delete", key, "/f")
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
+		winutil.HideConsoleWindow(cmd)
 		_, _ = cmd.CombinedOutput()
 	}
 	var firstErr error

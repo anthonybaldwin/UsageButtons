@@ -182,7 +182,9 @@ func scanFile(path string, todayStart, thirtyDaysAgo time.Time, result *costResu
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 256*1024), 1024*1024)
+	// Use a 10MB buffer to handle large prompt/response lines in local logs.
+	const maxLine = 10 * 1024 * 1024
+	scanner.Buffer(make([]byte, 256*1024), maxLine)
 
 	for scanner.Scan() {
 		var rec sessionRecord

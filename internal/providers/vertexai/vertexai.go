@@ -330,11 +330,36 @@ func refreshAccessToken(ctx context.Context, creds oauthCredentials) (oauthCrede
 		expiresIn = 3600
 	}
 	expiry := time.Now().Add(time.Duration(expiresIn) * time.Second)
+
+	_ = saveCredentials(credentialsPath(), root)
+
 	return oauthCredentials{
 		AccessToken: accessToken,
 		Email:       emailFromIDToken(providerutil.StringValue(root["id_token"])),
 		ExpiryDate:  &expiry,
 	}, nil
+}
+
+// saveCredentials updates application_default_credentials.json with refreshed
+// OAuth tokens while preserving unrelated fields.
+func saveCredentials(path string, refresh map[string]any) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		return err
+	}
+	for _, key := range []string{"access_token", "id_token"} {
+		if v := providerutil.StringValue(refresh[key]); v != "" {
+			root[key] = v
+		}
+	}
+	if expiresIn, ok := providerutil.FloatValue(refresh["expires_in"]); ok && expiresIn > 0 {
+		root["token_expiry"] = time.Now().Add(time.Duration(expiresIn) * time.Second).UTC().Format(time.RFC3339Nano)
+	}
+	return providerutil.WriteJSONAtomic(path, root)
 }
 
 // errorCode extracts OAuth error codes from a failed token response.

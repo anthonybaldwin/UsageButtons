@@ -2,7 +2,6 @@ package providers
 
 import (
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -39,6 +38,8 @@ func StartCredentialWatcher() {
 		credWatchTargets = []*credWatchTarget{
 			{providerID: "claude", pathFn: claudeCredPath},
 			{providerID: "codex", pathFn: codexCredPath},
+			{providerID: "gemini", pathFn: geminiCredPath},
+			{providerID: "vertexai", pathFn: vertexAICredPath},
 		}
 		// Seed last-known stats so the first change after startup —
 		// not the presence of a pre-existing file — triggers the clear.
@@ -93,20 +94,4 @@ func checkCredTarget(t *credWatchTarget) {
 	ClearCache(t.providerID)
 	t.lastMtime = mt
 	t.lastSize = sz
-}
-
-// claudeCredPath returns the filesystem path to the Claude OAuth credentials.
-func claudeCredPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude", ".credentials.json")
-}
-
-// codexCredPath returns the filesystem path to the Codex OAuth credentials,
-// honoring the CODEX_HOME override when set.
-func codexCredPath() string {
-	if ch := os.Getenv("CODEX_HOME"); ch != "" {
-		return filepath.Join(ch, "auth.json")
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".codex", "auth.json")
 }

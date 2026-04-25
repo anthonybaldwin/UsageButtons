@@ -251,6 +251,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.jetbrains",
+      "Name": "JetBrains AI",
+      "Tooltip": "JetBrains AI usage stats — local IDE quota remaining.",
+      "Icon": "assets/action-jetbrains",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-jetbrains-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.kilo",
       "Name": "Kilo",
       "Tooltip": "Kilo usage stats — credits and Kilo Pass quota.",

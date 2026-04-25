@@ -411,6 +411,11 @@
       <p class="hint">Fallback: <code>KIMI_K2_API_KEY</code>.</p>
     </div>
 
+    <!-- JetBrains AI auth -->
+    <div id="authConfig-jetbrains" class="auth-config" style="display:none">
+      <p class="hint">Reads local JetBrains IDE quota files. Optional override: <code>CODEXBAR_JETBRAINS_IDE_BASE_PATH</code> or <code>JETBRAINS_QUOTA_FILE</code>.</p>
+    </div>
+
     <!-- Kilo auth -->
     <div id="authConfig-kilo" class="auth-config" style="display:none">
       <label for="kiloKey">Kilo API key</label>
@@ -881,6 +886,9 @@
       "kimi-k2": [
         ["credits-balance", "Credits remaining", "pct"],
       ],
+      jetbrains: [
+        ["session-percent", "Current credits remaining %", "pct"],
+      ],
       kilo: [
         ["session-percent", "Credits remaining %",   "pct"],
         ["weekly-percent",  "Kilo Pass remaining %", "pct"],
@@ -913,6 +921,7 @@
       warp:       "#938bb4",
       zai:        "#e85a6a",
       "kimi-k2":  "#4c00ff",
+      jetbrains:  "#ff3399",
       kilo:       "#f27027",
       kiro:       "#ff9900",
       synthetic:  "#141414",
@@ -936,13 +945,14 @@
       warp:       "#171521",
       zai:        "#211012",
       "kimi-k2":  "#0c0324",
+      jetbrains:  "#25051a",
       kilo:       "#21130a",
       kiro:       "#241405",
       synthetic:  "#f4f4f5",
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi-k2", "kilo", "kiro", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi-k2", "jetbrains", "kilo", "kiro", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -960,6 +970,7 @@
       warp:       "Warp",
       zai:        "z.ai",
       "kimi-k2":  "Kimi K2",
+      jetbrains:  "JetBrains AI",
       kilo:       "Kilo",
       kiro:       "Kiro",
       synthetic:  "Synthetic",

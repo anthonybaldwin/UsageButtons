@@ -342,6 +342,11 @@
       <p class="hint">Fallbacks: extension from Alibaba Cloud console, <code>ALIBABA_CODING_PLAN_API_KEY</code>, <code>ALIBABA_CODING_PLAN_REGION</code>.</p>
     </div>
 
+    <!-- Antigravity auth -->
+    <div id="authConfig-antigravity" class="auth-config" style="display:none">
+      <p class="hint">Reads the local Antigravity language server. Launch Antigravity first. Optional overrides: <code>ANTIGRAVITY_PORT</code>, <code>ANTIGRAVITY_CSRF_TOKEN</code>.</p>
+    </div>
+
     <!-- Augment auth -->
     <div id="authConfig-augment" class="auth-config" style="display:none">
       <p class="hint">Uses <code>auggie account status</code> first, then the extension for <code>app.augmentcode.com</code>.</p>
@@ -921,6 +926,11 @@
         ["weekly-percent",  "Weekly quota remaining %", "pct"],
         ["opus-percent",    "Monthly quota remaining %", "pct"],
       ],
+      antigravity: [
+        ["session-percent", "Claude quota remaining %",       "pct"],
+        ["weekly-percent",  "Gemini Pro quota remaining %",   "pct"],
+        ["opus-percent",    "Gemini Flash quota remaining %", "pct"],
+      ],
       augment: [
         ["session-percent", "Credits remaining %", "pct"],
       ],
@@ -988,6 +998,7 @@
       cursor:     "#00bfa5",
       abacus:     "#38bdf8",
       alibaba:    "#ff6a00",
+      antigravity:"#60ba7e",
       augment:    "#6366f1",
       amp:        "#dc2626",
       opencode:   "#3b82f6",
@@ -1017,6 +1028,7 @@
       cursor:     "#06221f",
       abacus:     "#082033",
       alibaba:    "#281203",
+      antigravity:"#0d2418",
       augment:    "#10112f",
       amp:        "#250b0b",
       opencode:   "#081a33",
@@ -1036,7 +1048,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "abacus", "alibaba", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "abacus", "alibaba", "antigravity", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -1046,6 +1058,7 @@
       cursor:     "Cursor",
       abacus:     "Abacus AI",
       alibaba:    "Alibaba",
+      antigravity:"Antigravity",
       augment:    "Augment",
       amp:        "Amp",
       ollama:     "Ollama",

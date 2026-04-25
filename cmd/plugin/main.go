@@ -30,6 +30,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/abacus"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/alibaba"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/amp"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/antigravity"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/augment"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/codex"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/copilot"

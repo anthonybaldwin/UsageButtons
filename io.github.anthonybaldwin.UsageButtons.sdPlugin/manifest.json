@@ -123,6 +123,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.antigravity",
+      "Name": "Antigravity",
+      "Tooltip": "Antigravity usage stats — Claude, Gemini Pro, and Gemini Flash quota remaining.",
+      "Icon": "assets/action-antigravity",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-antigravity-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.augment",
       "Name": "Augment",
       "Tooltip": "Augment usage stats — credits remaining.",

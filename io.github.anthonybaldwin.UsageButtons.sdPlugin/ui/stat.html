@@ -401,6 +401,16 @@
       <p class="hint">Fallback: <code>Z_AI_API_KEY</code>.</p>
     </div>
 
+    <!-- Kimi auth -->
+    <div id="authConfig-kimi" class="auth-config" style="display:none">
+      <label for="kimiAuthToken">kimi-auth token</label>
+      <div class="key-row">
+        <input id="kimiAuthToken" type="password" autocomplete="off" placeholder="kimi-auth cookie or JWT" data-provider-key="kimiAuthToken">
+        <button type="button" class="reveal-btn" data-reveal-target="kimiAuthToken">Show</button>
+      </div>
+      <p class="hint">Fallbacks: extension from <code>kimi.com</code>, <code>KIMI_AUTH_TOKEN</code>, or <code>KIMI_MANUAL_COOKIE</code>.</p>
+    </div>
+
     <!-- Kimi K2 auth -->
     <div id="authConfig-kimi-k2" class="auth-config" style="display:none">
       <label for="kimik2Key">Kimi K2 API key</label>
@@ -883,6 +893,10 @@
         ["tokens-session-percent", "5-hour token usage remaining %", "pct"],
         ["mcp-percent",     "MCP usage remaining %",   "pct"],
       ],
+      kimi: [
+        ["session-percent", "Weekly coding quota remaining %", "pct"],
+        ["weekly-percent",  "5-hour rate limit remaining %",   "pct"],
+      ],
       "kimi-k2": [
         ["credits-balance", "Credits remaining", "pct"],
       ],
@@ -920,6 +934,7 @@
       perplexity: "#20b2aa",
       warp:       "#938bb4",
       zai:        "#e85a6a",
+      kimi:       "#fe603c",
       "kimi-k2":  "#4c00ff",
       jetbrains:  "#ff3399",
       kilo:       "#f27027",
@@ -944,6 +959,7 @@
       perplexity: "#082423",
       warp:       "#171521",
       zai:        "#211012",
+      kimi:       "#260d08",
       "kimi-k2":  "#0c0324",
       jetbrains:  "#25051a",
       kilo:       "#21130a",
@@ -952,7 +968,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi-k2", "jetbrains", "kilo", "kiro", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "kimi-k2", "jetbrains", "kilo", "kiro", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -969,6 +985,7 @@
       perplexity: "Perplexity",
       warp:       "Warp",
       zai:        "z.ai",
+      kimi:       "Kimi",
       "kimi-k2":  "Kimi K2",
       jetbrains:  "JetBrains AI",
       kilo:       "Kilo",

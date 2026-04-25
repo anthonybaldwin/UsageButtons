@@ -126,6 +126,7 @@ type ProviderKeys struct {
 	CopilotToken  string `json:"copilotToken,omitempty"`
 	SyntheticKey  string `json:"syntheticKey,omitempty"`
 	KiloKey       string `json:"kiloKey,omitempty"`
+	KimiAuthToken string `json:"kimiAuthToken,omitempty"`
 
 	// Endpoint overrides
 	OpenRouterURL       string `json:"openRouterURL,omitempty"`
@@ -552,6 +553,9 @@ func ChangedProviderIDs(prev, next ProviderKeys) []string {
 	}
 	if prev.KiloKey != next.KiloKey {
 		out = append(out, "kilo")
+	}
+	if prev.KimiAuthToken != next.KimiAuthToken {
+		out = append(out, "kimi")
 	}
 	if prev.CodexChatGPTBaseURL != next.CodexChatGPTBaseURL {
 		out = append(out, "codex")

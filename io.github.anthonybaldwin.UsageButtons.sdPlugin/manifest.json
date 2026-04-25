@@ -235,6 +235,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.kimi",
+      "Name": "Kimi",
+      "Tooltip": "Kimi usage stats — weekly coding quota and five-hour rate limit.",
+      "Icon": "assets/action-kimi",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-kimi-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.kimi-k2",
       "Name": "Kimi K2",
       "Tooltip": "Kimi K2 usage stats — credits remaining.",

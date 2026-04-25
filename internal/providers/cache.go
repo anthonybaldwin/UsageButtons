@@ -505,7 +505,7 @@ func usesUnfingerprintedBrowserSession(providerID string, s Snapshot) bool {
 	switch providerID {
 	case "cursor", "ollama", "amp", "perplexity", "opencode", "opencodego":
 		return true
-	case "claude", "codex", "augment":
+	case "claude", "codex", "augment", "kimi":
 		return s.Source == "cookie"
 	default:
 		return false
@@ -618,6 +618,10 @@ func providerConfigFingerprint(providerID string) string {
 		parts = append(parts,
 			"api-key", settings.ResolveAPIKey(pk.KiloKey, "KILO_API_KEY"),
 			"cli-auth", fileContentFingerprint(homePath(".local", "share", "kilo", "auth.json")),
+		)
+	case "kimi":
+		parts = append(parts,
+			"auth-token", settings.ResolveAPIKey(pk.KimiAuthToken, "KIMI_AUTH_TOKEN", "kimi_auth_token", "KIMI_MANUAL_COOKIE"),
 		)
 	case "codex":
 		parts = append(parts,

@@ -21,6 +21,22 @@ func (b BBox) Width() float64 { return b.MaxX - b.MinX }
 // Height returns the bounding box height.
 func (b BBox) Height() float64 { return b.MaxY - b.MinY }
 
+// Union returns the smallest BBox containing b and other.
+func (b BBox) Union(other BBox) BBox {
+	if b.Width() <= 0 || b.Height() <= 0 {
+		return other
+	}
+	if other.Width() <= 0 || other.Height() <= 0 {
+		return b
+	}
+	return BBox{
+		MinX: math.Min(b.MinX, other.MinX),
+		MinY: math.Min(b.MinY, other.MinY),
+		MaxX: math.Max(b.MaxX, other.MaxX),
+		MaxY: math.Max(b.MaxY, other.MaxY),
+	}
+}
+
 // tokenRe splits an SVG path d attribute into command letters and numbers.
 var tokenRe = regexp.MustCompile(`[a-zA-Z]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?`)
 
@@ -37,10 +53,18 @@ func PathBBox(d string) BBox {
 	cx, cy := 0.0, 0.0
 
 	mark := func(x, y float64) {
-		if x < minX { minX = x }
-		if x > maxX { maxX = x }
-		if y < minY { minY = y }
-		if y > maxY { maxY = y }
+		if x < minX {
+			minX = x
+		}
+		if x > maxX {
+			maxX = x
+		}
+		if y < minY {
+			minY = y
+		}
+		if y > maxY {
+			maxY = y
+		}
 	}
 
 	i := 0
@@ -96,44 +120,76 @@ func PathBBox(d string) BBox {
 		switch CMD {
 		case "M", "L", "T":
 			x, y := nextNum(), nextNum()
-			if rel { x += cx; y += cy }
+			if rel {
+				x += cx
+				y += cy
+			}
 			mark(x, y)
 			cx, cy = x, y
 			if CMD == "M" {
-				if rel { cmd = "l" } else { cmd = "L" }
+				if rel {
+					cmd = "l"
+				} else {
+					cmd = "L"
+				}
 			}
 		case "H":
 			x := nextNum()
-			if rel { x += cx }
+			if rel {
+				x += cx
+			}
 			mark(x, cy)
 			cx = x
 		case "V":
 			y := nextNum()
-			if rel { y += cy }
+			if rel {
+				y += cy
+			}
 			mark(cx, y)
 			cy = y
 		case "C":
 			x1, y1 := nextNum(), nextNum()
 			x2, y2 := nextNum(), nextNum()
 			x, y := nextNum(), nextNum()
-			if rel { x1 += cx; y1 += cy; x2 += cx; y2 += cy; x += cx; y += cy }
-			mark(x1, y1); mark(x2, y2); mark(x, y)
+			if rel {
+				x1 += cx
+				y1 += cy
+				x2 += cx
+				y2 += cy
+				x += cx
+				y += cy
+			}
+			mark(x1, y1)
+			mark(x2, y2)
+			mark(x, y)
 			cx, cy = x, y
 		case "S", "Q":
 			x1, y1 := nextNum(), nextNum()
 			x, y := nextNum(), nextNum()
-			if rel { x1 += cx; y1 += cy; x += cx; y += cy }
-			mark(x1, y1); mark(x, y)
+			if rel {
+				x1 += cx
+				y1 += cy
+				x += cx
+				y += cy
+			}
+			mark(x1, y1)
+			mark(x, y)
 			cx, cy = x, y
 		case "A":
 			// rx, ry, x-axis-rotation
-			nextNum(); nextNum(); nextNum()
+			nextNum()
+			nextNum()
+			nextNum()
 			// large-arc-flag, sweep-flag (single '0'/'1' chars, may
 			// be packed with the next coord in compact notation)
-			consumeArcFlag(); consumeArcFlag()
+			consumeArcFlag()
+			consumeArcFlag()
 			// endpoint
 			x, y := nextNum(), nextNum()
-			if rel { x += cx; y += cy }
+			if rel {
+				x += cx
+				y += cy
+			}
 			mark(x, y)
 			cx, cy = x, y
 		case "Z":
@@ -153,6 +209,33 @@ func PathBBox(d string) BBox {
 // centers a path's actual content into a target rectangle.
 func ContentFitTransform(d string, tx, ty, tw, th float64) string {
 	bb := PathBBox(d)
+	return ContentFitBBoxTransform(bb, tx, ty, tw, th)
+}
+
+// ContentFitGlyphTransform returns an SVG transform string that scales
+// and centers a provider glyph into a target rectangle. Multi-path
+// glyphs prefer their declared viewBox so source stroke widths and
+// arrowheads keep the same visual framing as the original SVG.
+func ContentFitGlyphTransform(g *ProviderGlyph, tx, ty, tw, th float64) string {
+	if g == nil {
+		return ""
+	}
+	if len(g.Paths) > 0 {
+		if bb, ok := ViewBoxBBox(g.ViewBox); ok {
+			return ContentFitBBoxTransform(bb, tx, ty, tw, th)
+		}
+		var bb BBox
+		for _, p := range g.Paths {
+			bb = bb.Union(PathBBox(p.D))
+		}
+		return ContentFitBBoxTransform(bb, tx, ty, tw, th)
+	}
+	return ContentFitTransform(g.D, tx, ty, tw, th)
+}
+
+// ContentFitBBoxTransform returns an SVG transform string that scales and
+// centers a bounding box into a target rectangle.
+func ContentFitBBoxTransform(bb BBox, tx, ty, tw, th float64) string {
 	bw, bh := bb.Width(), bb.Height()
 	if bw <= 0 || bh <= 0 {
 		return ""
@@ -161,6 +244,22 @@ func ContentFitTransform(d string, tx, ty, tw, th float64) string {
 	ox := tx + (tw-bw*scale)/2 - bb.MinX*scale
 	oy := ty + (th-bh*scale)/2 - bb.MinY*scale
 	return fmt.Sprintf("translate(%g,%g) scale(%g)", ox, oy, scale)
+}
+
+// ViewBoxBBox parses an SVG viewBox into a BBox.
+func ViewBoxBBox(viewBox string) (BBox, bool) {
+	parts := strings.Fields(viewBox)
+	if len(parts) != 4 {
+		return BBox{}, false
+	}
+	x, errX := strconv.ParseFloat(parts[0], 64)
+	y, errY := strconv.ParseFloat(parts[1], 64)
+	w, errW := strconv.ParseFloat(parts[2], 64)
+	h, errH := strconv.ParseFloat(parts[3], 64)
+	if errX != nil || errY != nil || errW != nil || errH != nil || w <= 0 || h <= 0 {
+		return BBox{}, false
+	}
+	return BBox{MinX: x, MinY: y, MaxX: x + w, MaxY: y + h}, true
 }
 
 // isLetter reports whether b is a Unicode letter (used to detect SVG path

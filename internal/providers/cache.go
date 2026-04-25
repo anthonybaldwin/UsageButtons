@@ -614,6 +614,11 @@ func providerConfigFingerprint(providerID string) string {
 		parts = append(parts,
 			"api-key", settings.ResolveAPIKey(pk.SyntheticKey, "SYNTHETIC_API_KEY", "SYNTHETIC_API_TOKEN"),
 		)
+	case "kilo":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.KiloKey, "KILO_API_KEY"),
+			"cli-auth", fileContentFingerprint(homePath(".local", "share", "kilo", "auth.json")),
+		)
 	case "codex":
 		parts = append(parts,
 			"base-url", pk.CodexChatGPTBaseURL,

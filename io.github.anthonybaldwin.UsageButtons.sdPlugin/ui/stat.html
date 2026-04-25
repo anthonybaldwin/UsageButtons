@@ -386,6 +386,16 @@
       <p class="hint">Fallback: <code>KIMI_K2_API_KEY</code>.</p>
     </div>
 
+    <!-- Kilo auth -->
+    <div id="authConfig-kilo" class="auth-config" style="display:none">
+      <label for="kiloKey">Kilo API key</label>
+      <div class="key-row">
+        <input id="kiloKey" type="password" autocomplete="off" placeholder="Kilo API key" data-provider-key="kiloKey">
+        <button type="button" class="reveal-btn" data-reveal-target="kiloKey">Show</button>
+      </div>
+      <p class="hint">Fallbacks: <code>KILO_API_KEY</code>, then <code>~/.local/share/kilo/auth.json</code>.</p>
+    </div>
+
     <!-- Synthetic auth -->
     <div id="authConfig-synthetic" class="auth-config" style="display:none">
       <label for="syntheticKey">Synthetic API key</label>
@@ -821,6 +831,10 @@
       "kimi-k2": [
         ["credits-balance", "Credits remaining", "pct"],
       ],
+      kilo: [
+        ["session-percent", "Credits remaining %",   "pct"],
+        ["weekly-percent",  "Kilo Pass remaining %", "pct"],
+      ],
       synthetic: [
         ["session-percent", "Five-hour quota remaining %", "pct"],
         ["weekly-percent",  "Weekly tokens remaining %",   "pct"],
@@ -840,6 +854,7 @@
       warp:       "#938bb4",
       zai:        "#e85a6a",
       "kimi-k2":  "#4c00ff",
+      kilo:       "#f27027",
       synthetic:  "#141414",
     };
 
@@ -856,11 +871,12 @@
       warp:       "#171521",
       zai:        "#211012",
       "kimi-k2":  "#0c0324",
+      kilo:       "#21130a",
       synthetic:  "#f4f4f5",
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "ollama", "openrouter", "warp", "zai", "kimi-k2", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "ollama", "openrouter", "warp", "zai", "kimi-k2", "kilo", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -873,6 +889,7 @@
       warp:       "Warp",
       zai:        "z.ai",
       "kimi-k2":  "Kimi K2",
+      kilo:       "Kilo",
       synthetic:  "Synthetic",
     };
 

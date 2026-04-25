@@ -171,6 +171,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.kilo",
+      "Name": "Kilo",
+      "Tooltip": "Kilo usage stats — credits and Kilo Pass quota.",
+      "Icon": "assets/action-kilo",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-kilo-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.synthetic",
       "Name": "Synthetic",
       "Tooltip": "Synthetic usage stats — five-hour quota, weekly tokens, search quota.",

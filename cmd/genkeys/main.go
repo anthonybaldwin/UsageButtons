@@ -15,6 +15,7 @@ var providerColors = map[string]string{
 	"codex":      "#10A37F",
 	"copilot":    "#a855f7",
 	"cursor":     "#00bfa5",
+	"kilo":       "#f27027",
 	"ollama":     "#f9fafb",
 	"openrouter": "#6467f2",
 	"synthetic":  "#141414",

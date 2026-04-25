@@ -91,6 +91,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.augment",
+      "Name": "Augment",
+      "Tooltip": "Augment usage stats — credits remaining.",
+      "Icon": "assets/action-augment",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-augment-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.ollama",
       "Name": "Ollama",
       "Tooltip": "Ollama usage stats — session %, weekly %.",

@@ -10,7 +10,7 @@
 // cf_clearance, sessionKey, etc. Benefits:
 //   - Chrome's real TLS fingerprint + User-Agent + cookie jar.
 //   - Smaller permission surface (no "cookies" permission needed).
-//   - Web-Store-friendlier: purpose is "proxy for 3 APIs" not
+//   - Web-Store-friendlier: purpose is "proxy for allowlisted APIs" not
 //     "exfiltrate cookies to a local binary."
 //
 // ALLOWED mirrors Go's cookies.Allowed. Adding a provider requires
@@ -19,7 +19,7 @@
 
 const HOST_NAME = "io.github.anthonybaldwin.usagebuttons";
 
-const ALLOWED = ["claude.ai", "cursor.com", "ollama.com", "chatgpt.com"];
+const ALLOWED = ["claude.ai", "cursor.com", "ollama.com", "chatgpt.com", "augmentcode.com"];
 
 function originAllowed(rawURL) {
   let u;

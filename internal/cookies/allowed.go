@@ -14,6 +14,7 @@ var Allowed = []string{
 	"cursor.com",
 	"ollama.com",
 	"chatgpt.com",
+	"augmentcode.com",
 }
 
 // IsAllowed reports whether host is covered by the allowlist. A host

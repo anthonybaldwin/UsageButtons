@@ -27,6 +27,7 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/update"
 
 	// Register all providers via init().
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/augment"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/codex"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/copilot"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/cursor"

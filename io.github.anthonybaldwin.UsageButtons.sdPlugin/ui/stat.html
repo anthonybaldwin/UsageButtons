@@ -317,6 +317,11 @@
       <p class="hint">Via extension.</p>
     </div>
 
+    <!-- Augment auth -->
+    <div id="authConfig-augment" class="auth-config" style="display:none">
+      <p class="hint">Uses <code>auggie account status</code> first, then the extension for <code>app.augmentcode.com</code>.</p>
+    </div>
+
     <!-- Ollama auth -->
     <div id="authConfig-ollama" class="auth-config" style="display:none">
       <p class="hint">Via extension.</p>
@@ -818,6 +823,9 @@
         ["ondemand-spent",  "On-demand spend ($)",                "dollar-m", "browser"],
         ["team-ondemand-spent", "Team on-demand spend ($)",        "dollar-m", "browser"],
       ],
+      augment: [
+        ["session-percent", "Credits remaining %", "pct"],
+      ],
       openrouter: [
         ["credits-balance", "Credit balance ($)",  "ref-dollar"],
         ["credits-used",    "Total usage ($)",     "dollar-m"],
@@ -859,6 +867,7 @@
       copilot:    "#a855f7",
       ollama:     "#f7f7f7",
       cursor:     "#00bfa5",
+      augment:    "#6366f1",
       openrouter: "#6467f2",
       warp:       "#938bb4",
       zai:        "#e85a6a",
@@ -877,6 +886,7 @@
       copilot:    "#150d2e",
       ollama:     "#141414",
       cursor:     "#06221f",
+      augment:    "#10112f",
       openrouter: "#101028",
       warp:       "#171521",
       zai:        "#211012",
@@ -887,7 +897,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "ollama", "openrouter", "warp", "zai", "kimi-k2", "kilo", "kiro", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "ollama", "openrouter", "warp", "zai", "kimi-k2", "kilo", "kiro", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -895,6 +905,7 @@
       codex:      "Codex",
       copilot:    "Copilot",
       cursor:     "Cursor",
+      augment:    "Augment",
       ollama:     "Ollama",
       openrouter: "OpenRouter",
       warp:       "Warp",

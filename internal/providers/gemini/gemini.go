@@ -308,9 +308,7 @@ func refreshAccessToken(ctx context.Context, refreshToken, credsPath string, raw
 		return "", "", fmt.Errorf("Gemini token refresh response missing access token")
 	}
 	idToken := providerutil.StringValue(parsed["id_token"])
-	if err := updateStoredCredentials(credsPath, rawCreds, parsed); err != nil {
-		return "", "", fmt.Errorf("persist refreshed Gemini credentials: %w", err)
-	}
+	_ = updateStoredCredentials(credsPath, rawCreds, parsed)
 	return accessToken, idToken, nil
 }
 

@@ -301,7 +301,10 @@ func refreshAccessToken(ctx context.Context, creds oauthCredentials) (oauthCrede
 		return oauthCredentials{}, fmt.Errorf("Vertex AI token refresh failed: %w", err)
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return oauthCredentials{}, fmt.Errorf("read Vertex AI token refresh response: %w", err)
+	}
 	if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized {
 		if code := errorCode(body); code == "invalid_grant" || code == "unauthorized_client" {
 			return oauthCredentials{}, fmt.Errorf("refresh token expired or revoked. Run gcloud auth application-default login again")

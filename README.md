@@ -17,6 +17,9 @@ Each provider is its own action — drag **Claude**, **Codex**, **Gemini**,
 **Vertex AI**, etc. onto a key and configure the metric, colors, and
 thresholds from the Property Inspector.
 
+Provider auth methods and selectable metrics are listed in
+[docs/PROVIDERS.md](docs/PROVIDERS.md).
+
 | Per-button settings | Plugin-wide defaults |
 |---|---|
 | ![Button settings](docs/button-settings.png) | ![Plugin settings](docs/plugin-settings.png) |
@@ -44,6 +47,7 @@ UsageButtons/
 │   ├── plugin/                           # Go entry point
 │   └── native-host/                      # Chrome native-messaging bridge
 ├── chrome-extension/                     # MV3 companion extension (fetch-proxy)
+├── docs/                                 # landing page, screenshots, provider reference
 ├── internal/
 │   ├── streamdeck/                       # SD WebSocket protocol
 │   ├── render/                           # SVG button renderer + bbox

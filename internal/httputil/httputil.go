@@ -115,7 +115,10 @@ func GetJSON(url string, headers map[string]string, timeout time.Duration, dst a
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read body %s: %w", url, err)
+	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &Error{
@@ -164,7 +167,10 @@ func PostJSON(url string, headers map[string]string, payload any, timeout time.D
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read body %s: %w", url, err)
+	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &Error{

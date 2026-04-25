@@ -607,8 +607,8 @@ func providerConfigFingerprint(providerID string) string {
 	case "copilot":
 		parts = append(parts,
 			"token", settings.ResolveAPIKey(pk.CopilotToken, "GITHUB_TOKEN"),
-			"hosts", fileContentFingerprint(copilotHostsPath()),
-			"apps", fileContentFingerprint(copilotAppsPath()),
+			"hosts", fileContentFingerprint(CopilotHostsPath()),
+			"apps", fileContentFingerprint(CopilotAppsPath()),
 		)
 	case "synthetic":
 		parts = append(parts,
@@ -642,11 +642,11 @@ func providerConfigFingerprint(providerID string) string {
 		)
 	case "gemini":
 		parts = append(parts,
-			"creds", fileContentFingerprint(geminiCredentialsPath()),
+			"creds", fileContentFingerprint(geminiCredPath()),
 		)
 	case "vertexai":
 		parts = append(parts,
-			"adc", fileContentFingerprint(vertexAICredentialsPath()),
+			"adc", fileContentFingerprint(vertexAICredPath()),
 		)
 	case "codex":
 		parts = append(parts,
@@ -683,66 +683,6 @@ func zaiRegionHostFingerprint(region string) string {
 	default:
 		return "https://api.z.ai"
 	}
-}
-
-// copilotHostsPath returns the GitHub Copilot hosts.json path.
-func copilotHostsPath() string {
-	return homePath(".config", "github-copilot", "hosts.json")
-}
-
-// copilotAppsPath returns the GitHub Copilot apps.json path.
-func copilotAppsPath() string {
-	return homePath(".config", "github-copilot", "apps.json")
-}
-
-// geminiCredentialsPath mirrors Gemini CLI's OAuth credentials path.
-func geminiCredentialsPath() string {
-	configDir := geminiConfigDirPath()
-	if configDir == "" {
-		return ""
-	}
-	return filepath.Join(configDir, "oauth_creds.json")
-}
-
-// geminiConfigDirPath mirrors Gemini CLI's config directory selection.
-func geminiConfigDirPath() string {
-	for _, name := range []string{"GEMINI_CONFIG_DIR", "GEMINI_CONFIG_HOME"} {
-		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
-			return filepath.Clean(value)
-		}
-	}
-	return homePath(".gemini")
-}
-
-// vertexAICredentialsPath mirrors gcloud's ADC credentials path.
-func vertexAICredentialsPath() string {
-	configDir := vertexAIConfigDirPath()
-	if configDir == "" {
-		return ""
-	}
-	return filepath.Join(configDir, "application_default_credentials.json")
-}
-
-// vertexAIConfigDirPath mirrors gcloud's config directory selection.
-func vertexAIConfigDirPath() string {
-	if value := strings.TrimSpace(os.Getenv("CLOUDSDK_CONFIG")); value != "" {
-		return filepath.Clean(value)
-	}
-	if appData := strings.TrimSpace(os.Getenv("APPDATA")); appData != "" {
-		path := filepath.Join(appData, "gcloud")
-		if _, err := os.Stat(path); err == nil {
-			return path
-		}
-	}
-	return homePath(".config", "gcloud")
-}
-
-// codexConfigPath returns the Codex config.toml path.
-func codexConfigPath() string {
-	if ch := strings.TrimSpace(os.Getenv("CODEX_HOME")); ch != "" {
-		return filepath.Join(ch, "config.toml")
-	}
-	return homePath(".codex", "config.toml")
 }
 
 // claudeCredentialsFingerprint mirrors Claude credential source precedence.

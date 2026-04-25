@@ -173,7 +173,7 @@ func scheduleDueKeys(conn *streamdeck.Connection) {
 	mu.Unlock()
 
 	for _, ctx := range due {
-		refreshKey(conn, ctx, false)
+		go refreshKey(conn, ctx, false)
 	}
 }
 
@@ -203,7 +203,7 @@ func refreshAllVisible(conn *streamdeck.Connection) {
 	mu.Unlock()
 
 	for _, ctx := range contexts {
-		refreshKey(conn, ctx, false)
+		go refreshKey(conn, ctx, false)
 	}
 }
 

@@ -71,18 +71,22 @@ func RegisterHost(hostName, binaryPath string, allowedOrigins []string) error {
 		return err
 	}
 
-	var firstErr error
+	var successes int
+	var lastErr error
 	for _, b := range windowsBrowserKeys {
 		key := fmt.Sprintf(`HKCU\%s\%s`, b.regRoot, hostName)
 		cmd := exec.Command("reg", "add", key, "/ve", "/t", "REG_SZ", "/d", path, "/f")
 		winutil.HideConsoleWindow(cmd)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			if firstErr == nil {
-				firstErr = fmt.Errorf("reg add %s: %w (%s)", b.name, err, string(out))
-			}
+			lastErr = fmt.Errorf("reg add %s: %w (%s)", b.name, err, string(out))
+		} else {
+			successes++
 		}
 	}
-	return firstErr
+	if successes == 0 && len(windowsBrowserKeys) > 0 {
+		return lastErr
+	}
+	return nil
 }
 
 // IsHostRegistered reports whether the native-messaging manifest file

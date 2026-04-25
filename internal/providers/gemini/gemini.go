@@ -308,14 +308,14 @@ func refreshAccessToken(ctx context.Context, refreshToken, credsPath string, raw
 		return "", "", fmt.Errorf("Gemini token refresh response missing access token")
 	}
 	idToken := providerutil.StringValue(parsed["id_token"])
-	updateStoredCredentials(credsPath, rawCreds, parsed)
+	_ = updateStoredCredentials(credsPath, rawCreds, parsed)
 	return accessToken, idToken, nil
 }
 
-// updateStoredCredentials persists refreshed OAuth fields best-effort.
-func updateStoredCredentials(path string, rawCreds, refresh map[string]any) {
+// updateStoredCredentials persists refreshed OAuth fields.
+func updateStoredCredentials(path string, rawCreds, refresh map[string]any) error {
 	if rawCreds == nil {
-		return
+		return nil
 	}
 	for _, key := range []string{"access_token", "id_token"} {
 		if v := providerutil.StringValue(refresh[key]); v != "" {
@@ -325,11 +325,7 @@ func updateStoredCredentials(path string, rawCreds, refresh map[string]any) {
 	if expiresIn, ok := providerutil.FloatValue(refresh["expires_in"]); ok && expiresIn > 0 {
 		rawCreds["expiry_date"] = float64(time.Now().Add(time.Duration(expiresIn) * time.Second).UnixMilli())
 	}
-	data, err := json.MarshalIndent(rawCreds, "", "  ")
-	if err != nil {
-		return
-	}
-	_ = os.WriteFile(path, append(data, '\n'), 0600)
+	return providerutil.WriteJSONAtomic(path, rawCreds)
 }
 
 // extractOAuthClientCredentials locates the installed Gemini CLI package and

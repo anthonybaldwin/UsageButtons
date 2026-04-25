@@ -26,6 +26,7 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/providers/providerutil"
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
@@ -352,7 +353,7 @@ func saveRefreshAttempt(attemptedAt time.Time) error {
 		root = map[string]any{}
 	}
 	root["usage_buttons_last_refresh_attempt"] = attemptedAt.Format(time.RFC3339Nano)
-	return writeCredentialsRoot(path, root)
+	return providerutil.WriteJSONAtomic(path, root)
 }
 
 // saveCredentials updates auth.json with refreshed OAuth tokens while
@@ -379,50 +380,7 @@ func saveCredentials(creds codexCreds, refreshedAt time.Time) error {
 	root["tokens"] = tokens
 	root["last_refresh"] = refreshedAt.Format(time.RFC3339Nano)
 	delete(root, "usage_buttons_last_refresh_attempt")
-	return writeCredentialsRoot(path, root)
-}
-
-// writeCredentialsRoot persists the auth.json root object with atomic replace semantics.
-func writeCredentialsRoot(path string, root map[string]any) error {
-	data, err := json.MarshalIndent(root, "", "  ")
-	if err != nil {
-		return err
-	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	cleanup := true
-	defer func() {
-		if cleanup {
-			_ = os.Remove(tmpPath)
-		}
-	}()
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := replaceFileAtomic(tmpPath, path); err != nil {
-		return err
-	}
-	cleanup = false
-	return nil
+	return providerutil.WriteJSONAtomic(path, root)
 }
 
 // --- API response types ---

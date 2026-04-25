@@ -7,7 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
+
+	"github.com/anthonybaldwin/UsageButtons/internal/winutil"
 )
 
 // windowsBrowserKeys lists the HKCU registry roots under which each
@@ -74,7 +75,7 @@ func RegisterHost(hostName, binaryPath string, allowedOrigins []string) error {
 	for _, b := range windowsBrowserKeys {
 		key := fmt.Sprintf(`HKCU\%s\%s`, b.regRoot, hostName)
 		cmd := exec.Command("reg", "add", key, "/ve", "/t", "REG_SZ", "/d", path, "/f")
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		winutil.HideConsoleWindow(cmd)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("reg add %s: %w (%s)", b.name, err, string(out))
@@ -102,7 +103,7 @@ func UnregisterHost(hostName string) error {
 	for _, b := range windowsBrowserKeys {
 		key := fmt.Sprintf(`HKCU\%s\%s`, b.regRoot, hostName)
 		cmd := exec.Command("reg", "delete", key, "/f")
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		winutil.HideConsoleWindow(cmd)
 		_, _ = cmd.CombinedOutput()
 	}
 	var firstErr error

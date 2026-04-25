@@ -5,6 +5,8 @@ import (
 	"context"
 	"os"
 	"os/exec"
+
+	"github.com/anthonybaldwin/UsageButtons/internal/winutil"
 )
 
 // CommandResult is the captured output from a completed CLI command.
@@ -22,6 +24,7 @@ func RunCommand(ctx context.Context, name string, args ...string) (CommandResult
 	}
 	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	winutil.HideConsoleWindow(cmd)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

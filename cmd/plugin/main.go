@@ -301,9 +301,14 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 				"#49a3b0", "#a855f7", "#00bfa5", "#888888", "#938bb4", "#e85a6a", "#4c00ff",
 				// Old Codex green (pre blue/purple gradient).
 				"#10a37f",
+				// Old provider-parity colors (pre-CodexBar palette sync).
+				"#8534f3", "#f54e00", "#01a4ff", "#0071e3",
 			}
 			if prov != nil {
 				staleFill = append(staleFill, strings.ToLower(prov.BrandColor()))
+				if prov.ID() == "zai" {
+					staleFill = append(staleFill, "#ffffff")
+				}
 			}
 			lc := strings.ToLower(ks.FillColor)
 			for _, s := range staleFill {

@@ -116,10 +116,10 @@ func (Provider) ID() string { return "cursor" }
 func (Provider) Name() string { return "Cursor" }
 
 // BrandColor returns the accent color used on button faces.
-func (Provider) BrandColor() string { return "#F54E00" }
+func (Provider) BrandColor() string { return "#00bfa5" }
 
 // BrandBg returns the background color used on button faces.
-func (Provider) BrandBg() string { return "#1a0e06" }
+func (Provider) BrandBg() string { return "#06221f" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {

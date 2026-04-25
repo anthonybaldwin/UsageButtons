@@ -15,6 +15,10 @@ const Canvas = 144
 type ProviderGlyph struct {
 	// ViewBox is the SVG viewBox attribute for the glyph path.
 	ViewBox string
+	// Markup holds raw inner SVG elements for glyphs that are not plain
+	// path-only marks. Elements should use currentColor for brand-colored
+	// fills/strokes so each render layer can recolor them safely.
+	Markup string
 	// D is the SVG path `d` attribute for the glyph geometry.
 	D string
 	// Paths holds multi-path glyph geometry. When set, Paths is rendered
@@ -487,6 +491,11 @@ func expandHexColor(s string) (string, bool) {
 // stroke width stays visually consistent regardless of the scale
 // ContentFitTransform applied.
 func glyphPathMarkup(xf, color string, opacity float64, g *ProviderGlyph) string {
+	if g.Markup != "" {
+		return fmt.Sprintf(
+			`<g transform="%s" color="%s" opacity="%.2f">%s</g>`,
+			xf, color, opacity, g.Markup)
+	}
 	if len(g.Paths) > 0 {
 		var parts []string
 		for _, p := range g.Paths {

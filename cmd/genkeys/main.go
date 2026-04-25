@@ -13,13 +13,13 @@ import (
 var providerColors = map[string]string{
 	"claude":     "#cc7c5e",
 	"codex":      "#10A37F",
-	"copilot":    "#1f6feb",
-	"cursor":     "#888888",
+	"copilot":    "#a855f7",
+	"cursor":     "#00bfa5",
 	"ollama":     "#f9fafb",
 	"openrouter": "#6467f2",
 	"warp":       "#938bb4",
-	"zai":        "#4c00ff",
-	"kimi-k2":    "#e85a6a",
+	"zai":        "#e85a6a",
+	"kimi-k2":    "#4c00ff",
 }
 
 func main() {
@@ -49,6 +49,9 @@ func main() {
 }
 
 func glyphKeyMarkup(glyph *render.ProviderGlyph, color string) string {
+	if glyph.Markup != "" {
+		return fmt.Sprintf(`<g color="%s">%s</g>`, color, glyph.Markup)
+	}
 	if len(glyph.Paths) == 0 {
 		if glyph.Stroke {
 			return fmt.Sprintf(`<path d="%s" fill="none" stroke="%s" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`, glyph.D, color)

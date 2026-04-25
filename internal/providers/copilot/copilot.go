@@ -116,7 +116,7 @@ func (Provider) ID() string { return "copilot" }
 func (Provider) Name() string { return "Copilot" }
 
 // BrandColor returns the accent color used on button faces.
-func (Provider) BrandColor() string { return "#8534F3" }
+func (Provider) BrandColor() string { return "#a855f7" }
 
 // BrandBg returns the background color used on button faces.
 func (Provider) BrandBg() string { return "#150d2e" }
@@ -142,12 +142,12 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 
 	var resp copilotUsageResponse
 	err := httputil.GetJSON(usageURL, map[string]string{
-		"Authorization":          "token " + token,
-		"Accept":                 "application/json",
-		"editor-version":         "vscode/1.96.2",
-		"editor-plugin-version":  "copilot-chat/0.26.7",
-		"User-Agent":             "GitHubCopilotChat/0.26.7",
-		"x-github-api-version":   "2025-04-01",
+		"Authorization":         "token " + token,
+		"Accept":                "application/json",
+		"editor-version":        "vscode/1.96.2",
+		"editor-plugin-version": "copilot-chat/0.26.7",
+		"User-Agent":            "GitHubCopilotChat/0.26.7",
+		"x-github-api-version":  "2025-04-01",
 	}, 15*time.Second, &resp)
 
 	if err != nil {

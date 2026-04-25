@@ -220,9 +220,12 @@ func ContentFitGlyphTransform(g *ProviderGlyph, tx, ty, tw, th float64) string {
 	if g == nil {
 		return ""
 	}
-	if len(g.Paths) > 0 {
+	if g.Markup != "" || len(g.Paths) > 0 {
 		if bb, ok := ViewBoxBBox(g.ViewBox); ok {
 			return ContentFitBBoxTransform(bb, tx, ty, tw, th)
+		}
+		if g.Markup != "" {
+			return ""
 		}
 		var bb BBox
 		for _, p := range g.Paths {

@@ -640,6 +640,14 @@ func providerConfigFingerprint(providerID string) string {
 			"token", settings.ResolveAPIKey(pk.FactoryToken, "FACTORY_TOKEN"),
 			"base-url", settings.ResolveEndpoint(pk.FactoryBaseURL, "", "FACTORY_BASE_URL"),
 		)
+	case "gemini":
+		parts = append(parts,
+			"creds", fileContentFingerprint(geminiCredentialsPath()),
+		)
+	case "vertexai":
+		parts = append(parts,
+			"adc", fileContentFingerprint(vertexAICredentialsPath()),
+		)
 	case "codex":
 		parts = append(parts,
 			"base-url", pk.CodexChatGPTBaseURL,
@@ -685,6 +693,48 @@ func copilotHostsPath() string {
 // copilotAppsPath returns the GitHub Copilot apps.json path.
 func copilotAppsPath() string {
 	return homePath(".config", "github-copilot", "apps.json")
+}
+
+// geminiCredentialsPath mirrors Gemini CLI's OAuth credentials path.
+func geminiCredentialsPath() string {
+	configDir := geminiConfigDirPath()
+	if configDir == "" {
+		return ""
+	}
+	return filepath.Join(configDir, "oauth_creds.json")
+}
+
+// geminiConfigDirPath mirrors Gemini CLI's config directory selection.
+func geminiConfigDirPath() string {
+	for _, name := range []string{"GEMINI_CONFIG_DIR", "GEMINI_CONFIG_HOME"} {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return filepath.Clean(value)
+		}
+	}
+	return homePath(".gemini")
+}
+
+// vertexAICredentialsPath mirrors gcloud's ADC credentials path.
+func vertexAICredentialsPath() string {
+	configDir := vertexAIConfigDirPath()
+	if configDir == "" {
+		return ""
+	}
+	return filepath.Join(configDir, "application_default_credentials.json")
+}
+
+// vertexAIConfigDirPath mirrors gcloud's config directory selection.
+func vertexAIConfigDirPath() string {
+	if value := strings.TrimSpace(os.Getenv("CLOUDSDK_CONFIG")); value != "" {
+		return filepath.Clean(value)
+	}
+	if appData := strings.TrimSpace(os.Getenv("APPDATA")); appData != "" {
+		path := filepath.Join(appData, "gcloud")
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return homePath(".config", "gcloud")
 }
 
 // codexConfigPath returns the Codex config.toml path.

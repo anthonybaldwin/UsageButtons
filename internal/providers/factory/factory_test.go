@@ -3,6 +3,8 @@ package factory
 import (
 	"testing"
 	"time"
+
+	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
 func TestBuildSnapshotMapsStandardAndPremium(t *testing.T) {
@@ -62,6 +64,33 @@ func TestUsagePercentHandlesUnlimitedAllowance(t *testing.T) {
 	})
 	if got != 50 {
 		t.Fatalf("usagePercent() = %v, want 50", got)
+	}
+}
+
+func TestDisplayNameTitleCasesTier(t *testing.T) {
+	got := displayName(usageSnapshot{Tier: "résumé", OrganizationName: "Example Org"})
+	if got != "Droid Résumé Example Org" {
+		t.Fatalf("displayName() = %q", got)
+	}
+}
+
+func TestBaseCandidatesPrefersOverride(t *testing.T) {
+	oldSettings := settings.Get()
+	t.Cleanup(func() {
+		settings.Set(oldSettings)
+	})
+	t.Setenv("FACTORY_BASE_URL", "")
+	t.Setenv("FACTORY_DROID_BASE_URL", "")
+	settings.Set(settings.GlobalSettings{
+		ProviderKeys: settings.ProviderKeys{FactoryBaseURL: "https://factory.example.test/"},
+	})
+
+	got := baseCandidates()
+	if len(got) == 0 {
+		t.Fatal("baseCandidates() returned no candidates")
+	}
+	if got[0] != "https://factory.example.test" {
+		t.Fatalf("baseCandidates()[0] = %q, want override first; all = %#v", got[0], got)
 	}
 }
 

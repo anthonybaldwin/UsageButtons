@@ -14,6 +14,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
@@ -379,7 +381,7 @@ func tokenCaption(usage tokenUsage) string {
 func displayName(usage usageSnapshot) string {
 	parts := []string{providerName}
 	if usage.Tier != "" {
-		parts = append(parts, strings.Title(usage.Tier))
+		parts = append(parts, titleWords(usage.Tier))
 	} else if usage.PlanName != "" && !strings.Contains(strings.ToLower(usage.PlanName), "factory") {
 		parts = append(parts, usage.PlanName)
 	}
@@ -389,11 +391,29 @@ func displayName(usage usageSnapshot) string {
 	return strings.Join(parts, " ")
 }
 
-// baseCandidates returns Factory base URL candidates in CodexBar order.
+// baseCandidates returns Factory base URL candidates, preferring user overrides.
 func baseCandidates() []string {
 	pk := settings.ProviderKeysGet()
 	override := settings.ResolveEndpoint(pk.FactoryBaseURL, "", "FACTORY_BASE_URL", "FACTORY_DROID_BASE_URL")
-	return uniqueStrings(nonEmptyStrings(authBase, apiBase, defaultBase, override))
+	return uniqueStrings(nonEmptyStrings(override, authBase, apiBase, defaultBase))
+}
+
+// titleWords title-cases whitespace-separated labels.
+func titleWords(value string) string {
+	words := strings.Fields(value)
+	for i, word := range words {
+		words[i] = titleWord(word)
+	}
+	return strings.Join(words, " ")
+}
+
+// titleWord title-cases one word while preserving Unicode suffix casing.
+func titleWord(value string) string {
+	r, size := utf8.DecodeRuneInString(value)
+	if r == utf8.RuneError && size == 0 {
+		return ""
+	}
+	return string(unicode.ToTitle(r)) + strings.ToLower(value[size:])
 }
 
 // bearerToken resolves a Factory bearer token from settings or env vars.

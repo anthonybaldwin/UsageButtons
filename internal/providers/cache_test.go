@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -312,6 +313,55 @@ func TestProviderConfigFingerprintIncludesFactorySettings(t *testing.T) {
 	withBaseURL := providerConfigFingerprint("factory")
 	if withBaseURL == withToken {
 		t.Fatal("factory base URL change did not change provider fingerprint")
+	}
+}
+
+// TestProviderConfigFingerprintIncludesGeminiCredentials verifies Gemini
+// re-authentication invalidates restart-surviving snapshots.
+func TestProviderConfigFingerprintIncludesGeminiCredentials(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("GEMINI_CONFIG_DIR", dir)
+	t.Setenv("GEMINI_CONFIG_HOME", "")
+	path := filepath.Join(dir, "oauth_creds.json")
+
+	base := providerConfigFingerprint("gemini")
+	if err := os.WriteFile(path, []byte(`{"refresh_token":"one"}`), 0o600); err != nil {
+		t.Fatalf("write gemini creds: %v", err)
+	}
+	withOne := providerConfigFingerprint("gemini")
+	if withOne == base {
+		t.Fatal("gemini credentials did not change provider fingerprint")
+	}
+	if err := os.WriteFile(path, []byte(`{"refresh_token":"two"}`), 0o600); err != nil {
+		t.Fatalf("rewrite gemini creds: %v", err)
+	}
+	withTwo := providerConfigFingerprint("gemini")
+	if withTwo == withOne {
+		t.Fatal("gemini credentials rewrite did not change provider fingerprint")
+	}
+}
+
+// TestProviderConfigFingerprintIncludesVertexAICredentials verifies gcloud ADC
+// re-authentication invalidates restart-surviving snapshots.
+func TestProviderConfigFingerprintIncludesVertexAICredentials(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLOUDSDK_CONFIG", dir)
+	path := filepath.Join(dir, "application_default_credentials.json")
+
+	base := providerConfigFingerprint("vertexai")
+	if err := os.WriteFile(path, []byte(`{"refresh_token":"one"}`), 0o600); err != nil {
+		t.Fatalf("write vertex ai creds: %v", err)
+	}
+	withOne := providerConfigFingerprint("vertexai")
+	if withOne == base {
+		t.Fatal("vertex ai credentials did not change provider fingerprint")
+	}
+	if err := os.WriteFile(path, []byte(`{"refresh_token":"two"}`), 0o600); err != nil {
+		t.Fatalf("rewrite vertex ai creds: %v", err)
+	}
+	withTwo := providerConfigFingerprint("vertexai")
+	if withTwo == withOne {
+		t.Fatal("vertex ai credentials rewrite did not change provider fingerprint")
 	}
 }
 

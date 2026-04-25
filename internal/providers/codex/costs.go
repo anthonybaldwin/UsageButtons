@@ -43,56 +43,123 @@ var (
 // codexCostCacheTTL bounds how often session logs are rescanned.
 const codexCostCacheTTL = 5 * time.Minute
 
-// Per-million-token pricing for GPT-5 class Codex models (USD).
-const (
-	// codexPriceInputPerMTok is the price per million input tokens.
-	codexPriceInputPerMTok = 1.25
-	// codexPriceCachedPerMTok is the price per million cached-input tokens.
-	codexPriceCachedPerMTok = 0.125
-	// codexPriceOutputPerMTok is the price per million output tokens.
-	codexPriceOutputPerMTok = 10.0
-	// codexPriceReasoningPerMTok is the price per million reasoning tokens.
-	codexPriceReasoningPerMTok = 10.0
-)
+// codexCumulativeBaselineMinTokens is the smallest inherited baseline that
+// can be treated as cumulative without a pinned bucket signal.
+//
+// Small single-bucket baselines can be exceeded by ordinary per-turn rows; a
+// larger inherited baseline is more likely to represent cumulative fork state
+// when every bucket covers the baseline but none is pinned.
+const codexCumulativeBaselineMinTokens = 1_000
+
+// codexPricing stores per-million-token prices in USD.
+type codexPricing struct {
+	input  float64
+	output float64
+	cached *float64
+}
+
+// codexPriceTable mirrors CodexBar's Codex model pricing table. Unknown
+// models intentionally do not fall back to a fake cost; we keep the local
+// estimate limited to models whose prices we know.
+var codexPriceTable = map[string]codexPricing{
+	"gpt-5":               {input: 1.25, output: 10.0, cached: ptrFloat(0.125)},
+	"gpt-5-codex":         {input: 1.25, output: 10.0, cached: ptrFloat(0.125)},
+	"gpt-5-mini":          {input: 0.25, output: 2.0, cached: ptrFloat(0.025)},
+	"gpt-5-nano":          {input: 0.05, output: 0.4, cached: ptrFloat(0.005)},
+	"gpt-5-pro":           {input: 15.0, output: 120.0},
+	"gpt-5.1":             {input: 1.25, output: 10.0, cached: ptrFloat(0.125)},
+	"gpt-5.1-codex":       {input: 1.25, output: 10.0, cached: ptrFloat(0.125)},
+	"gpt-5.1-codex-max":   {input: 1.25, output: 10.0, cached: ptrFloat(0.125)},
+	"gpt-5.1-codex-mini":  {input: 0.25, output: 2.0, cached: ptrFloat(0.025)},
+	"gpt-5.2":             {input: 1.75, output: 14.0, cached: ptrFloat(0.175)},
+	"gpt-5.2-codex":       {input: 1.75, output: 14.0, cached: ptrFloat(0.175)},
+	"gpt-5.2-pro":         {input: 21.0, output: 168.0},
+	"gpt-5.3-codex":       {input: 1.75, output: 14.0, cached: ptrFloat(0.175)},
+	"gpt-5.3-codex-spark": {input: 0, output: 0, cached: ptrFloat(0)},
+	"gpt-5.4":             {input: 2.5, output: 15.0, cached: ptrFloat(0.25)},
+	"gpt-5.4-mini":        {input: 0.75, output: 4.5, cached: ptrFloat(0.075)},
+	"gpt-5.4-nano":        {input: 0.2, output: 1.25, cached: ptrFloat(0.02)},
+	"gpt-5.4-pro":         {input: 30.0, output: 180.0},
+}
 
 // codexTokenUsage mirrors the total_token_usage object Codex writes into
 // every token_count event.
 type codexTokenUsage struct {
-	InputTokens           int `json:"input_tokens"`
-	CachedInputTokens     int `json:"cached_input_tokens"`
-	OutputTokens          int `json:"output_tokens"`
+	// InputTokens is the uncached input token count.
+	InputTokens int `json:"input_tokens"`
+	// CachedInputTokens is the cached input token count.
+	CachedInputTokens int `json:"cached_input_tokens"`
+	// CacheReadInputTokens is the alternate cached input token count key.
+	CacheReadInputTokens int `json:"cache_read_input_tokens"`
+	// OutputTokens is the visible output token count.
+	OutputTokens int `json:"output_tokens"`
+	// ReasoningOutputTokens is the hidden reasoning output token count.
 	ReasoningOutputTokens int `json:"reasoning_output_tokens"`
-	TotalTokens           int `json:"total_tokens"`
+	// TotalTokens is Codex's optional aggregate token count.
+	TotalTokens int `json:"total_tokens"`
 }
 
 // codexLine covers both session_meta and event_msg/token_count lines.
 // Unused fields for a given event type stay zero-valued.
 type codexLine struct {
+	// Timestamp is the event timestamp string.
 	Timestamp string `json:"timestamp"`
-	Type      string `json:"type"`
-	Payload   *struct {
-		Type            string `json:"type"`
-		SessionID       string `json:"session_id"`
-		ForkedFromID    string `json:"forked_from_id"`
+	// Type is the event type.
+	Type string `json:"type"`
+	// Model is a top-level model hint.
+	Model string `json:"model"`
+	// Payload is the event body.
+	Payload *struct {
+		// Type is the payload event type.
+		Type string `json:"type"`
+		// SessionID is the Codex session identifier.
+		SessionID string `json:"session_id"`
+		// ForkedFromID is the snake_case parent session identifier.
+		ForkedFromID string `json:"forked_from_id"`
+		// ForkedFromIDAlt is the camelCase parent session identifier.
 		ForkedFromIDAlt string `json:"forkedFromId"`
+		// ParentSessionID is the alternate parent session identifier.
 		ParentSessionID string `json:"parent_session_id"`
-		Timestamp       string `json:"timestamp"`
-		Info            *struct {
+		// Timestamp is the payload timestamp string.
+		Timestamp string `json:"timestamp"`
+		// Model is a payload-level model hint.
+		Model string `json:"model"`
+		// Info contains token usage and model metadata.
+		Info *struct {
+			// TotalTokenUsage is cumulative usage for the session.
 			TotalTokenUsage *codexTokenUsage `json:"total_token_usage"`
+			// LastTokenUsage is usage for the last turn or cumulative fork row.
+			LastTokenUsage *codexTokenUsage `json:"last_token_usage"`
+			// Model is an info-level model hint.
+			Model string `json:"model"`
+			// ModelName is an alternate info-level model hint.
+			ModelName string `json:"model_name"`
 		} `json:"info"`
 	} `json:"payload"`
 }
 
 // codexCostResult aggregates today / last-30d token cost estimates.
 type codexCostResult struct {
-	Today   float64
+	// Today is the estimated spend since local midnight.
+	Today float64
+	// Last30d is the estimated spend over the last 30 days.
 	Last30d float64
+	// Seen reports whether at least one priced Codex usage row was found.
+	Seen bool
 }
 
 // codexRawSnapshot is one cumulative total_token_usage observation
 // paired with the timestamp at which it was emitted.
 type codexRawSnapshot struct {
 	ts    time.Time
+	usage codexTokenUsage
+}
+
+// codexUsageDelta is a token delta paired with the model active when it
+// was emitted.
+type codexUsageDelta struct {
+	ts    time.Time
+	model string
 	usage codexTokenUsage
 }
 
@@ -108,7 +175,15 @@ type codexSessionMeta struct {
 // through a single scan so forked sessions reparse parents at most once.
 type codexScanState struct {
 	byID        map[string]string // session ID → file path, populated during discovery
+	metaByID    map[string]codexSessionMeta
 	parentCache map[string][]codexRawSnapshot
+}
+
+// codexCostLog emits a tagged local-cost scan warning through the provider log sink.
+func codexCostLog(format string, args ...any) {
+	if providers.LogSink != nil {
+		providers.LogSink(fmt.Sprintf("[codex] local costs: "+format, args...))
+	}
 }
 
 // sessionsRoot returns the filesystem root under which Codex writes
@@ -153,6 +228,7 @@ func scanCodexCosts() (*codexCostResult, error) {
 
 	state := &codexScanState{
 		byID:        make(map[string]string),
+		metaByID:    make(map[string]codexSessionMeta),
 		parentCache: make(map[string][]codexRawSnapshot),
 	}
 
@@ -164,6 +240,7 @@ func scanCodexCosts() (*codexCostResult, error) {
 
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
+			codexCostLog("skipping %s: %v", path, err)
 			return nil
 		}
 		if d.IsDir() || !strings.HasSuffix(d.Name(), ".jsonl") {
@@ -171,11 +248,17 @@ func scanCodexCosts() (*codexCostResult, error) {
 		}
 		info, err := d.Info()
 		if err != nil {
+			codexCostLog("skipping %s: %v", path, err)
 			return nil
 		}
-		meta, _ := readCodexSessionMeta(path)
+		meta, _, err := readCodexSessionMeta(path)
+		if err != nil {
+			codexCostLog("skipping %s: %v", path, err)
+			return nil
+		}
 		if meta.sessionID != "" {
 			state.byID[meta.sessionID] = path
+			state.metaByID[meta.sessionID] = meta
 		}
 		// Mod-time is a cheap pre-filter; a fork may still need the
 		// file as a parent even if its own last event is out of window,
@@ -189,7 +272,9 @@ func scanCodexCosts() (*codexCostResult, error) {
 
 	var result codexCostResult
 	for _, fe := range toScan {
-		scanCodexSessionFile(state, fe.path, fe.meta, todayStart, thirtyDaysAgo, &result)
+		if scanErr := scanCodexSessionFile(state, fe.path, fe.meta, todayStart, thirtyDaysAgo, &result); scanErr != nil {
+			codexCostLog("skipping %s: %v", fe.path, scanErr)
+		}
 	}
 
 	codexCostCacheErr = err
@@ -199,12 +284,11 @@ func scanCodexCosts() (*codexCostResult, error) {
 }
 
 // readCodexSessionMeta reads the first handful of lines of a JSONL file
-// looking for the session_meta event. Returns an empty meta if not found
-// or the file can't be opened.
-func readCodexSessionMeta(path string) (codexSessionMeta, bool) {
+// looking for the session_meta event. Returns an empty meta if not found.
+func readCodexSessionMeta(path string) (codexSessionMeta, bool, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return codexSessionMeta{}, false
+		return codexSessionMeta{}, false, fmt.Errorf("open codex session meta %s: %w", path, err)
 	}
 	defer f.Close()
 
@@ -235,35 +319,48 @@ func readCodexSessionMeta(path string) (codexSessionMeta, bool) {
 				meta.forkTS = t
 			}
 		}
-		return meta, true
+		return meta, true, nil
 	}
-	return codexSessionMeta{}, false
+	if err := scanner.Err(); err != nil {
+		return codexSessionMeta{}, false, fmt.Errorf("scan codex session meta %s: %w", path, err)
+	}
+	return codexSessionMeta{}, false, nil
 }
 
 // parentSnapshots returns every cumulative total_token_usage in the named
 // parent session, in timestamp order. Results are cached on the scan state
 // so multiple children forking from the same parent don't reparse it.
-func parentSnapshots(state *codexScanState, parentID string) []codexRawSnapshot {
+func parentSnapshots(state *codexScanState, parentID string) ([]codexRawSnapshot, bool) {
 	if snaps, ok := state.parentCache[parentID]; ok {
-		return snaps
+		return snaps, true
 	}
 	path, ok := state.byID[parentID]
 	if !ok {
-		state.parentCache[parentID] = nil
-		return nil
+		return nil, false
 	}
-	snaps := readCodexSnapshots(path)
+	var seed codexTokenUsage
+	if meta := state.metaByID[parentID]; meta.forkedFromID != "" {
+		var ok bool
+		seed, ok = inheritedBaseline(state, meta.forkedFromID, meta.forkTS)
+		if !ok {
+			return nil, false
+		}
+	}
+	snaps, err := readCodexSnapshots(path, seed)
+	if err != nil {
+		return nil, false
+	}
 	state.parentCache[parentID] = snaps
-	return snaps
+	return snaps, true
 }
 
 // readCodexSnapshots reads every cumulative total_token_usage from a file
 // in the order it appears. It reads the raw cumulative values — fork
 // inheritance subtraction is applied separately where needed.
-func readCodexSnapshots(path string) []codexRawSnapshot {
+func readCodexSnapshots(path string, seed codexTokenUsage) ([]codexRawSnapshot, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("open codex snapshots %s: %w", path, err)
 	}
 	defer f.Close()
 
@@ -271,6 +368,8 @@ func readCodexSnapshots(path string) []codexRawSnapshot {
 	scanner.Buffer(make([]byte, 256*1024), 4*1024*1024)
 
 	var out []codexRawSnapshot
+	prev := seed
+	remainingInherited := &seed
 	for scanner.Scan() {
 		var ev codexLine
 		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
@@ -279,16 +378,29 @@ func readCodexSnapshots(path string) []codexRawSnapshot {
 		if ev.Type != "event_msg" || ev.Payload == nil || ev.Payload.Type != "token_count" {
 			continue
 		}
-		if ev.Payload.Info == nil || ev.Payload.Info.TotalTokenUsage == nil {
+		if ev.Payload.Info == nil {
 			continue
 		}
 		t, ok := parseCodexTimestamp(ev.Timestamp)
 		if !ok {
 			continue
 		}
-		out = append(out, codexRawSnapshot{ts: t, usage: *ev.Payload.Info.TotalTokenUsage})
+		switch {
+		case ev.Payload.Info.TotalTokenUsage != nil:
+			prev = normalizeCodexUsage(*ev.Payload.Info.TotalTokenUsage)
+			remainingInherited = nil
+		case ev.Payload.Info.LastTokenUsage != nil:
+			delta := adjustInheritedLastDelta(normalizeCodexUsage(*ev.Payload.Info.LastTokenUsage), &remainingInherited)
+			prev = addUsage(prev, delta)
+		default:
+			continue
+		}
+		out = append(out, codexRawSnapshot{ts: t, usage: prev})
 	}
-	return out
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan codex snapshots %s: %w", path, err)
+	}
+	return out, nil
 }
 
 // inheritedBaseline walks the parent's snapshots and returns the last
@@ -296,43 +408,203 @@ func readCodexSnapshots(path string) []codexRawSnapshot {
 // the parent's cumulative already embeds its own inheritance, which is
 // what we want: child's raw first event minus parent's raw cumulative
 // yields exactly the tokens the child added.
-func inheritedBaseline(state *codexScanState, parentID string, forkTS time.Time) codexTokenUsage {
+func inheritedBaseline(state *codexScanState, parentID string, forkTS time.Time) (codexTokenUsage, bool) {
 	var baseline codexTokenUsage
-	for _, s := range parentSnapshots(state, parentID) {
+	snaps, ok := parentSnapshots(state, parentID)
+	if !ok {
+		return codexTokenUsage{}, false
+	}
+	for _, s := range snaps {
 		if s.ts.After(forkTS) {
 			break
 		}
 		baseline = s.usage
 	}
-	return baseline
+	return baseline, true
 }
 
 // scanCodexSessionFile walks one rollout JSONL, computes per-event deltas
 // from the raw cumulative totals, and buckets each delta into today /
 // last-30d by its own timestamp (not the session's final timestamp).
-func scanCodexSessionFile(state *codexScanState, path string, meta codexSessionMeta, todayStart, thirtyDaysAgo time.Time, result *codexCostResult) {
-	snaps := readCodexSnapshots(path)
-	if len(snaps) == 0 {
-		return
+func scanCodexSessionFile(state *codexScanState, path string, meta codexSessionMeta, todayStart, thirtyDaysAgo time.Time, result *codexCostResult) error {
+	deltas, err := readCodexDeltas(path, func(parentID string, forkTS time.Time) (codexTokenUsage, bool) {
+		return inheritedBaseline(state, parentID, forkTS)
+	}, meta)
+	if err != nil {
+		return err
+	}
+	if len(deltas) == 0 {
+		return nil
 	}
 
-	var prev codexTokenUsage
-	if meta.forkedFromID != "" {
-		prev = inheritedBaseline(state, meta.forkedFromID, meta.forkTS)
-	}
-
-	for _, s := range snaps {
-		delta := subUsage(s.usage, prev)
-		prev = s.usage
-		if s.ts.Before(thirtyDaysAgo) {
+	for _, d := range deltas {
+		if d.ts.Before(thirtyDaysAgo) {
 			continue
 		}
-		cost := codexTokenCost(delta)
+		cost, ok := codexTokenCost(d.model, d.usage)
+		if !ok {
+			continue
+		}
+		result.Seen = true
 		result.Last30d += cost
-		if !s.ts.Before(todayStart) {
+		if !d.ts.Before(todayStart) {
 			result.Today += cost
 		}
 	}
+	return nil
+}
+
+// readCodexDeltas parses one session log into per-event token deltas with
+// the best model hint available for each token_count event.
+func readCodexDeltas(path string, inherited func(string, time.Time) (codexTokenUsage, bool), meta codexSessionMeta) ([]codexUsageDelta, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open codex deltas %s: %w", path, err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 256*1024), 4*1024*1024)
+
+	var out []codexUsageDelta
+	var currentModel string
+	var pending []codexUsageDelta
+	var remainingInherited *codexTokenUsage
+	var prev codexTokenUsage
+	if meta.forkedFromID != "" && inherited != nil {
+		// Fall back to a zero baseline when the parent is not resolvable
+		// (parent file deleted, permission flipped mid-walk, or sat under a
+		// directory that errored during discovery). Pricing the child from
+		// zero over-counts inherited tokens, but that is preferable to
+		// dropping the entire session's cost data for the TTL window.
+		if baseline, ok := inherited(meta.forkedFromID, meta.forkTS); ok {
+			prev = baseline
+			remainingInherited = &baseline
+		} else {
+			codexCostLog("parent session %q not found; pricing %s from zero baseline", meta.forkedFromID, path)
+		}
+	}
+
+	for scanner.Scan() {
+		var ev codexLine
+		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
+			continue
+		}
+		if model := codexModelHint(ev); model != "" {
+			currentModel = normalizeCodexModel(model)
+			for i := range pending {
+				pending[i].model = currentModel
+			}
+			out = append(out, pending...)
+			pending = nil
+		}
+		if ev.Type != "event_msg" || ev.Payload == nil || ev.Payload.Type != "token_count" {
+			continue
+		}
+		t, ok := parseCodexTimestamp(ev.Timestamp)
+		if !ok {
+			continue
+		}
+		if ev.Payload.Info == nil {
+			continue
+		}
+
+		var delta codexTokenUsage
+		if ev.Payload.Info.TotalTokenUsage != nil {
+			total := normalizeCodexUsage(*ev.Payload.Info.TotalTokenUsage)
+			delta = subUsage(total, prev)
+			prev = total
+			remainingInherited = nil
+		} else if ev.Payload.Info.LastTokenUsage != nil {
+			delta = adjustInheritedLastDelta(normalizeCodexUsage(*ev.Payload.Info.LastTokenUsage), &remainingInherited)
+			prev = addUsage(prev, delta)
+		} else {
+			continue
+		}
+		if isZeroUsage(delta) {
+			continue
+		}
+		d := codexUsageDelta{ts: t, model: currentModel, usage: delta}
+		if currentModel == "" {
+			// Keep model-less codexUsageDelta rows in pending until a
+			// currentModel hint can flush them into out; if none arrives, they
+			// are discarded rather than priced as an unknown model.
+			pending = append(pending, d)
+			continue
+		}
+		out = append(out, d)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan codex deltas %s: %w", path, err)
+	}
+	return out, nil
+}
+
+// adjustInheritedLastDelta subtracts inherited fork tokens from
+// last_token_usage rows only when the row clearly contains the full inherited
+// baseline plus new usage. Plain per-turn rows are returned unchanged.
+func adjustInheritedLastDelta(raw codexTokenUsage, remaining **codexTokenUsage) codexTokenUsage {
+	if remaining == nil || *remaining == nil {
+		return raw
+	}
+	baseline := **remaining
+	if !looksCumulativeInheritedUsage(raw, baseline) {
+		*remaining = nil
+		return raw
+	}
+	adjusted := subUsage(raw, baseline)
+	*remaining = nil
+	return adjusted
+}
+
+// looksCumulativeInheritedUsage reports whether raw looks like a cumulative
+// inherited-plus-new row rather than a coincidentally large per-turn row.
+func looksCumulativeInheritedUsage(raw, baseline codexTokenUsage) bool {
+	return coversUsage(raw, baseline) && hasCumulativeShapeSignal(raw, baseline)
+}
+
+// coversUsage reports whether raw includes every non-zero token bucket in
+// baseline, which indicates inherited-plus-new rather than per-turn usage.
+func coversUsage(raw, baseline codexTokenUsage) bool {
+	return coversTokenBucket(raw.InputTokens, baseline.InputTokens) &&
+		coversTokenBucket(logicalCachedTokens(raw), logicalCachedTokens(baseline)) &&
+		coversTokenBucket(raw.OutputTokens, baseline.OutputTokens) &&
+		coversTokenBucket(raw.ReasoningOutputTokens, baseline.ReasoningOutputTokens)
+}
+
+// coversTokenBucket reports whether raw contains a non-zero baseline bucket.
+func coversTokenBucket(raw, baseline int) bool {
+	return baseline <= 0 || raw >= baseline
+}
+
+// hasCumulativeShapeSignal reports whether raw has enough baseline shape to
+// avoid treating a single-bucket per-turn row as cumulative inherited usage.
+func hasCumulativeShapeSignal(raw, baseline codexTokenUsage) bool {
+	if pinnedTokenBucket(raw.InputTokens, baseline.InputTokens) ||
+		pinnedTokenBucket(logicalCachedTokens(raw), logicalCachedTokens(baseline)) ||
+		pinnedTokenBucket(raw.OutputTokens, baseline.OutputTokens) ||
+		pinnedTokenBucket(raw.ReasoningOutputTokens, baseline.ReasoningOutputTokens) {
+		return true
+	}
+	return billableUsageTokens(baseline) >= codexCumulativeBaselineMinTokens
+}
+
+// pinnedTokenBucket reports whether a non-zero inherited bucket is unchanged.
+func pinnedTokenBucket(raw, baseline int) bool {
+	return baseline > 0 && raw == baseline
+}
+
+// logicalCachedTokens treats cached_input_tokens/cache_read_input_tokens as aliases.
+func logicalCachedTokens(u codexTokenUsage) int {
+	return max(u.CachedInputTokens, u.CacheReadInputTokens)
+}
+
+// billableUsageTokens totals logical billable buckets, excluding total_tokens.
+func billableUsageTokens(u codexTokenUsage) int {
+	return maxZero(u.InputTokens) +
+		maxZero(logicalCachedTokens(u)) +
+		maxZero(u.OutputTokens) +
+		maxZero(u.ReasoningOutputTokens)
 }
 
 // subUsage subtracts b from a field-by-field. Negative fields are floored
@@ -342,10 +614,44 @@ func subUsage(a, b codexTokenUsage) codexTokenUsage {
 	return codexTokenUsage{
 		InputTokens:           maxZero(a.InputTokens - b.InputTokens),
 		CachedInputTokens:     maxZero(a.CachedInputTokens - b.CachedInputTokens),
+		CacheReadInputTokens:  maxZero(a.CacheReadInputTokens - b.CacheReadInputTokens),
 		OutputTokens:          maxZero(a.OutputTokens - b.OutputTokens),
 		ReasoningOutputTokens: maxZero(a.ReasoningOutputTokens - b.ReasoningOutputTokens),
 		TotalTokens:           maxZero(a.TotalTokens - b.TotalTokens),
 	}
+}
+
+// addUsage adds b to a field-by-field.
+func addUsage(a, b codexTokenUsage) codexTokenUsage {
+	return codexTokenUsage{
+		InputTokens:           a.InputTokens + b.InputTokens,
+		CachedInputTokens:     a.CachedInputTokens + b.CachedInputTokens,
+		CacheReadInputTokens:  a.CacheReadInputTokens + b.CacheReadInputTokens,
+		OutputTokens:          a.OutputTokens + b.OutputTokens,
+		ReasoningOutputTokens: a.ReasoningOutputTokens + b.ReasoningOutputTokens,
+		TotalTokens:           a.TotalTokens + b.TotalTokens,
+	}
+}
+
+// isZeroUsage reports whether u has no billable token movement.
+func isZeroUsage(u codexTokenUsage) bool {
+	return u.InputTokens == 0 &&
+		u.CachedInputTokens == 0 &&
+		u.CacheReadInputTokens == 0 &&
+		u.OutputTokens == 0 &&
+		u.ReasoningOutputTokens == 0
+}
+
+// normalizeCodexUsage accepts both cached_input_tokens and the older
+// cache_read_input_tokens spelling.
+func normalizeCodexUsage(u codexTokenUsage) codexTokenUsage {
+	if u.CachedInputTokens == 0 && u.CacheReadInputTokens > 0 {
+		u.CachedInputTokens = u.CacheReadInputTokens
+	}
+	if u.CacheReadInputTokens == 0 && u.CachedInputTokens > 0 {
+		u.CacheReadInputTokens = u.CachedInputTokens
+	}
+	return u
 }
 
 // maxZero clamps n to a non-negative int.
@@ -372,11 +678,71 @@ func parseCodexTimestamp(ts string) (time.Time, bool) {
 }
 
 // codexTokenCost returns the USD cost for a single codexTokenUsage delta.
-func codexTokenCost(u codexTokenUsage) float64 {
-	return float64(u.InputTokens)*codexPriceInputPerMTok/1_000_000 +
-		float64(u.CachedInputTokens)*codexPriceCachedPerMTok/1_000_000 +
-		float64(u.OutputTokens)*codexPriceOutputPerMTok/1_000_000 +
-		float64(u.ReasoningOutputTokens)*codexPriceReasoningPerMTok/1_000_000
+// The model argument must already be normalized via normalizeCodexModel.
+// Free/preview models (all prices zero) return ok=false so zero-cost usage
+// does not mark the session as billable and surface a misleading $0.00.
+func codexTokenCost(model string, u codexTokenUsage) (float64, bool) {
+	pricing, ok := codexPriceTable[model]
+	if !ok {
+		return 0, false
+	}
+	cached := min(maxZero(u.CachedInputTokens), maxZero(u.InputTokens))
+	nonCached := maxZero(u.InputTokens - cached)
+	cachedRate := pricing.input
+	if pricing.cached != nil {
+		cachedRate = *pricing.cached
+	}
+	cost := float64(nonCached)*pricing.input/1_000_000 +
+		float64(cached)*cachedRate/1_000_000 +
+		float64(maxZero(u.OutputTokens)+maxZero(u.ReasoningOutputTokens))*pricing.output/1_000_000
+	if cost == 0 {
+		return 0, false
+	}
+	return cost, true
+}
+
+// codexModelHint extracts a model hint from the known Codex JSONL shapes.
+func codexModelHint(ev codexLine) string {
+	if ev.Payload != nil {
+		if ev.Payload.Info != nil {
+			if ev.Payload.Info.Model != "" {
+				return ev.Payload.Info.Model
+			}
+			if ev.Payload.Info.ModelName != "" {
+				return ev.Payload.Info.ModelName
+			}
+		}
+		if ev.Payload.Model != "" {
+			return ev.Payload.Model
+		}
+	}
+	return ev.Model
+}
+
+// normalizeCodexModel maps provider-prefixed and dated model IDs onto
+// pricing-table keys.
+func normalizeCodexModel(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	trimmed = strings.TrimPrefix(trimmed, "openai/")
+	if _, ok := codexPriceTable[trimmed]; ok {
+		return trimmed
+	}
+	parts := strings.Split(trimmed, "-")
+	if len(parts) > 3 {
+		last := strings.Join(parts[len(parts)-3:], "-")
+		if _, err := time.Parse("2006-01-02", last); err == nil {
+			base := strings.Join(parts[:len(parts)-3], "-")
+			if _, ok := codexPriceTable[base]; ok {
+				return base
+			}
+		}
+	}
+	return trimmed
+}
+
+// ptrFloat returns a pointer to v.
+func ptrFloat(v float64) *float64 {
+	return &v
 }
 
 // codexCostMetrics returns cost-today + cost-30d metrics built from the
@@ -387,7 +753,7 @@ func codexCostMetrics() []providers.MetricValue {
 	if err != nil || result == nil {
 		return nil
 	}
-	if result.Today == 0 && result.Last30d == 0 {
+	if !result.Seen {
 		return nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339)

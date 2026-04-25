@@ -27,6 +27,7 @@ const ALLOWED = [
   "augmentcode.com",
   "ampcode.com",
   "perplexity.ai",
+  "opencode.ai",
 ];
 
 function originAllowed(rawURL) {

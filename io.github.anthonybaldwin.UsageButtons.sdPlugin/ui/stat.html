@@ -332,6 +332,11 @@
       <p class="hint">Via extension.</p>
     </div>
 
+    <!-- OpenCode auth -->
+    <div id="authConfig-opencode" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>opencode.ai</code>. Optional workspace override: <code>CODEXBAR_OPENCODE_WORKSPACE_ID</code>.</p>
+    </div>
+
     <!-- Copilot auth -->
     <div id="authConfig-copilot" class="auth-config" style="display:none">
       <label for="copilotToken">GitHub token</label>
@@ -826,6 +831,10 @@
         ["weekly-percent",  "Weekly usage remaining %",         "pct",  "browser"],
         ["weekly-pace",     "Weekly pace (burn rate)",          "pace", "browser"],
       ],
+      opencode: [
+        ["session-percent", "5-hour usage remaining %", "pct"],
+        ["weekly-percent",  "Weekly usage remaining %", "pct"],
+      ],
       cursor: [
         ["total-percent",   "Total plan usage remaining %",       "pct",      "browser"],
         ["auto-percent",    "Auto / Composer usage remaining %",  "pct",      "browser"],
@@ -887,6 +896,7 @@
       cursor:     "#00bfa5",
       augment:    "#6366f1",
       amp:        "#dc2626",
+      opencode:   "#3b82f6",
       openrouter: "#6467f2",
       perplexity: "#20b2aa",
       warp:       "#938bb4",
@@ -908,6 +918,7 @@
       cursor:     "#06221f",
       augment:    "#10112f",
       amp:        "#250b0b",
+      opencode:   "#081a33",
       openrouter: "#101028",
       perplexity: "#082423",
       warp:       "#171521",
@@ -919,7 +930,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "amp", "ollama", "openrouter", "perplexity", "warp", "zai", "kimi-k2", "kilo", "kiro", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "amp", "ollama", "opencode", "openrouter", "perplexity", "warp", "zai", "kimi-k2", "kilo", "kiro", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -930,6 +941,7 @@
       augment:    "Augment",
       amp:        "Amp",
       ollama:     "Ollama",
+      opencode:   "OpenCode",
       openrouter: "OpenRouter",
       perplexity: "Perplexity",
       warp:       "Warp",

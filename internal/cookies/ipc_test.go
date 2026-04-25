@@ -217,8 +217,12 @@ func TestClientProbe_StaleAllowlist(t *testing.T) {
 		_ = WriteFrame(conn, payload)
 	})
 
-	if HostAvailable(context.Background()) {
-		t.Fatal("HostAvailable should be false when helper omits allowlist")
+	if !HostAvailable(context.Background()) {
+		t.Fatal("HostAvailable should stay true when helper omits allowlist")
+	}
+	status := Status(context.Background())
+	if HelperAllowlistCurrent(status.AllowedHosts) {
+		t.Fatal("HelperAllowlistCurrent should be false when helper omits allowlist")
 	}
 }
 

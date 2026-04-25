@@ -119,7 +119,7 @@ func FetchHTML(ctx context.Context, url string, headers map[string]string) (stri
 // cookie-gated provider requests on this.
 func HostAvailable(ctx context.Context) bool {
 	status := Status(ctx)
-	return status.Ready && HelperAllowlistCurrent(status.AllowedHosts)
+	return status.Ready
 }
 
 // StatusInfo is a richer snapshot of the bridge state. The PI uses it

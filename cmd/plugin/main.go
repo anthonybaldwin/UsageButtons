@@ -35,6 +35,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/codex"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/copilot"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/cursor"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/factory"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/jetbrains"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kilo"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimi"

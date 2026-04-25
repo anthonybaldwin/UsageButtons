@@ -129,6 +129,7 @@ type ProviderKeys struct {
 	KimiAuthToken string `json:"kimiAuthToken,omitempty"`
 	MiniMaxKey    string `json:"miniMaxKey,omitempty"`
 	AlibabaKey    string `json:"alibabaKey,omitempty"`
+	FactoryToken  string `json:"factoryToken,omitempty"`
 
 	// Endpoint overrides
 	OpenRouterURL       string `json:"openRouterURL,omitempty"`
@@ -139,6 +140,7 @@ type ProviderKeys struct {
 	AlibabaRegion       string `json:"alibabaRegion,omitempty"` // "intl" | "cn"
 	AlibabaHost         string `json:"alibabaHost,omitempty"`
 	AlibabaQuotaURL     string `json:"alibabaQuotaURL,omitempty"`
+	FactoryBaseURL      string `json:"factoryBaseURL,omitempty"`
 	CodexChatGPTBaseURL string `json:"codexChatGPTBaseURL,omitempty"`
 }
 
@@ -572,6 +574,10 @@ func ChangedProviderIDs(prev, next ProviderKeys) []string {
 		prev.AlibabaHost != next.AlibabaHost ||
 		prev.AlibabaQuotaURL != next.AlibabaQuotaURL {
 		out = append(out, "alibaba")
+	}
+	if prev.FactoryToken != next.FactoryToken ||
+		prev.FactoryBaseURL != next.FactoryBaseURL {
+		out = append(out, "factory")
 	}
 	if prev.CodexChatGPTBaseURL != next.CodexChatGPTBaseURL {
 		out = append(out, "codex")

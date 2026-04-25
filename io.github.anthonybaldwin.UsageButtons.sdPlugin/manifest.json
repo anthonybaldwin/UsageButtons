@@ -91,6 +91,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.factory",
+      "Name": "Droid",
+      "Tooltip": "Droid usage stats — Standard and Premium token usage.",
+      "Icon": "assets/action-factory",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-factory-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.abacus",
       "Name": "Abacus AI",
       "Tooltip": "Abacus AI usage stats — monthly compute credits.",

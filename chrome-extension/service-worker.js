@@ -25,6 +25,7 @@ const ALLOWED = [
   "aliyun.com",
   "claude.ai",
   "cursor.com",
+  "factory.ai",
   "ollama.com",
   "chatgpt.com",
   "augmentcode.com",

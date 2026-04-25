@@ -317,6 +317,18 @@
       <p class="hint">Via extension.</p>
     </div>
 
+    <!-- Droid auth -->
+    <div id="authConfig-factory" class="auth-config" style="display:none">
+      <label for="factoryToken">Droid bearer token</label>
+      <div class="key-row">
+        <input id="factoryToken" type="password" autocomplete="off" placeholder="optional bearer token" data-provider-key="factoryToken">
+        <button type="button" class="reveal-btn" data-reveal-target="factoryToken">Show</button>
+      </div>
+      <label for="factoryBaseURL">API base URL</label>
+      <input id="factoryBaseURL" type="text" placeholder="https://app.factory.ai" data-provider-key="factoryBaseURL">
+      <p class="hint">Fallbacks: extension from <code>app.factory.ai</code>, then <code>FACTORY_TOKEN</code>.</p>
+    </div>
+
     <!-- Abacus AI auth -->
     <div id="authConfig-abacus" class="auth-config" style="display:none">
       <p class="hint">Via extension from <code>apps.abacus.ai</code>.</p>
@@ -918,6 +930,10 @@
         ["ondemand-spent",  "On-demand spend ($)",                "dollar-m", "browser"],
         ["team-ondemand-spent", "Team on-demand spend ($)",        "dollar-m", "browser"],
       ],
+      factory: [
+        ["session-percent", "Standard tokens remaining %", "pct"],
+        ["weekly-percent",  "Premium tokens remaining %",  "pct"],
+      ],
       abacus: [
         ["session-percent", "Monthly compute credits remaining %", "pct", "browser"],
       ],
@@ -996,6 +1012,7 @@
       copilot:    "#a855f7",
       ollama:     "#f7f7f7",
       cursor:     "#00bfa5",
+      factory:    "#ff6b35",
       abacus:     "#38bdf8",
       alibaba:    "#ff6a00",
       antigravity:"#60ba7e",
@@ -1026,6 +1043,7 @@
       copilot:    "#150d2e",
       ollama:     "#141414",
       cursor:     "#06221f",
+      factory:    "#281006",
       abacus:     "#082033",
       alibaba:    "#281203",
       antigravity:"#0d2418",
@@ -1048,7 +1066,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "abacus", "alibaba", "antigravity", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "abacus", "alibaba", "antigravity", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -1056,6 +1074,7 @@
       codex:      "Codex",
       copilot:    "Copilot",
       cursor:     "Cursor",
+      factory:    "Droid",
       abacus:     "Abacus AI",
       alibaba:    "Alibaba",
       antigravity:"Antigravity",

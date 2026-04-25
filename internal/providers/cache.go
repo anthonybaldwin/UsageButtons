@@ -505,7 +505,7 @@ func usesUnfingerprintedBrowserSession(providerID string, s Snapshot) bool {
 	switch providerID {
 	case "cursor", "ollama", "amp", "perplexity", "opencode", "opencodego":
 		return true
-	case "claude", "codex", "augment", "kimi":
+	case "claude", "codex", "augment", "kimi", "minimax":
 		return s.Source == "cookie"
 	default:
 		return false
@@ -622,6 +622,11 @@ func providerConfigFingerprint(providerID string) string {
 	case "kimi":
 		parts = append(parts,
 			"auth-token", settings.ResolveAPIKey(pk.KimiAuthToken, "KIMI_AUTH_TOKEN", "kimi_auth_token", "KIMI_MANUAL_COOKIE"),
+		)
+	case "minimax":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.MiniMaxKey, "MINIMAX_API_KEY"),
+			"region", settings.ResolveAPIKey(pk.MiniMaxRegion, "MINIMAX_REGION", "MINIMAX_HOST"),
 		)
 	case "codex":
 		parts = append(parts,

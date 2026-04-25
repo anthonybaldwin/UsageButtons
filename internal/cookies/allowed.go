@@ -19,6 +19,8 @@ var Allowed = []string{
 	"perplexity.ai",
 	"opencode.ai",
 	"kimi.com",
+	"minimax.io",
+	"minimaxi.com",
 }
 
 // IsAllowed reports whether host is covered by the allowlist. A host

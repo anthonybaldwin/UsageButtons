@@ -251,6 +251,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.minimax",
+      "Name": "MiniMax",
+      "Tooltip": "MiniMax usage stats — coding-plan prompt quota.",
+      "Icon": "assets/action-minimax",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-minimax-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.kimi-k2",
       "Name": "Kimi K2",
       "Tooltip": "Kimi K2 usage stats — credits remaining.",

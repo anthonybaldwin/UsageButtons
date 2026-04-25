@@ -29,6 +29,8 @@ const ALLOWED = [
   "perplexity.ai",
   "opencode.ai",
   "kimi.com",
+  "minimax.io",
+  "minimaxi.com",
 ];
 
 function originAllowed(rawURL) {

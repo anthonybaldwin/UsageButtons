@@ -127,12 +127,14 @@ type ProviderKeys struct {
 	SyntheticKey  string `json:"syntheticKey,omitempty"`
 	KiloKey       string `json:"kiloKey,omitempty"`
 	KimiAuthToken string `json:"kimiAuthToken,omitempty"`
+	MiniMaxKey    string `json:"miniMaxKey,omitempty"`
 
 	// Endpoint overrides
 	OpenRouterURL       string `json:"openRouterURL,omitempty"`
 	ZaiHost             string `json:"zaiHost,omitempty"`
 	ZaiQuotaURL         string `json:"zaiQuotaURL,omitempty"`
 	ZaiRegion           string `json:"zaiRegion,omitempty"` // "global" | "bigmodel-cn"
+	MiniMaxRegion       string `json:"miniMaxRegion,omitempty"`
 	CodexChatGPTBaseURL string `json:"codexChatGPTBaseURL,omitempty"`
 }
 
@@ -556,6 +558,10 @@ func ChangedProviderIDs(prev, next ProviderKeys) []string {
 	}
 	if prev.KimiAuthToken != next.KimiAuthToken {
 		out = append(out, "kimi")
+	}
+	if prev.MiniMaxKey != next.MiniMaxKey ||
+		prev.MiniMaxRegion != next.MiniMaxRegion {
+		out = append(out, "minimax")
 	}
 	if prev.CodexChatGPTBaseURL != next.CodexChatGPTBaseURL {
 		out = append(out, "codex")

@@ -13,9 +13,9 @@ Runs on **Windows and macOS**.
 
 ## Settings
 
-Each provider is its own action — drag **Claude**, **Codex**, **Copilot**,
-etc. onto a key and configure the metric, colors, and thresholds from the
-Property Inspector.
+Each provider is its own action — drag **Claude**, **Codex**, **Gemini**,
+**Vertex AI**, etc. onto a key and configure the metric, colors, and
+thresholds from the Property Inspector.
 
 | Per-button settings | Plugin-wide defaults |
 |---|---|
@@ -49,16 +49,34 @@ UsageButtons/
 │   ├── render/                           # SVG button renderer + bbox
 │   ├── cookies/                          # browser fetch-proxy client + bridge
 │   ├── providers/                        # provider interface, cache, mock
+│   │   ├── abacus/                       # Abacus AI (browser)
+│   │   ├── alibaba/                      # Alibaba Coding Plan (browser/API key)
+│   │   ├── amp/                          # Amp (browser)
+│   │   ├── antigravity/                  # Antigravity (local language server)
+│   │   ├── augment/                      # Augment (CLI/browser)
 │   │   ├── claude/                       # Claude (OAuth + browser web API)
 │   │   ├── codex/                        # Codex (OAuth)
 │   │   ├── cookieaux/                    # cookie-gated provider messaging helpers
 │   │   ├── copilot/                      # GitHub Copilot
 │   │   ├── cursor/                       # Cursor (browser)
+│   │   ├── factory/                      # Droid / Factory (browser/token)
+│   │   ├── gemini/                       # Gemini CLI OAuth
+│   │   ├── jetbrains/                    # JetBrains AI
+│   │   ├── kilo/                         # Kilo
+│   │   ├── kimi/                         # Kimi (browser/token)
+│   │   ├── kimik2/                       # Kimi K2 (API key)
+│   │   ├── kiro/                         # Kiro
+│   │   ├── minimax/                      # MiniMax (browser/API key)
+│   │   ├── mistral/                      # Mistral (browser)
 │   │   ├── ollama/                       # Ollama (browser)
+│   │   ├── opencode/                     # OpenCode (browser)
+│   │   ├── opencodego/                   # OpenCode Go (browser)
 │   │   ├── openrouter/                   # OpenRouter (API key)
+│   │   ├── perplexity/                   # Perplexity (browser)
+│   │   ├── synthetic/                    # Synthetic (API key)
+│   │   ├── vertexai/                     # Vertex AI (gcloud ADC)
 │   │   ├── warp/                         # Warp (GraphQL)
-│   │   ├── zai/                          # z.ai (API token)
-│   │   └── kimik2/                       # Kimi K2 (API key)
+│   │   └── zai/                          # z.ai (API token)
 │   ├── settings/                         # global + per-key settings
 │   ├── icons/                            # provider SVG glyph paths
 │   ├── update/                           # GitHub Releases update checker
@@ -79,7 +97,7 @@ Short version:
 1. Download the **.streamDeckPlugin** bundle for your OS from the
    [latest release](https://github.com/anthonybaldwin/UsageButtons/releases/latest)
    and double-click to install in Stream Deck.
-2. (Optional, for Claude extras / Cursor / Ollama) Grab
+2. (Optional, for browser-backed providers) Grab
    **UsageButtons-Helper-unpacked.zip** from the same release, unzip
    it, and **Load unpacked** in `chrome://extensions`. The plugin
    auto-registers — nothing to configure.
@@ -119,29 +137,28 @@ The workflow bumps both manifests, tags, builds plugin + native host
 for Windows + macOS (both arches), packages the Helper zip, and
 publishes the release with all three artifacts attached.
 
-## Usage Buttons Helper (required for Claude extras, Cursor, Ollama)
+## Usage Buttons Helper (required for browser-backed metrics)
 
-Claude's web extras (balance / overage), Cursor, and Ollama sit
-behind Cloudflare and need a logged-in browser session. Usage
-Buttons ships a small Chrome extension — **Usage Buttons Helper** —
-in [`chrome-extension/`](chrome-extension/) that proxies `fetch()`
-for those three sites. Your usage reads happen through your real
-browser session; cookies never leave Chrome.
+Some providers sit behind browser sessions instead of public API keys.
+Usage Buttons ships a small Chrome extension — **Usage Buttons Helper**
+— in [`chrome-extension/`](chrome-extension/) that proxies `fetch()` for
+the narrow allowlist used by those providers. Your usage reads happen
+through your real browser session; cookies never leave Chrome.
 
 - **No credentials in the plugin.** `credentials: "include"` +
   Chrome's native cookie jar. The plugin only sees API response
   bodies.
-- **Narrow by design.** Hardcoded to fetch only `claude.ai`,
-  `cursor.com`, and `ollama.com` — enforced in the manifest's
+- **Narrow by design.** Hardcoded to fetch only the provider origins in
+  `internal/cookies/allowed.go` — enforced in the manifest's
   `host_permissions` AND again in the service worker at request
   time. No `cookies` permission, no broad host scope.
 - **One-click install.** The extension's ID is pinned by its public
   key, so the plugin auto-registers the native-messaging bridge on
   launch — download the release zip, Load Unpacked in
   `chrome://extensions`, done.
-- **Providers that don't need it keep working unchanged** — Claude
-  OAuth, Codex, Copilot, OpenRouter, Warp, z.ai, Kimi K2 never touch
-  the extension path.
+- **Providers that don't need it keep working unchanged** — Gemini,
+  Vertex AI, Copilot, OpenRouter, Warp, z.ai, Kimi K2, Synthetic,
+  Kilo, Kiro, JetBrains AI, and Antigravity never require the extension.
 - **Waits patiently on cold start.** Cookie-gated buttons stay in a
   quiet "needs browser extension" state until the extension
   handshakes — so launching Stream Deck before Chrome doesn't

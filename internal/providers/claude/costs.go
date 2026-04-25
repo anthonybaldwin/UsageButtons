@@ -22,30 +22,75 @@ var (
 	costCache *costResult
 	// costCacheT is the wall-clock time of the last successful scan.
 	costCacheT time.Time
+	// unpricedModelMu guards unpricedModelCounts.
+	unpricedModelMu sync.Mutex
+	// unpricedModelCounts tracks skipped token totals by normalized model ID.
+	unpricedModelCounts = make(map[string]int)
 )
 
 // costCacheTTL bounds how often scanCosts re-reads the session JSONL files.
 const costCacheTTL = 5 * time.Minute
 
-// modelPricing is the per-million-token price (USD) for supported Claude
-// models. Cache creation is 1.25x input; cache reads are 0.1x input.
-var modelPricing = map[string]struct{ input, output float64 }{
-	"claude-opus-4-7":              {5.0, 25.0},
-	"claude-opus-4-6":              {5.0, 25.0},
-	"claude-opus-4-5-20250414":     {5.0, 25.0},
-	"claude-sonnet-4-6":            {3.0, 15.0},
-	"claude-sonnet-4-5-20250514":   {3.0, 15.0},
-	"claude-sonnet-4-0-20250514":   {3.0, 15.0},
-	"claude-haiku-4-5-20251001":    {1.0, 5.0},
-	"claude-3-5-sonnet-20241022":   {3.0, 15.0},
-	"claude-3-5-haiku-20241022":    {0.80, 4.0},
+// claudePricing stores per-million-token prices in USD.
+type claudePricing struct {
+	// input is the per-million input token price in USD.
+	input float64
+	// output is the per-million output token price in USD.
+	output float64
+	// cacheCreate is the per-million cache-write token price in USD.
+	cacheCreate float64
+	// cacheRead is the per-million cache-read token price in USD.
+	cacheRead float64
+	// threshold is the input-side token count above which long-context rates apply.
+	threshold int
+	// inputAbove optionally overrides input pricing when the request crosses threshold.
+	inputAbove *float64
+	// outputAbove optionally overrides output pricing when the request crosses threshold.
+	outputAbove *float64
+	// cacheCreateAbove optionally overrides cache-write pricing when the request crosses threshold.
+	cacheCreateAbove *float64
+	// cacheReadAbove optionally overrides cache-read pricing when the request crosses threshold.
+	cacheReadAbove *float64
 }
 
-// defaultInputPrice is the Sonnet-class fallback input price per million tokens.
-const defaultInputPrice = 3.0
-
-// defaultOutputPrice is the Sonnet-class fallback output price per million tokens.
-const defaultOutputPrice = 15.0
+// modelPricing mirrors CodexBar's Claude pricing table for local CLI logs.
+var modelPricing = map[string]claudePricing{
+	"claude-haiku-4-5-20251001": {input: 1.0, output: 5.0, cacheCreate: 1.25, cacheRead: 0.1},
+	"claude-haiku-4-5":          {input: 1.0, output: 5.0, cacheCreate: 1.25, cacheRead: 0.1},
+	"claude-opus-4-5-20251101":  {input: 5.0, output: 25.0, cacheCreate: 6.25, cacheRead: 0.5},
+	"claude-opus-4-5":           {input: 5.0, output: 25.0, cacheCreate: 6.25, cacheRead: 0.5},
+	"claude-opus-4-6-20260205":  {input: 5.0, output: 25.0, cacheCreate: 6.25, cacheRead: 0.5},
+	"claude-opus-4-6":           {input: 5.0, output: 25.0, cacheCreate: 6.25, cacheRead: 0.5},
+	"claude-opus-4-7":           {input: 5.0, output: 25.0, cacheCreate: 6.25, cacheRead: 0.5},
+	"claude-sonnet-4-5": {
+		input: 3.0, output: 15.0, cacheCreate: 3.75, cacheRead: 0.3, threshold: 200_000,
+		inputAbove: ptrFloat(6.0), outputAbove: ptrFloat(22.5), cacheCreateAbove: ptrFloat(7.5), cacheReadAbove: ptrFloat(0.6),
+	},
+	"claude-sonnet-4-6": {
+		input: 3.0, output: 15.0, cacheCreate: 3.75, cacheRead: 0.3,
+	},
+	"claude-sonnet-4-5-20250929": {
+		input: 3.0, output: 15.0, cacheCreate: 3.75, cacheRead: 0.3, threshold: 200_000,
+		inputAbove: ptrFloat(6.0), outputAbove: ptrFloat(22.5), cacheCreateAbove: ptrFloat(7.5), cacheReadAbove: ptrFloat(0.6),
+	},
+	"claude-opus-4-20250514": {input: 15.0, output: 75.0, cacheCreate: 18.75, cacheRead: 1.5},
+	"claude-opus-4-1":        {input: 15.0, output: 75.0, cacheCreate: 18.75, cacheRead: 1.5},
+	"claude-sonnet-4-20250514": {
+		input: 3.0, output: 15.0, cacheCreate: 3.75, cacheRead: 0.3, threshold: 200_000,
+		inputAbove: ptrFloat(6.0), outputAbove: ptrFloat(22.5), cacheCreateAbove: ptrFloat(7.5), cacheReadAbove: ptrFloat(0.6),
+	},
+	// Legacy Claude 3.5 models still appear in older session logs.
+	// normalizeClaudeModel strips dated suffixes when the base is priced,
+	// so these bases cover both undated and -YYYYMMDD variants.
+	"claude-3-5-sonnet": {input: 3.0, output: 15.0, cacheCreate: 3.75, cacheRead: 0.3},
+	"claude-3-5-haiku":  {input: 0.80, output: 4.0, cacheCreate: 1.0, cacheRead: 0.08},
+	// claude-sonnet-4-0 is the pre-rename form of Sonnet 4 that still
+	// shows up as claude-sonnet-4-0-YYYYMMDD in older Vertex/Bedrock logs.
+	"claude-sonnet-4-0": {
+		input: 3.0, output: 15.0, cacheCreate: 3.75, cacheRead: 0.3, threshold: 200_000,
+		inputAbove: ptrFloat(6.0), outputAbove: ptrFloat(22.5), cacheCreateAbove: ptrFloat(7.5), cacheReadAbove: ptrFloat(0.6),
+	},
+}
 
 // sessionRecord is the shape of one line in a Claude session .jsonl file.
 type sessionRecord struct {
@@ -64,8 +109,10 @@ type sessionRecord struct {
 
 // costResult aggregates the estimated spend across session files.
 type costResult struct {
-	Today    float64
-	Last30d  float64
+	// Today is the estimated spend since local midnight.
+	Today float64
+	// Last30d is the estimated spend over the trailing 30 days.
+	Last30d float64
 }
 
 // scanCosts walks ~/.claude/projects and returns aggregated today/30-day
@@ -76,6 +123,7 @@ func scanCosts() (*costResult, error) {
 	if costCache != nil && time.Since(costCacheT) < costCacheTTL {
 		return costCache, nil
 	}
+	resetUnpricedModels()
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -170,27 +218,123 @@ func scanFile(path string, todayStart, thirtyDaysAgo time.Time, result *costResu
 // tokenCost returns the estimated USD cost for a single assistant message
 // given its model and per-bucket token counts.
 func tokenCost(model string, input, output, cacheCreate, cacheRead int) float64 {
-	pricing, ok := modelPricing[model]
+	normalized := normalizeClaudeModel(model)
+	pricing, ok := modelPricing[normalized]
 	if !ok {
-		// Try prefix match for versioned model IDs
-		for prefix, p := range modelPricing {
-			if strings.HasPrefix(model, strings.TrimSuffix(prefix, "-20250414")) {
-				pricing = p
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			pricing = struct{ input, output float64 }{defaultInputPrice, defaultOutputPrice}
-		}
+		recordUnpricedModel(model, normalized, input, output, cacheCreate, cacheRead)
+		return 0
 	}
 
-	inputCost := float64(input) * pricing.input / 1_000_000
-	outputCost := float64(output) * pricing.output / 1_000_000
-	cacheCreateCost := float64(cacheCreate) * pricing.input * 1.25 / 1_000_000
-	cacheReadCost := float64(cacheRead) * pricing.input * 0.10 / 1_000_000
+	totalInputSide := maxZero(input) + maxZero(cacheCreate) + maxZero(cacheRead)
+	longContext := pricing.threshold > 0 && totalInputSide > pricing.threshold
+	inputCost := tokenBucketCost(input, pricing.input, pricing.inputAbove, longContext)
+	outputCost := tokenBucketCost(output, pricing.output, pricing.outputAbove, longContext)
+	cacheCreateCost := tokenBucketCost(cacheCreate, pricing.cacheCreate, pricing.cacheCreateAbove, longContext)
+	cacheReadCost := tokenBucketCost(cacheRead, pricing.cacheRead, pricing.cacheReadAbove, longContext)
 
 	return inputCost + outputCost + cacheCreateCost + cacheReadCost
+}
+
+// recordUnpricedModel tracks model IDs whose local pricing is unknown.
+func recordUnpricedModel(model, normalized string, input, output, cacheCreate, cacheRead int) {
+	if normalized == "" {
+		normalized = strings.TrimSpace(model)
+	}
+	tokens := maxZero(input) + maxZero(output) + maxZero(cacheCreate) + maxZero(cacheRead)
+
+	unpricedModelMu.Lock()
+	unpricedModelCounts[normalized] += tokens
+	total := unpricedModelCounts[normalized]
+	unpricedModelMu.Unlock()
+
+	if total == tokens && tokens > 0 {
+		logf("unknown local cost model %q normalized as %q; skipping %d tokens", model, normalized, tokens)
+	}
+}
+
+// resetUnpricedModels clears per-scan observability for unknown local pricing.
+func resetUnpricedModels() {
+	unpricedModelMu.Lock()
+	unpricedModelCounts = make(map[string]int)
+	unpricedModelMu.Unlock()
+}
+
+// tokenBucketCost applies the selected per-million-token rate to a bucket.
+func tokenBucketCost(tokens int, base float64, above *float64, longContext bool) float64 {
+	rate := base
+	if longContext && above != nil {
+		rate = *above
+	}
+	return float64(maxZero(tokens)) * rate / 1_000_000
+}
+
+// normalizeClaudeModel maps provider-prefixed and versioned Claude model IDs
+// onto pricing-table keys.
+func normalizeClaudeModel(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	// Remove the common Anthropic provider prefix before table lookup.
+	trimmed = strings.TrimPrefix(trimmed, "anthropic.")
+	// Some provider IDs are dot-qualified; keep the tail when it is a Claude ID.
+	if lastDot := strings.LastIndex(trimmed, "."); lastDot >= 0 && strings.Contains(trimmed, "claude-") {
+		tail := trimmed[lastDot+1:]
+		if strings.HasPrefix(tail, "claude-") {
+			trimmed = tail
+		}
+	}
+	// Strip Bedrock-style -vN:M suffixes after verifying the suffix is numeric.
+	if idx := strings.Index(trimmed, "-v"); idx >= 0 {
+		suffix := trimmed[idx+2:]
+		if colon := strings.IndexByte(suffix, ':'); colon > 0 {
+			allDigits := true
+			for _, r := range suffix[:colon] + suffix[colon+1:] {
+				if r < '0' || r > '9' {
+					allDigits = false
+					break
+				}
+			}
+			if allDigits {
+				trimmed = trimmed[:idx]
+			}
+		}
+	}
+	if _, ok := modelPricing[trimmed]; ok {
+		return trimmed
+	}
+	// Strip Vertex-style @YYYYMMDD date tags when the base model is priced.
+	if at := strings.LastIndexByte(trimmed, '@'); at > 0 {
+		if _, err := time.Parse("20060102", trimmed[at+1:]); err == nil {
+			base := trimmed[:at]
+			if _, ok := modelPricing[base]; ok {
+				return base
+			}
+		}
+	}
+	// Strip trailing -YYYYMMDD date tags when the base model is priced.
+	if len(trimmed) > 9 {
+		base := trimmed[:len(trimmed)-9]
+		suffix := trimmed[len(trimmed)-9:]
+		if strings.HasPrefix(suffix, "-") {
+			if _, err := time.Parse("20060102", suffix[1:]); err == nil {
+				if _, ok := modelPricing[base]; ok {
+					return base
+				}
+			}
+		}
+	}
+	return trimmed
+}
+
+// maxZero clamps n to a non-negative int.
+func maxZero(n int) int {
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+// ptrFloat returns a pointer to v.
+func ptrFloat(v float64) *float64 {
+	return &v
 }
 
 // costMetrics renders the scanned spend into MetricValue tiles for today

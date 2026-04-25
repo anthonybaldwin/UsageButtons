@@ -503,7 +503,7 @@ func shouldPersistProviderSnapshot(providerID string, s Snapshot) bool {
 // browser session that providerConfigFingerprint cannot validate at startup.
 func usesUnfingerprintedBrowserSession(providerID string, s Snapshot) bool {
 	switch providerID {
-	case "cursor", "ollama":
+	case "cursor", "ollama", "amp":
 		return true
 	case "claude", "codex", "augment":
 		return s.Source == "cookie"

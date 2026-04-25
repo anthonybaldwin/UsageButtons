@@ -322,6 +322,11 @@
       <p class="hint">Uses <code>auggie account status</code> first, then the extension for <code>app.augmentcode.com</code>.</p>
     </div>
 
+    <!-- Amp auth -->
+    <div id="authConfig-amp" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>ampcode.com/settings</code>.</p>
+    </div>
+
     <!-- Ollama auth -->
     <div id="authConfig-ollama" class="auth-config" style="display:none">
       <p class="hint">Via extension.</p>
@@ -826,6 +831,9 @@
       augment: [
         ["session-percent", "Credits remaining %", "pct"],
       ],
+      amp: [
+        ["session-percent", "Amp Free remaining %", "pct"],
+      ],
       openrouter: [
         ["credits-balance", "Credit balance ($)",  "ref-dollar"],
         ["credits-used",    "Total usage ($)",     "dollar-m"],
@@ -868,6 +876,7 @@
       ollama:     "#f7f7f7",
       cursor:     "#00bfa5",
       augment:    "#6366f1",
+      amp:        "#dc2626",
       openrouter: "#6467f2",
       warp:       "#938bb4",
       zai:        "#e85a6a",
@@ -887,6 +896,7 @@
       ollama:     "#141414",
       cursor:     "#06221f",
       augment:    "#10112f",
+      amp:        "#250b0b",
       openrouter: "#101028",
       warp:       "#171521",
       zai:        "#211012",
@@ -897,7 +907,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "ollama", "openrouter", "warp", "zai", "kimi-k2", "kilo", "kiro", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "augment", "amp", "ollama", "openrouter", "warp", "zai", "kimi-k2", "kilo", "kiro", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -906,6 +916,7 @@
       copilot:    "Copilot",
       cursor:     "Cursor",
       augment:    "Augment",
+      amp:        "Amp",
       ollama:     "Ollama",
       openrouter: "OpenRouter",
       warp:       "Warp",

@@ -334,6 +334,11 @@
       <p class="hint">Uses Gemini CLI OAuth from <code>~/.gemini/oauth_creds.json</code>. Run <code>gemini</code> and sign in with Google.</p>
     </div>
 
+    <!-- Vertex AI auth -->
+    <div id="authConfig-vertexai" class="auth-config" style="display:none">
+      <p class="hint">Uses gcloud Application Default Credentials. Run <code>gcloud auth application-default login</code> and <code>gcloud config set project PROJECT_ID</code>.</p>
+    </div>
+
     <!-- Abacus AI auth -->
     <div id="authConfig-abacus" class="auth-config" style="display:none">
       <p class="hint">Via extension from <code>apps.abacus.ai</code>.</p>
@@ -944,6 +949,10 @@
         ["weekly-percent",  "Flash quota remaining %",      "pct"],
         ["opus-percent",    "Flash Lite quota remaining %", "pct"],
       ],
+      vertexai: [
+        ["session-percent", "Request quota remaining %", "pct"],
+        ["weekly-percent",  "Token quota remaining %",   "pct"],
+      ],
       abacus: [
         ["session-percent", "Monthly compute credits remaining %", "pct", "browser"],
       ],
@@ -1024,6 +1033,7 @@
       cursor:     "#00bfa5",
       factory:    "#ff6b35",
       gemini:     "#ab87ea",
+      vertexai:   "#4285f4",
       abacus:     "#38bdf8",
       alibaba:    "#ff6a00",
       antigravity:"#60ba7e",
@@ -1056,6 +1066,7 @@
       cursor:     "#06221f",
       factory:    "#281006",
       gemini:     "#1b102a",
+      vertexai:   "#071426",
       abacus:     "#082033",
       alibaba:    "#281203",
       antigravity:"#0d2418",
@@ -1078,7 +1089,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "abacus", "alibaba", "antigravity", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -1088,6 +1099,7 @@
       cursor:     "Cursor",
       factory:    "Droid",
       gemini:     "Gemini",
+      vertexai:   "Vertex AI",
       abacus:     "Abacus AI",
       alibaba:    "Alibaba",
       antigravity:"Antigravity",

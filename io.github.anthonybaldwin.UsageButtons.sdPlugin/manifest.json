@@ -123,6 +123,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.vertexai",
+      "Name": "Vertex AI",
+      "Tooltip": "Vertex AI usage stats — request and token quota remaining.",
+      "Icon": "assets/action-vertexai",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-vertexai-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.abacus",
       "Name": "Abacus AI",
       "Tooltip": "Abacus AI usage stats — monthly compute credits.",

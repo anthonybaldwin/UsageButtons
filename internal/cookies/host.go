@@ -22,11 +22,11 @@ import (
 // Plugin ↔ host kinds: "status" (Ready flag), "fetch" / "fetchResult"
 // relayed through to/from the extension.
 type Message struct {
-	ID         string            `json:"id,omitempty"`
-	Kind       string            `json:"kind"`
-	URL        string            `json:"url,omitempty"`
-	Method     string            `json:"method,omitempty"`
-	Headers    map[string]string `json:"headers,omitempty"`
+	ID      string            `json:"id,omitempty"`
+	Kind    string            `json:"kind"`
+	URL     string            `json:"url,omitempty"`
+	Method  string            `json:"method,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 	// Body carries the base64-encoded request or response body,
 	// direction implied by Kind. Base64 keeps binary bytes + UTF-8
 	// text alike JSON-safe.

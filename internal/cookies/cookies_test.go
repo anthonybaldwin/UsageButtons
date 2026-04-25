@@ -46,8 +46,8 @@ func TestURLAllowed(t *testing.T) {
 		{"https://ollama.com/settings", true},
 		{"https://cursor.com/api/usage-summary", true},
 		{"https://example.com/", false},
-		{"http://claude.ai/", false},   // non-https rejected
-		{"ftp://claude.ai/", false},     // non-https rejected
+		{"http://claude.ai/", false}, // non-https rejected
+		{"ftp://claude.ai/", false},  // non-https rejected
 		{"://broken", false},
 		{"", false},
 	}

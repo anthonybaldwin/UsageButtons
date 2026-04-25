@@ -1,10 +1,11 @@
 // Package copilot implements the GitHub Copilot usage provider.
 //
 // Auth, in priority order:
-//   1. Property Inspector settings field
-//   2. $GITHUB_TOKEN env var
-//   3. ~/.config/github-copilot/hosts.json
-//   4. ~/.config/github-copilot/apps.json
+//  1. Property Inspector settings field
+//  2. $GITHUB_TOKEN env var
+//  3. ~/.config/github-copilot/hosts.json
+//  4. ~/.config/github-copilot/apps.json
+//
 // Endpoint: GET https://api.github.com/copilot_internal/user
 package copilot
 

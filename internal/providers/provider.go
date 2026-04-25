@@ -4,23 +4,23 @@ package providers
 
 // MetricValue represents a single usage metric from a provider.
 type MetricValue struct {
-	ID            string   `json:"id"`
-	Label         string   `json:"label"`
-	Name          string   `json:"name,omitempty"`
-	Value         any      `json:"value"`           // number or string
-	NumericValue  *float64 `json:"numericValue,omitempty"`
-	NumericUnit   string   `json:"numericUnit,omitempty"`   // "percent"|"dollars"|"cents"|"count"
-	NumericGoodWhen string `json:"numericGoodWhen,omitempty"` // "high"|"low"
-	NumericMax    *float64 `json:"numericMax,omitempty"`
-	Unit          string   `json:"unit,omitempty"`
-	Ratio         *float64 `json:"ratio,omitempty"` // 0..1
-	Direction     string   `json:"direction,omitempty"` // "up"|"down"|"right"|"left"
-	ResetInSeconds *float64 `json:"resetInSeconds,omitempty"`
-	Caption       string   `json:"caption,omitempty"`
-	RawCount      *int     `json:"rawCount,omitempty"`
-	RawMax        *int     `json:"rawMax,omitempty"`
-	UpdatedAt     string   `json:"updatedAt,omitempty"`
-	Stale         *bool    `json:"stale,omitempty"`
+	ID              string   `json:"id"`
+	Label           string   `json:"label"`
+	Name            string   `json:"name,omitempty"`
+	Value           any      `json:"value"` // number or string
+	NumericValue    *float64 `json:"numericValue,omitempty"`
+	NumericUnit     string   `json:"numericUnit,omitempty"`     // "percent"|"dollars"|"cents"|"count"
+	NumericGoodWhen string   `json:"numericGoodWhen,omitempty"` // "high"|"low"
+	NumericMax      *float64 `json:"numericMax,omitempty"`
+	Unit            string   `json:"unit,omitempty"`
+	Ratio           *float64 `json:"ratio,omitempty"`     // 0..1
+	Direction       string   `json:"direction,omitempty"` // "up"|"down"|"right"|"left"
+	ResetInSeconds  *float64 `json:"resetInSeconds,omitempty"`
+	Caption         string   `json:"caption,omitempty"`
+	RawCount        *int     `json:"rawCount,omitempty"`
+	RawMax          *int     `json:"rawMax,omitempty"`
+	UpdatedAt       string   `json:"updatedAt,omitempty"`
+	Stale           *bool    `json:"stale,omitempty"`
 }
 
 // NumericVal returns the numeric value or 0.
@@ -79,4 +79,3 @@ func Register(p Provider) {
 func Get(id string) Provider {
 	return registry[id]
 }
-

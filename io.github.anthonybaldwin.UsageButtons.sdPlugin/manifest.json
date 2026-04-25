@@ -107,6 +107,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.gemini",
+      "Name": "Gemini",
+      "Tooltip": "Gemini usage stats — Pro, Flash, and Flash Lite quota remaining.",
+      "Icon": "assets/action-gemini",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-gemini-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.abacus",
       "Name": "Abacus AI",
       "Tooltip": "Abacus AI usage stats — monthly compute credits.",

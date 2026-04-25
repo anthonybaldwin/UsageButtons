@@ -21,6 +21,7 @@ var providerColors = map[string]string{
 	"copilot":     "#a855f7",
 	"cursor":      "#00bfa5",
 	"factory":     "#ff6b35",
+	"gemini":      "#ab87ea",
 	"jetbrains":   "#ff3399",
 	"kimi":        "#fe603c",
 	"kilo":        "#f27027",

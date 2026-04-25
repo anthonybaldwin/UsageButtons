@@ -11,6 +11,8 @@ import (
 // require a coordinated extension release.
 var Allowed = []string{
 	"abacus.ai",
+	"alibabacloud.com",
+	"aliyun.com",
 	"claude.ai",
 	"cursor.com",
 	"ollama.com",

@@ -107,6 +107,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.alibaba",
+      "Name": "Alibaba",
+      "Tooltip": "Alibaba Coding Plan usage stats — 5-hour, weekly, and monthly quotas.",
+      "Icon": "assets/action-alibaba",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-alibaba-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.augment",
       "Name": "Augment",
       "Tooltip": "Augment usage stats — credits remaining.",

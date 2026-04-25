@@ -128,6 +128,7 @@ type ProviderKeys struct {
 	KiloKey       string `json:"kiloKey,omitempty"`
 	KimiAuthToken string `json:"kimiAuthToken,omitempty"`
 	MiniMaxKey    string `json:"miniMaxKey,omitempty"`
+	AlibabaKey    string `json:"alibabaKey,omitempty"`
 
 	// Endpoint overrides
 	OpenRouterURL       string `json:"openRouterURL,omitempty"`
@@ -135,6 +136,9 @@ type ProviderKeys struct {
 	ZaiQuotaURL         string `json:"zaiQuotaURL,omitempty"`
 	ZaiRegion           string `json:"zaiRegion,omitempty"` // "global" | "bigmodel-cn"
 	MiniMaxRegion       string `json:"miniMaxRegion,omitempty"`
+	AlibabaRegion       string `json:"alibabaRegion,omitempty"` // "intl" | "cn"
+	AlibabaHost         string `json:"alibabaHost,omitempty"`
+	AlibabaQuotaURL     string `json:"alibabaQuotaURL,omitempty"`
 	CodexChatGPTBaseURL string `json:"codexChatGPTBaseURL,omitempty"`
 }
 
@@ -562,6 +566,12 @@ func ChangedProviderIDs(prev, next ProviderKeys) []string {
 	if prev.MiniMaxKey != next.MiniMaxKey ||
 		prev.MiniMaxRegion != next.MiniMaxRegion {
 		out = append(out, "minimax")
+	}
+	if prev.AlibabaKey != next.AlibabaKey ||
+		prev.AlibabaRegion != next.AlibabaRegion ||
+		prev.AlibabaHost != next.AlibabaHost ||
+		prev.AlibabaQuotaURL != next.AlibabaQuotaURL {
+		out = append(out, "alibaba")
 	}
 	if prev.CodexChatGPTBaseURL != next.CodexChatGPTBaseURL {
 		out = append(out, "codex")

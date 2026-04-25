@@ -503,7 +503,7 @@ func shouldPersistProviderSnapshot(providerID string, s Snapshot) bool {
 // browser session that providerConfigFingerprint cannot validate at startup.
 func usesUnfingerprintedBrowserSession(providerID string, s Snapshot) bool {
 	switch providerID {
-	case "abacus", "cursor", "ollama", "amp", "perplexity", "opencode", "opencodego":
+	case "abacus", "alibaba", "cursor", "ollama", "amp", "perplexity", "opencode", "opencodego":
 		return true
 	case "claude", "codex", "augment", "kimi", "minimax", "mistral":
 		return s.Source == "cookie"
@@ -627,6 +627,13 @@ func providerConfigFingerprint(providerID string) string {
 		parts = append(parts,
 			"api-key", settings.ResolveAPIKey(pk.MiniMaxKey, "MINIMAX_API_KEY"),
 			"region", settings.ResolveAPIKey(pk.MiniMaxRegion, "MINIMAX_REGION", "MINIMAX_HOST"),
+		)
+	case "alibaba":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.AlibabaKey, "ALIBABA_CODING_PLAN_API_KEY", "ALIBABA_API_KEY", "DASHSCOPE_API_KEY"),
+			"region", settings.ResolveAPIKey(pk.AlibabaRegion, "ALIBABA_CODING_PLAN_REGION"),
+			"host", settings.ResolveEndpoint(pk.AlibabaHost, "", "ALIBABA_CODING_PLAN_HOST"),
+			"quota-url", settings.ResolveEndpoint(pk.AlibabaQuotaURL, "", "ALIBABA_CODING_PLAN_QUOTA_URL"),
 		)
 	case "codex":
 		parts = append(parts,

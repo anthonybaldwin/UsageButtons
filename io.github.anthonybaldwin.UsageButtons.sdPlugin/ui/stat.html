@@ -322,6 +322,26 @@
       <p class="hint">Via extension from <code>apps.abacus.ai</code>.</p>
     </div>
 
+    <!-- Alibaba auth -->
+    <div id="authConfig-alibaba" class="auth-config" style="display:none">
+      <label for="alibabaKey">Alibaba Coding Plan API key</label>
+      <div class="key-row">
+        <input id="alibabaKey" type="password" autocomplete="off" placeholder="optional API key" data-provider-key="alibabaKey">
+        <button type="button" class="reveal-btn" data-reveal-target="alibabaKey">Show</button>
+      </div>
+      <label for="alibabaRegion">Gateway region</label>
+      <select id="alibabaRegion" data-provider-key="alibabaRegion">
+        <option value="">International, retry China</option>
+        <option value="intl">International</option>
+        <option value="cn">China mainland</option>
+      </select>
+      <label for="alibabaHost">Console host override</label>
+      <input id="alibabaHost" type="text" placeholder="modelstudio.console.alibabacloud.com" data-provider-key="alibabaHost">
+      <label for="alibabaQuotaURL">Quota URL override</label>
+      <input id="alibabaQuotaURL" type="text" placeholder="https://.../data/api.json?action=..." data-provider-key="alibabaQuotaURL">
+      <p class="hint">Fallbacks: extension from Alibaba Cloud console, <code>ALIBABA_CODING_PLAN_API_KEY</code>, <code>ALIBABA_CODING_PLAN_REGION</code>.</p>
+    </div>
+
     <!-- Augment auth -->
     <div id="authConfig-augment" class="auth-config" style="display:none">
       <p class="hint">Uses <code>auggie account status</code> first, then the extension for <code>app.augmentcode.com</code>.</p>
@@ -896,6 +916,11 @@
       abacus: [
         ["session-percent", "Monthly compute credits remaining %", "pct", "browser"],
       ],
+      alibaba: [
+        ["session-percent", "5-hour quota remaining %", "pct"],
+        ["weekly-percent",  "Weekly quota remaining %", "pct"],
+        ["opus-percent",    "Monthly quota remaining %", "pct"],
+      ],
       augment: [
         ["session-percent", "Credits remaining %", "pct"],
       ],
@@ -962,6 +987,7 @@
       ollama:     "#f7f7f7",
       cursor:     "#00bfa5",
       abacus:     "#38bdf8",
+      alibaba:    "#ff6a00",
       augment:    "#6366f1",
       amp:        "#dc2626",
       opencode:   "#3b82f6",
@@ -990,6 +1016,7 @@
       ollama:     "#141414",
       cursor:     "#06221f",
       abacus:     "#082033",
+      alibaba:    "#281203",
       augment:    "#10112f",
       amp:        "#250b0b",
       opencode:   "#081a33",
@@ -1009,7 +1036,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "abacus", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "abacus", "alibaba", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -1018,6 +1045,7 @@
       copilot:    "Copilot",
       cursor:     "Cursor",
       abacus:     "Abacus AI",
+      alibaba:    "Alibaba",
       augment:    "Augment",
       amp:        "Amp",
       ollama:     "Ollama",

@@ -21,6 +21,8 @@ const HOST_NAME = "io.github.anthonybaldwin.usagebuttons";
 
 const ALLOWED = [
   "abacus.ai",
+  "alibabacloud.com",
+  "aliyun.com",
   "claude.ai",
   "cursor.com",
   "ollama.com",

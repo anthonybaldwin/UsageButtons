@@ -317,9 +317,81 @@
       <p class="hint">Via extension.</p>
     </div>
 
+    <!-- Droid auth -->
+    <div id="authConfig-factory" class="auth-config" style="display:none">
+      <label for="factoryToken">Droid bearer token</label>
+      <div class="key-row">
+        <input id="factoryToken" type="password" autocomplete="off" placeholder="optional bearer token" data-provider-key="factoryToken">
+        <button type="button" class="reveal-btn" data-reveal-target="factoryToken">Show</button>
+      </div>
+      <label for="factoryBaseURL">API base URL</label>
+      <input id="factoryBaseURL" type="text" placeholder="https://app.factory.ai" data-provider-key="factoryBaseURL">
+      <p class="hint">Fallbacks: extension from <code>app.factory.ai</code>, then <code>FACTORY_TOKEN</code>.</p>
+    </div>
+
+    <!-- Gemini auth -->
+    <div id="authConfig-gemini" class="auth-config" style="display:none">
+      <p class="hint">Uses Gemini CLI OAuth from <code>~/.gemini/oauth_creds.json</code>. Run <code>gemini</code> and sign in with Google.</p>
+    </div>
+
+    <!-- Vertex AI auth -->
+    <div id="authConfig-vertexai" class="auth-config" style="display:none">
+      <p class="hint">Uses gcloud Application Default Credentials. Run <code>gcloud auth application-default login</code> and <code>gcloud config set project PROJECT_ID</code>.</p>
+    </div>
+
+    <!-- Abacus AI auth -->
+    <div id="authConfig-abacus" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>apps.abacus.ai</code>.</p>
+    </div>
+
+    <!-- Alibaba auth -->
+    <div id="authConfig-alibaba" class="auth-config" style="display:none">
+      <label for="alibabaKey">Alibaba Coding Plan API key</label>
+      <div class="key-row">
+        <input id="alibabaKey" type="password" autocomplete="off" placeholder="optional API key" data-provider-key="alibabaKey">
+        <button type="button" class="reveal-btn" data-reveal-target="alibabaKey">Show</button>
+      </div>
+      <label for="alibabaRegion">Gateway region</label>
+      <select id="alibabaRegion" data-provider-key="alibabaRegion">
+        <option value="">International, retry China</option>
+        <option value="intl">International</option>
+        <option value="cn">China mainland</option>
+      </select>
+      <label for="alibabaHost">Console host override</label>
+      <input id="alibabaHost" type="text" placeholder="modelstudio.console.alibabacloud.com" data-provider-key="alibabaHost">
+      <label for="alibabaQuotaURL">Quota URL override</label>
+      <input id="alibabaQuotaURL" type="text" placeholder="https://.../data/api.json?action=..." data-provider-key="alibabaQuotaURL">
+      <p class="hint">Fallbacks: extension from Alibaba Cloud console, <code>ALIBABA_CODING_PLAN_API_KEY</code>, <code>ALIBABA_CODING_PLAN_REGION</code>.</p>
+    </div>
+
+    <!-- Antigravity auth -->
+    <div id="authConfig-antigravity" class="auth-config" style="display:none">
+      <p class="hint">Reads the local Antigravity language server. Launch Antigravity first. Optional overrides: <code>ANTIGRAVITY_PORT</code>, <code>ANTIGRAVITY_CSRF_TOKEN</code>.</p>
+    </div>
+
+    <!-- Augment auth -->
+    <div id="authConfig-augment" class="auth-config" style="display:none">
+      <p class="hint">Uses <code>auggie account status</code> first, then the extension for <code>app.augmentcode.com</code>.</p>
+    </div>
+
+    <!-- Amp auth -->
+    <div id="authConfig-amp" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>ampcode.com/settings</code>.</p>
+    </div>
+
     <!-- Ollama auth -->
     <div id="authConfig-ollama" class="auth-config" style="display:none">
       <p class="hint">Via extension.</p>
+    </div>
+
+    <!-- OpenCode auth -->
+    <div id="authConfig-opencode" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>opencode.ai</code>. Optional workspace override: <code>CODEXBAR_OPENCODE_WORKSPACE_ID</code>.</p>
+    </div>
+
+    <!-- OpenCode Go auth -->
+    <div id="authConfig-opencodego" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>opencode.ai</code>. Optional workspace override: <code>CODEXBAR_OPENCODEGO_WORKSPACE_ID</code>.</p>
     </div>
 
     <!-- Copilot auth -->
@@ -349,6 +421,11 @@
       <p class="hint">Fallback: <code>OPENROUTER_API_KEY</code>.</p>
     </div>
 
+    <!-- Perplexity auth -->
+    <div id="authConfig-perplexity" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>perplexity.ai</code>.</p>
+    </div>
+
     <!-- Warp auth -->
     <div id="authConfig-warp" class="auth-config" style="display:none">
       <label for="warpKey">Warp API key</label>
@@ -376,6 +453,32 @@
       <p class="hint">Fallback: <code>Z_AI_API_KEY</code>.</p>
     </div>
 
+    <!-- Kimi auth -->
+    <div id="authConfig-kimi" class="auth-config" style="display:none">
+      <label for="kimiAuthToken">kimi-auth token</label>
+      <div class="key-row">
+        <input id="kimiAuthToken" type="password" autocomplete="off" placeholder="kimi-auth cookie or JWT" data-provider-key="kimiAuthToken">
+        <button type="button" class="reveal-btn" data-reveal-target="kimiAuthToken">Show</button>
+      </div>
+      <p class="hint">Fallbacks: extension from <code>kimi.com</code>, <code>KIMI_AUTH_TOKEN</code>, or <code>KIMI_MANUAL_COOKIE</code>.</p>
+    </div>
+
+    <!-- MiniMax auth -->
+    <div id="authConfig-minimax" class="auth-config" style="display:none">
+      <label for="miniMaxKey">MiniMax API key</label>
+      <div class="key-row">
+        <input id="miniMaxKey" type="password" autocomplete="off" placeholder="sk-cp-… / sk-api-…" data-provider-key="miniMaxKey">
+        <button type="button" class="reveal-btn" data-reveal-target="miniMaxKey">Show</button>
+      </div>
+      <label for="miniMaxRegion">Region</label>
+      <select id="miniMaxRegion" data-provider-key="miniMaxRegion">
+        <option value="">Global, retry China</option>
+        <option value="global">Global</option>
+        <option value="cn">China mainland</option>
+      </select>
+      <p class="hint">Fallbacks: extension from <code>minimax.io</code>, <code>MINIMAX_API_KEY</code>, <code>MINIMAX_REGION</code>.</p>
+    </div>
+
     <!-- Kimi K2 auth -->
     <div id="authConfig-kimi-k2" class="auth-config" style="display:none">
       <label for="kimik2Key">Kimi K2 API key</label>
@@ -384,6 +487,41 @@
         <button type="button" class="reveal-btn" data-reveal-target="kimik2Key">Show</button>
       </div>
       <p class="hint">Fallback: <code>KIMI_K2_API_KEY</code>.</p>
+    </div>
+
+    <!-- JetBrains AI auth -->
+    <div id="authConfig-jetbrains" class="auth-config" style="display:none">
+      <p class="hint">Reads local JetBrains IDE quota files. Optional override: <code>CODEXBAR_JETBRAINS_IDE_BASE_PATH</code> or <code>JETBRAINS_QUOTA_FILE</code>.</p>
+    </div>
+
+    <!-- Kilo auth -->
+    <div id="authConfig-kilo" class="auth-config" style="display:none">
+      <label for="kiloKey">Kilo API key</label>
+      <div class="key-row">
+        <input id="kiloKey" type="password" autocomplete="off" placeholder="Kilo API key" data-provider-key="kiloKey">
+        <button type="button" class="reveal-btn" data-reveal-target="kiloKey">Show</button>
+      </div>
+      <p class="hint">Fallbacks: <code>KILO_API_KEY</code>, then <code>~/.local/share/kilo/auth.json</code>.</p>
+    </div>
+
+    <!-- Kiro auth -->
+    <div id="authConfig-kiro" class="auth-config" style="display:none">
+      <p class="hint">Uses <code>kiro-cli</code>. Run <code>kiro-cli login</code> before adding Kiro buttons.</p>
+    </div>
+
+    <!-- Mistral auth -->
+    <div id="authConfig-mistral" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>admin.mistral.ai</code>.</p>
+    </div>
+
+    <!-- Synthetic auth -->
+    <div id="authConfig-synthetic" class="auth-config" style="display:none">
+      <label for="syntheticKey">Synthetic API key</label>
+      <div class="key-row">
+        <input id="syntheticKey" type="password" autocomplete="off" placeholder="Synthetic API key" data-provider-key="syntheticKey">
+        <button type="button" class="reveal-btn" data-reveal-target="syntheticKey">Show</button>
+      </div>
+      <p class="hint">Fallback: <code>SYNTHETIC_API_KEY</code>.</p>
     </div>
 
     <div class="group-heading" style="margin-top: 24px;">
@@ -786,6 +924,15 @@
         ["weekly-percent",  "Weekly usage remaining %",         "pct",  "browser"],
         ["weekly-pace",     "Weekly pace (burn rate)",          "pace", "browser"],
       ],
+      opencode: [
+        ["session-percent", "5-hour usage remaining %", "pct"],
+        ["weekly-percent",  "Weekly usage remaining %", "pct"],
+      ],
+      opencodego: [
+        ["session-percent", "5-hour usage remaining %", "pct"],
+        ["weekly-percent",  "Weekly usage remaining %", "pct"],
+        ["monthly-percent", "Monthly usage remaining %", "pct"],
+      ],
       cursor: [
         ["total-percent",   "Total plan usage remaining %",       "pct",      "browser"],
         ["auto-percent",    "Auto / Composer usage remaining %",  "pct",      "browser"],
@@ -793,11 +940,48 @@
         ["ondemand-spent",  "On-demand spend ($)",                "dollar-m", "browser"],
         ["team-ondemand-spent", "Team on-demand spend ($)",        "dollar-m", "browser"],
       ],
+      factory: [
+        ["session-percent", "Standard tokens remaining %", "pct"],
+        ["weekly-percent",  "Premium tokens remaining %",  "pct"],
+      ],
+      gemini: [
+        ["session-percent", "Pro quota remaining %",        "pct"],
+        ["weekly-percent",  "Flash quota remaining %",      "pct"],
+        ["opus-percent",    "Flash Lite quota remaining %", "pct"],
+      ],
+      vertexai: [
+        ["session-percent", "Request quota remaining %", "pct"],
+        ["weekly-percent",  "Token quota remaining %",   "pct"],
+      ],
+      abacus: [
+        ["session-percent", "Monthly compute credits remaining %", "pct", "browser"],
+      ],
+      alibaba: [
+        ["session-percent", "5-hour quota remaining %", "pct"],
+        ["weekly-percent",  "Weekly quota remaining %", "pct"],
+        ["opus-percent",    "Monthly quota remaining %", "pct"],
+      ],
+      antigravity: [
+        ["session-percent", "Claude quota remaining %",       "pct"],
+        ["weekly-percent",  "Gemini Pro quota remaining %",   "pct"],
+        ["opus-percent",    "Gemini Flash quota remaining %", "pct"],
+      ],
+      augment: [
+        ["session-percent", "Credits remaining %", "pct"],
+      ],
+      amp: [
+        ["session-percent", "Amp Free remaining %", "pct"],
+      ],
       openrouter: [
         ["credits-balance", "Credit balance ($)",  "ref-dollar"],
         ["credits-used",    "Total usage ($)",     "dollar-m"],
         ["key-percent",     "Per-key quota remaining %", "pct"],
         ["rate-limit",      "Rate limit (requests / interval)", "ref"],
+      ],
+      perplexity: [
+        ["session-percent", "Recurring credits remaining %", "pct"],
+        ["weekly-percent",  "Bonus credits remaining %",     "pct"],
+        ["opus-percent",    "Purchased credits remaining %", "pct"],
       ],
       warp: [
         ["credits-percent", "Credits remaining %",       "pct"],
@@ -808,8 +992,34 @@
         ["tokens-session-percent", "5-hour token usage remaining %", "pct"],
         ["mcp-percent",     "MCP usage remaining %",   "pct"],
       ],
+      kimi: [
+        ["session-percent", "Weekly coding quota remaining %", "pct"],
+        ["weekly-percent",  "5-hour rate limit remaining %",   "pct"],
+      ],
+      minimax: [
+        ["session-percent", "Coding prompts remaining %", "pct"],
+      ],
       "kimi-k2": [
         ["credits-balance", "Credits remaining", "pct"],
+      ],
+      jetbrains: [
+        ["session-percent", "Current credits remaining %", "pct"],
+      ],
+      kilo: [
+        ["session-percent", "Credits remaining %",   "pct"],
+        ["weekly-percent",  "Kilo Pass remaining %", "pct"],
+      ],
+      kiro: [
+        ["session-percent", "Monthly credits remaining %", "pct"],
+        ["weekly-percent",  "Bonus credits remaining %",   "pct"],
+      ],
+      mistral: [
+        ["session-percent", "Monthly billing usage", "ref-dollar", "browser"],
+      ],
+      synthetic: [
+        ["session-percent", "Five-hour quota remaining %", "pct"],
+        ["weekly-percent",  "Weekly tokens remaining %",   "pct"],
+        ["search-percent",  "Search hourly remaining %",   "pct"],
       ],
     };
 
@@ -818,16 +1028,34 @@
     const BRAND_COLORS = {
       claude:     "#cc7c5e",
       codex:      "#3941FF",
-      copilot:    "#8534F3",
+      copilot:    "#a855f7",
       ollama:     "#f7f7f7",
-      cursor:     "#F54E00",
+      cursor:     "#00bfa5",
+      factory:    "#ff6b35",
+      gemini:     "#ab87ea",
+      vertexai:   "#4285f4",
+      abacus:     "#38bdf8",
+      alibaba:    "#ff6a00",
+      antigravity:"#60ba7e",
+      augment:    "#6366f1",
+      amp:        "#dc2626",
+      opencode:   "#3b82f6",
+      opencodego: "#3b82f6",
       openrouter: "#6467f2",
-      warp:       "#01A4FF",
-      zai:        "#ffffff",
-      "kimi-k2":  "#0071e3",
+      perplexity: "#20b2aa",
+      warp:       "#938bb4",
+      zai:        "#e85a6a",
+      kimi:       "#fe603c",
+      minimax:    "#fe603c",
+      "kimi-k2":  "#4c00ff",
+      jetbrains:  "#ff3399",
+      kilo:       "#f27027",
+      kiro:       "#ff9900",
+      mistral:    "#ff500f",
+      synthetic:  "#141414",
     };
 
-// Per-provider brand background colors. Kept in sync with each
+    // Per-provider brand background colors. Kept in sync with each
     // provider's BrandBg() in Go so the PI can pre-fill the hidden
     // bgColor picker with the actual default the tile will render.
     const BRAND_BGS = {
@@ -835,15 +1063,33 @@
       codex:      "#000000",
       copilot:    "#150d2e",
       ollama:     "#141414",
-      cursor:     "#1a0e06",
+      cursor:     "#06221f",
+      factory:    "#281006",
+      gemini:     "#1b102a",
+      vertexai:   "#071426",
+      abacus:     "#082033",
+      alibaba:    "#281203",
+      antigravity:"#0d2418",
+      augment:    "#10112f",
+      amp:        "#250b0b",
+      opencode:   "#081a33",
+      opencodego: "#081a33",
       openrouter: "#101028",
-      warp:       "#081520",
-      zai:        "#0c0c0c",
-      "kimi-k2":  "#0a1225",
+      perplexity: "#082423",
+      warp:       "#171521",
+      zai:        "#211012",
+      kimi:       "#260d08",
+      minimax:    "#260d08",
+      "kimi-k2":  "#0c0324",
+      jetbrains:  "#25051a",
+      kilo:       "#21130a",
+      kiro:       "#241405",
+      mistral:    "#260b04",
+      synthetic:  "#f4f4f5",
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "ollama", "openrouter", "warp", "zai", "kimi-k2"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -851,11 +1097,29 @@
       codex:      "Codex",
       copilot:    "Copilot",
       cursor:     "Cursor",
+      factory:    "Droid",
+      gemini:     "Gemini",
+      vertexai:   "Vertex AI",
+      abacus:     "Abacus AI",
+      alibaba:    "Alibaba",
+      antigravity:"Antigravity",
+      augment:    "Augment",
+      amp:        "Amp",
       ollama:     "Ollama",
+      opencode:   "OpenCode",
+      opencodego: "OpenCode Go",
       openrouter: "OpenRouter",
+      perplexity: "Perplexity",
       warp:       "Warp",
       zai:        "z.ai",
+      kimi:       "Kimi",
+      minimax:    "MiniMax",
       "kimi-k2":  "Kimi K2",
+      jetbrains:  "JetBrains AI",
+      kilo:       "Kilo",
+      kiro:       "Kiro",
+      mistral:    "Mistral",
+      synthetic:  "Synthetic",
     };
 
     // ---------- Provider from action UUID ----------
@@ -1667,14 +1931,21 @@
 
     function setCookieStatus(payload) {
       const available = !!payload.available;
+      const allowlistStale = payload.extensionAllowlistOK === false;
       const dot = document.getElementById("cookieHostStatusDot");
       const text = document.getElementById("cookieHostStatusText");
       const versionLine = document.getElementById("cookieHostVersionLine");
 
       text.replaceChildren();
-      if (available) {
+      if (available && allowlistStale) {
+        dot.style.background = "#f59e0b";
+        text.append("Extension connected, but its allowlist report is stale. Existing supported providers can still fetch.");
+      } else if (available) {
         dot.style.background = "#22c55e";
         text.append("Extension connected. Browser-sourced metrics are live.");
+      } else if (allowlistStale) {
+        dot.style.background = "#f59e0b";
+        text.append("Helper connected, but its allowlist is stale. Reload the unpacked extension from this branch.");
       } else {
         dot.style.background = "#f59e0b";
         text.append("Not connected — ");
@@ -1700,6 +1971,12 @@
       versionLine.replaceChildren();
       if (payload.extensionVersion) {
         versionLine.append("Helper v" + payload.extensionVersion);
+        if (allowlistStale) {
+          const stale = document.createElement("span");
+          stale.style.cssText = "margin-left: 8px; color: #fde68a;";
+          stale.textContent = "reload required";
+          versionLine.append(stale);
+        }
         if (payload.updateAvailable && payload.latestVersion) {
           const hint = document.createElement("span");
           hint.style.cssText = "margin-left: 8px; color: #fde68a;";

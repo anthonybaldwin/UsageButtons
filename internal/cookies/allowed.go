@@ -10,10 +10,22 @@ import (
 // service worker and in manifest.json host_permissions. Changes here
 // require a coordinated extension release.
 var Allowed = []string{
+	"abacus.ai",
+	"alibabacloud.com",
+	"aliyun.com",
 	"claude.ai",
 	"cursor.com",
+	"factory.ai",
 	"ollama.com",
 	"chatgpt.com",
+	"augmentcode.com",
+	"ampcode.com",
+	"perplexity.ai",
+	"opencode.ai",
+	"kimi.com",
+	"minimax.io",
+	"minimaxi.com",
+	"mistral.ai",
 }
 
 // IsAllowed reports whether host is covered by the allowlist. A host

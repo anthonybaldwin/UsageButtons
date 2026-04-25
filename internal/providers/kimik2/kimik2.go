@@ -251,10 +251,10 @@ func (Provider) ID() string { return "kimi-k2" }
 func (Provider) Name() string { return "Kimi K2" }
 
 // BrandColor returns the accent color used on button faces.
-func (Provider) BrandColor() string { return "#0071e3" }
+func (Provider) BrandColor() string { return "#4c00ff" }
 
 // BrandBg returns the background color used on button faces.
-func (Provider) BrandBg() string { return "#0a1225" }
+func (Provider) BrandBg() string { return "#0c0324" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {

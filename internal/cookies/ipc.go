@@ -308,7 +308,12 @@ func clientStatusDetail(ctx context.Context) (StatusInfo, bool, error) {
 		// so callers don't blame the socket for a protocol mismatch.
 		return StatusInfo{}, true, fmt.Errorf("cookies: unexpected response kind %q", resp.Kind)
 	}
-	return StatusInfo{Ready: resp.Ready, UserAgent: resp.UserAgent, Version: resp.Version}, true, nil
+	return StatusInfo{
+		Ready:        resp.Ready,
+		UserAgent:    resp.UserAgent,
+		Version:      resp.Version,
+		AllowedHosts: append([]string(nil), resp.AllowedHosts...),
+	}, true, nil
 }
 
 // init wires the package-level transport closures to the TCP-loopback

@@ -15,14 +15,31 @@ const Canvas = 144
 type ProviderGlyph struct {
 	// ViewBox is the SVG viewBox attribute for the glyph path.
 	ViewBox string
+	// Markup holds raw inner SVG elements for glyphs that are not plain
+	// path-only marks. Elements should use currentColor for brand-colored
+	// fills/strokes so each render layer can recolor them safely.
+	Markup string
 	// D is the SVG path `d` attribute for the glyph geometry.
 	D string
+	// Paths holds multi-path glyph geometry. When set, Paths is rendered
+	// instead of D so mixed fill/stroke logos can keep their source shape.
+	Paths []GlyphPath
 	// Stroke renders the glyph as an outline (stroke + fill:none +
 	// vector-effect:non-scaling-stroke) instead of the default filled
 	// silhouette — lets outline marks (Tabler, Lucide, etc.) sit
 	// alongside solid brand glyphs without reshaping each path to a
 	// closed fill region.
 	Stroke bool
+}
+
+// GlyphPath is one path in a provider glyph.
+type GlyphPath struct {
+	// D is the SVG path data for this glyph element.
+	D string
+	// Stroke renders this path as a stroked outline instead of a fill.
+	Stroke bool
+	// StrokeWidth preserves source SVG stroke widths for stroked paths.
+	StrokeWidth float64
 }
 
 // ButtonInput configures a button face render.
@@ -58,15 +75,15 @@ var valueFontSizes = map[string]int{"small": 26, "medium": 34, "large": 40}
 var subvalueFontSizes = map[string]int{"small": 14, "medium": 18, "large": 22}
 
 const (
-	valueFontMin  = 22
-	valueEmWidth  = 0.56
+	valueFontMin = 22
+	valueEmWidth = 0.56
 	// labelFontMax matches the "large" subvalueFontSize so a short
 	// label can visually dominate the subtext — the category ("SESSION",
 	// "LIMIT", "TODAY") should read at least as prominently as the
 	// secondary line ("Cost (local)", "4h 20m"), not smaller than it.
-	labelFontMax  = 22
-	labelFontMin  = 12
-	subvalueMin   = 10
+	labelFontMax = 22
+	labelFontMin = 12
+	subvalueMin  = 10
 )
 
 // fitFontSize picks the largest font size at or below preferredSize that
@@ -229,7 +246,7 @@ func RenderButton(in ButtonInput) string {
 			gSize := math.Max(44, math.Min(72, zoneH))
 			gxOff := (float64(Canvas) - gSize) / 2
 			gyOff := math.Round(zoneTop + (zoneH-gSize)/2)
-			xf := ContentFitTransform(in.Glyph.D, gxOff, gyOff, gSize, gSize)
+			xf := ContentFitGlyphTransform(in.Glyph, gxOff, gyOff, gSize, gSize)
 
 			fillLum := hexLuminance(fill)
 			var frontColor string
@@ -252,14 +269,14 @@ func RenderButton(in ButtonInput) string {
 		case "centered":
 			gSize := 60.0
 			gOff := (float64(Canvas) - gSize) / 2
-			xf := ContentFitTransform(in.Glyph.D, gOff, gOff, gSize, gSize)
+			xf := ContentFitGlyphTransform(in.Glyph, gOff, gOff, gSize, gSize)
 			glyphFront = glyphPathMarkup(xf, glyphBg, 0.92, in.Glyph)
 
 		case "corner":
 			gSize := 20.0
 			gx := float64(Canvas) - gSize - 6
 			gy := 6.0
-			xf := ContentFitTransform(in.Glyph.D, gx, gy, gSize, gSize)
+			xf := ContentFitGlyphTransform(in.Glyph, gx, gy, gSize, gSize)
 			glyphFront = glyphPathMarkup(xf, glyphBg, 0.70, in.Glyph)
 		}
 	}
@@ -364,7 +381,7 @@ func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, sho
 	if glyph != nil {
 		gxOff := (float64(Canvas) - loadGlyphSize) / 2
 		gyOff := math.Round(lzTop + (lzH-loadGlyphSize)/2)
-		xf := ContentFitTransform(glyph.D, gxOff, gyOff, loadGlyphSize, loadGlyphSize)
+		xf := ContentFitGlyphTransform(glyph, gxOff, gyOff, loadGlyphSize, loadGlyphSize)
 		// Match the loaded watermark's back-layer opacity so the
 		// glyph doesn't read bolder on load than it will after data
 		// arrives. Same helper that renders stroke/outline glyphs.
@@ -474,6 +491,30 @@ func expandHexColor(s string) (string, bool) {
 // stroke width stays visually consistent regardless of the scale
 // ContentFitTransform applied.
 func glyphPathMarkup(xf, color string, opacity float64, g *ProviderGlyph) string {
+	if g.Markup != "" {
+		return fmt.Sprintf(
+			`<g transform="%s" color="%s" opacity="%.2f">%s</g>`,
+			xf, color, opacity, g.Markup)
+	}
+	if len(g.Paths) > 0 {
+		var parts []string
+		for _, p := range g.Paths {
+			if p.Stroke {
+				width := p.StrokeWidth
+				if width <= 0 {
+					width = 2
+				}
+				parts = append(parts, fmt.Sprintf(
+					`<path d="%s" fill="none" stroke="%s" stroke-opacity="%.2f" stroke-width="%g" stroke-linecap="round" stroke-linejoin="round"/>`,
+					p.D, color, opacity, width))
+				continue
+			}
+			parts = append(parts, fmt.Sprintf(
+				`<path d="%s" fill="%s" fill-opacity="%.2f"/>`,
+				p.D, color, opacity))
+		}
+		return fmt.Sprintf(`<g transform="%s">%s</g>`, xf, strings.Join(parts, ""))
+	}
 	if g.Stroke {
 		return fmt.Sprintf(
 			`<g transform="%s" fill="none" stroke="%s" stroke-opacity="%.2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"><path d="%s"/></g>`,

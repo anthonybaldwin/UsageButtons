@@ -27,12 +27,30 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/update"
 
 	// Register all providers via init().
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/abacus"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/alibaba"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/amp"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/antigravity"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/augment"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/codex"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/copilot"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/cursor"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/factory"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/gemini"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/jetbrains"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kilo"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimi"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimik2"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kiro"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/minimax"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/mistral"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/ollama"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/opencode"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/opencodego"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/openrouter"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/perplexity"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/synthetic"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/vertexai"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/warp"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/zai"
 )
@@ -301,9 +319,14 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 				"#49a3b0", "#a855f7", "#00bfa5", "#888888", "#938bb4", "#e85a6a", "#4c00ff",
 				// Old Codex green (pre blue/purple gradient).
 				"#10a37f",
+				// Old provider-parity colors (pre-CodexBar palette sync).
+				"#8534f3", "#f54e00", "#01a4ff", "#0071e3",
 			}
 			if prov != nil {
 				staleFill = append(staleFill, strings.ToLower(prov.BrandColor()))
+				if prov.ID() == "zai" {
+					staleFill = append(staleFill, "#ffffff")
+				}
 			}
 			lc := strings.ToLower(ks.FillColor)
 			for _, s := range staleFill {
@@ -658,7 +681,9 @@ func replyCookieStatus(conn *streamdeck.Connection, ctxStr, action string) {
 
 	status, reachable, probeErr := cookies.StatusDetail(pctx)
 	latest := update.LatestVersion()
-	updateAvailable := status.Version != "" && latest != "" && status.Version != latest
+	helperAllowlistStale := status.Ready && !cookies.HelperAllowlistCurrent(status.AllowedHosts)
+	helperAvailable := status.Ready
+	updateAvailable := status.Version != "" && latest != "" && update.IsNewerVersion(status.Version, latest)
 
 	// Diagnostic line for the "Not connected" failure mode. `reachable`
 	// separates "plugin couldn't dial the native-host socket" (plugin
@@ -669,19 +694,20 @@ func replyCookieStatus(conn *streamdeck.Connection, ctxStr, action string) {
 	if probeErr != nil {
 		probeErrStr = probeErr.Error()
 	}
-	conn.Logf("cookieStatus poll: ready=%v ext-version=%q reachable=%v probeErr=%q registered=%v",
-		status.Ready, status.Version, reachable, probeErrStr,
+	conn.Logf("cookieStatus poll: ready=%v allowlistCurrent=%v ext-version=%q reachable=%v probeErr=%q registered=%v",
+		status.Ready, !helperAllowlistStale, status.Version, reachable, probeErrStr,
 		cookies.IsHostRegistered(cookies.HostName))
 
 	conn.SendToPropertyInspector(ctxStr, action, map[string]any{
-		"action":           "cookieStatus",
-		"available":        status.Ready,
-		"extensionVersion": status.Version,
-		"latestVersion":    latest,
-		"updateAvailable":  updateAvailable,
-		"ipcAddress":       cookies.IPCAddress(),
-		"hostName":         cookies.HostName,
-		"hostRegistered":   cookies.IsHostRegistered(cookies.HostName),
+		"action":               "cookieStatus",
+		"available":            helperAvailable,
+		"extensionVersion":     status.Version,
+		"extensionAllowlistOK": !helperAllowlistStale,
+		"latestVersion":        latest,
+		"updateAvailable":      updateAvailable,
+		"ipcAddress":           cookies.IPCAddress(),
+		"hostName":             cookies.HostName,
+		"hostRegistered":       cookies.IsHostRegistered(cookies.HostName),
 	})
 }
 

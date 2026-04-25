@@ -40,6 +40,7 @@ func main() {
 		defer f.Close()
 	}
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.LUTC)
+	cookies.LogSink = func(msg string) { log.Print(msg) }
 	log.Printf("native-host: start pid=%d", os.Getpid())
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

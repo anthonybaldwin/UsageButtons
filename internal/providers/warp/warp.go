@@ -123,10 +123,10 @@ func (Provider) ID() string { return "warp" }
 func (Provider) Name() string { return "Warp" }
 
 // BrandColor returns the accent color used on button faces.
-func (Provider) BrandColor() string { return "#01A4FF" }
+func (Provider) BrandColor() string { return "#938bb4" }
 
 // BrandBg returns the background color used on button faces.
-func (Provider) BrandBg() string { return "#081520" }
+func (Provider) BrandBg() string { return "#171521" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
@@ -155,10 +155,10 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 
 	var resp graphqlResponse
 	err := httputil.PostJSON(graphqlURL, map[string]string{
-		"Authorization":  "Bearer " + apiKey,
-		"Content-Type":   "application/json",
+		"Authorization":    "Bearer " + apiKey,
+		"Content-Type":     "application/json",
 		"X-Warp-Client-Id": "warp-app",
-		"User-Agent":     "Warp/1.0",
+		"User-Agent":       "Warp/1.0",
 	}, payload, 15*time.Second, &resp)
 	if err != nil {
 		return providers.Snapshot{}, err

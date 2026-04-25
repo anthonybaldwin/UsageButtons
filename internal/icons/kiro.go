@@ -1,0 +1,12 @@
+package icons
+
+import "github.com/anthonybaldwin/UsageButtons/internal/render"
+
+func init() {
+	ProviderIcons["kiro"] = &render.ProviderGlyph{
+		ViewBox: "0 0 48 48",
+		Markup: `<g transform="translate(0,48) scale(0.1,-0.1)">
+  <path fill="currentColor" d="M175 367 c-25 -25 -35 -45 -40 -83 -3 -27 -10 -59 -16 -72 -15 -37 -11 -63 10 -69 12 -3 21 -15 23 -32 2 -20 9 -27 30 -29 15 -2 36 2 48 8 13 7 20 7 20 0 0 -13 36 -13 62 1 32 17 58 86 58 157 0 103 -38 152 -118 152 -36 0 -50 -6 -77 -33z m93 -86 c3 -16 -1 -22 -10 -19 -7 3 -15 15 -16 27 -3 16 1 22 10 19 7 -3 15 -15 16 -27z m52 4 c0 -26 -14 -33 -25 -15 -9 14 1 40 15 40 5 0 10 -11 10 -25z"/>
+</g>`,
+	}
+}

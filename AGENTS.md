@@ -137,9 +137,11 @@ project scope, update ALL of these in the same commit or PR:**
 This is a hard rule, not a nice-to-have. Stale metadata confuses
 users and search engines.
 
-Current topics: `go`, `golang`, `stream-deck`, `stream-deck-plugin`,
-`elgato`, `ai-tools`, `usage-monitoring`, `claude`, `copilot`,
-`cursor`, `ollama`, `openrouter`, `openai-codex`, `warp`.
+Current topics (GitHub caps this list at 20): `stream-deck`,
+`stream-deck-plugin`, `claude`, `openai-codex`, `cursor`, `gemini`,
+`vertex-ai`, `openrouter`, `abacus`, `alibaba`, `kilo`, `kiro`,
+`antigravity`, `augment`, `amp`, `mistral`, `minimax`, `kimi`,
+`perplexity`, `opencode`.
 
 ## Stream Deck plugin notes
 
@@ -158,7 +160,9 @@ Current topics: `go`, `golang`, `stream-deck`, `stream-deck-plugin`,
 
 ## Browser fetch bridge (Usage Buttons Helper extension)
 
-Cookie-gated providers (Claude web extras, Cursor, Ollama) route
+Cookie-gated providers (Claude web extras, Codex web extras, Cursor,
+Ollama, Abacus AI, Alibaba, Augment, Amp, Droid, Kimi, MiniMax,
+Mistral, OpenCode, OpenCode Go, and Perplexity) route
 requests through the companion Chrome extension in
 `chrome-extension/` (Usage Buttons Helper), which proxies `fetch()`
 for a narrow allowlist of origins. Cookies never leave the browser —
@@ -168,8 +172,8 @@ Architecture:
 
 - `chrome-extension/` — MV3 service worker that holds a persistent
   `connectNative` port to the native host, proxies `fetch()` for
-  `claude.ai` / `cursor.com` / `ollama.com`, and passes base64 bodies
-  on the wire.
+  the origins listed in `internal/cookies/allowed.go`, and passes
+  base64 bodies on the wire.
 - `cmd/native-host/` — Go binary Chrome spawns on `connectNative`.
   Reads/writes Chrome's stdin/stdout framing, listens on a local
   TCP loopback port (published to a sidecar file) for the plugin,

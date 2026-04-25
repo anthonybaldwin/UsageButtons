@@ -42,7 +42,7 @@ type TitleParameters struct {
 type TitleParametersDidChangePayload struct {
 	Settings        json.RawMessage `json:"settings"`
 	Title           string          `json:"title"`
-	TitleParameters TitleParameters  `json:"titleParameters"`
+	TitleParameters TitleParameters `json:"titleParameters"`
 }
 
 // WillAppearTitleParameters extends WillAppearPayload with title info.
@@ -70,8 +70,8 @@ type SendToPluginPayload struct {
 
 // SetImageEvent sets the button image (SVG data URI).
 type SetImageEvent struct {
-	Event   string         `json:"event"`
-	Context string         `json:"context"`
+	Event   string          `json:"event"`
+	Context string          `json:"context"`
 	Payload SetImagePayload `json:"payload"`
 }
 
@@ -83,8 +83,8 @@ type SetImagePayload struct {
 
 // SetTitleEvent sets the button title.
 type SetTitleEvent struct {
-	Event   string         `json:"event"`
-	Context string         `json:"context"`
+	Event   string          `json:"event"`
+	Context string          `json:"context"`
 	Payload SetTitlePayload `json:"payload"`
 }
 
@@ -103,8 +103,8 @@ type SetSettingsEvent struct {
 
 // OpenURLEvent opens a URL in the default browser.
 type OpenURLEvent struct {
-	Event   string          `json:"event"`
-	Payload OpenURLPayload  `json:"payload"`
+	Event   string         `json:"event"`
+	Payload OpenURLPayload `json:"payload"`
 }
 
 // OpenURLPayload carries the URL to open.
@@ -114,7 +114,7 @@ type OpenURLPayload struct {
 
 // LogMessageEvent writes to Stream Deck's plugin log.
 type LogMessageEvent struct {
-	Event   string           `json:"event"`
+	Event   string            `json:"event"`
 	Payload LogMessagePayload `json:"payload"`
 }
 

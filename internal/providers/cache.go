@@ -503,9 +503,9 @@ func shouldPersistProviderSnapshot(providerID string, s Snapshot) bool {
 // browser session that providerConfigFingerprint cannot validate at startup.
 func usesUnfingerprintedBrowserSession(providerID string, s Snapshot) bool {
 	switch providerID {
-	case "cursor", "ollama":
+	case "abacus", "alibaba", "cursor", "ollama", "amp", "perplexity", "opencode", "opencodego":
 		return true
-	case "claude", "codex":
+	case "claude", "codex", "augment", "factory", "kimi", "minimax", "mistral":
 		return s.Source == "cookie"
 	default:
 		return false
@@ -610,6 +610,44 @@ func providerConfigFingerprint(providerID string) string {
 			"hosts", fileContentFingerprint(copilotHostsPath()),
 			"apps", fileContentFingerprint(copilotAppsPath()),
 		)
+	case "synthetic":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.SyntheticKey, "SYNTHETIC_API_KEY", "SYNTHETIC_API_TOKEN"),
+		)
+	case "kilo":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.KiloKey, "KILO_API_KEY"),
+			"cli-auth", fileContentFingerprint(homePath(".local", "share", "kilo", "auth.json")),
+		)
+	case "kimi":
+		parts = append(parts,
+			"auth-token", settings.ResolveAPIKey(pk.KimiAuthToken, "KIMI_AUTH_TOKEN", "kimi_auth_token", "KIMI_MANUAL_COOKIE"),
+		)
+	case "minimax":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.MiniMaxKey, "MINIMAX_API_KEY"),
+			"region", settings.ResolveAPIKey(pk.MiniMaxRegion, "MINIMAX_REGION", "MINIMAX_HOST"),
+		)
+	case "alibaba":
+		parts = append(parts,
+			"api-key", settings.ResolveAPIKey(pk.AlibabaKey, "ALIBABA_CODING_PLAN_API_KEY", "ALIBABA_API_KEY", "DASHSCOPE_API_KEY"),
+			"region", settings.ResolveAPIKey(pk.AlibabaRegion, "ALIBABA_CODING_PLAN_REGION"),
+			"host", settings.ResolveEndpoint(pk.AlibabaHost, "", "ALIBABA_CODING_PLAN_HOST"),
+			"quota-url", settings.ResolveEndpoint(pk.AlibabaQuotaURL, "", "ALIBABA_CODING_PLAN_QUOTA_URL"),
+		)
+	case "factory":
+		parts = append(parts,
+			"token", settings.ResolveAPIKey(pk.FactoryToken, "FACTORY_TOKEN"),
+			"base-url", settings.ResolveEndpoint(pk.FactoryBaseURL, "", "FACTORY_BASE_URL"),
+		)
+	case "gemini":
+		parts = append(parts,
+			"creds", fileContentFingerprint(geminiCredentialsPath()),
+		)
+	case "vertexai":
+		parts = append(parts,
+			"adc", fileContentFingerprint(vertexAICredentialsPath()),
+		)
 	case "codex":
 		parts = append(parts,
 			"base-url", pk.CodexChatGPTBaseURL,
@@ -655,6 +693,48 @@ func copilotHostsPath() string {
 // copilotAppsPath returns the GitHub Copilot apps.json path.
 func copilotAppsPath() string {
 	return homePath(".config", "github-copilot", "apps.json")
+}
+
+// geminiCredentialsPath mirrors Gemini CLI's OAuth credentials path.
+func geminiCredentialsPath() string {
+	configDir := geminiConfigDirPath()
+	if configDir == "" {
+		return ""
+	}
+	return filepath.Join(configDir, "oauth_creds.json")
+}
+
+// geminiConfigDirPath mirrors Gemini CLI's config directory selection.
+func geminiConfigDirPath() string {
+	for _, name := range []string{"GEMINI_CONFIG_DIR", "GEMINI_CONFIG_HOME"} {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return filepath.Clean(value)
+		}
+	}
+	return homePath(".gemini")
+}
+
+// vertexAICredentialsPath mirrors gcloud's ADC credentials path.
+func vertexAICredentialsPath() string {
+	configDir := vertexAIConfigDirPath()
+	if configDir == "" {
+		return ""
+	}
+	return filepath.Join(configDir, "application_default_credentials.json")
+}
+
+// vertexAIConfigDirPath mirrors gcloud's config directory selection.
+func vertexAIConfigDirPath() string {
+	if value := strings.TrimSpace(os.Getenv("CLOUDSDK_CONFIG")); value != "" {
+		return filepath.Clean(value)
+	}
+	if appData := strings.TrimSpace(os.Getenv("APPDATA")); appData != "" {
+		path := filepath.Join(appData, "gcloud")
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return homePath(".config", "gcloud")
 }
 
 // codexConfigPath returns the Codex config.toml path.

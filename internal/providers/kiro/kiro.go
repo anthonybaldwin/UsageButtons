@@ -56,7 +56,7 @@ func (Provider) Name() string { return "Kiro" }
 func (Provider) BrandColor() string { return "#ff9900" }
 
 // BrandBg returns the background color used on button faces.
-func (Provider) BrandBg() string { return "#241405" }
+func (Provider) BrandBg() string { return "#111214" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {

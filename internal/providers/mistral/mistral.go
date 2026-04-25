@@ -106,7 +106,7 @@ func (Provider) Name() string { return "Mistral" }
 func (Provider) BrandColor() string { return "#ff500f" }
 
 // BrandBg returns the background color used on button faces.
-func (Provider) BrandBg() string { return "#260b04" }
+func (Provider) BrandBg() string { return "#111214" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {

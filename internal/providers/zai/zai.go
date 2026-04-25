@@ -135,7 +135,7 @@ func (Provider) Name() string { return "z.ai" }
 func (Provider) BrandColor() string { return "#e85a6a" }
 
 // BrandBg returns the background color used on button faces.
-func (Provider) BrandBg() string { return "#211012" }
+func (Provider) BrandBg() string { return "#111214" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {

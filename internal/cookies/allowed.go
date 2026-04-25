@@ -21,6 +21,7 @@ var Allowed = []string{
 	"kimi.com",
 	"minimax.io",
 	"minimaxi.com",
+	"mistral.ai",
 }
 
 // IsAllowed reports whether host is covered by the allowlist. A host

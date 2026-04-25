@@ -22,6 +22,7 @@ var providerColors = map[string]string{
 	"kilo":       "#f27027",
 	"kiro":       "#ff9900",
 	"minimax":    "#fe603c",
+	"mistral":    "#ff500f",
 	"ollama":     "#f9fafb",
 	"opencode":   "#3b82f6",
 	"opencodego": "#3b82f6",

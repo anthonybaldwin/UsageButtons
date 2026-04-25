@@ -31,6 +31,7 @@ const ALLOWED = [
   "kimi.com",
   "minimax.io",
   "minimaxi.com",
+  "mistral.ai",
 ];
 
 function originAllowed(rawURL) {

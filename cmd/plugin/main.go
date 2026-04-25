@@ -38,6 +38,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimik2"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kiro"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/minimax"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/mistral"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/ollama"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/opencode"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/opencodego"

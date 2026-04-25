@@ -505,7 +505,7 @@ func usesUnfingerprintedBrowserSession(providerID string, s Snapshot) bool {
 	switch providerID {
 	case "cursor", "ollama", "amp", "perplexity", "opencode", "opencodego":
 		return true
-	case "claude", "codex", "augment", "kimi", "minimax":
+	case "claude", "codex", "augment", "kimi", "minimax", "mistral":
 		return s.Source == "cookie"
 	default:
 		return false

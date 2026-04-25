@@ -331,6 +331,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.mistral",
+      "Name": "Mistral",
+      "Tooltip": "Mistral usage stats — monthly billing usage.",
+      "Icon": "assets/action-mistral",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-mistral-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.synthetic",
       "Name": "Synthetic",
       "Tooltip": "Synthetic usage stats — five-hour quota, weekly tokens, search quota.",

@@ -22,6 +22,7 @@ func RunCommand(ctx context.Context, name string, args ...string) (CommandResult
 	}
 	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	hideConsoleWindow(cmd)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

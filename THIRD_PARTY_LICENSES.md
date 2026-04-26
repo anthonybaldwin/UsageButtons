@@ -39,6 +39,33 @@ notice be included in all copies or substantial portions of the
 Software. The Software is provided "AS IS", without warranty of any
 kind.
 
+## openusage — MIT
+
+<https://github.com/robinebers/openusage>
+
+Copyright (c) 2026 Robin Ebers
+
+The Perplexity provider in `internal/providers/perplexity/perplexity.go`
+calls the same `/rest/pplx-api/v2/groups`, `/rest/pplx-api/v2/groups/{id}`,
+and `/rest/rate-limit/all` endpoints documented by openusage's
+`plugins/perplexity/plugin.js`, with the same flexible field-name
+lookup pattern (`balance_usd`/`balanceUsd`/etc. under `apiOrganization`,
+`customerInfo`, etc. wrappers). Perplexity removed the older
+`/rest/billing/credits` endpoint in 2026; openusage's mapping was the
+shortest path back to working data. The Go implementation is ours; the
+endpoint set and field-name fallbacks are the borrowed knowledge.
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the condition that the above copyright notice and this permission
+notice be included in all copies or substantial portions of the
+Software. The Software is provided "AS IS", without warranty of any
+kind.
+
 ## lobehub/lobe-icons — MIT
 
 <https://github.com/lobehub/lobe-icons>

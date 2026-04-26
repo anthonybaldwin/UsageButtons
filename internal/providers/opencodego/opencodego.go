@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -136,26 +138,78 @@ func parseSubscription(text string, now time.Time) (usageSnapshot, error) {
 	rollingReset := extractInt(`rollingUsage[^}]*?resetInSec\s*:\s*([0-9]+)`, text)
 	weeklyPercent := extractFloat(`weeklyUsage[^}]*?usagePercent\s*:\s*([0-9]+(?:\.[0-9]+)?)`, text)
 	weeklyReset := extractInt(`weeklyUsage[^}]*?resetInSec\s*:\s*([0-9]+)`, text)
-	if rollingPercent == nil || rollingReset == nil || weeklyPercent == nil || weeklyReset == nil {
-		return usageSnapshot{}, fmt.Errorf("OpenCode Go parse error: missing usage fields")
+	if rollingPercent != nil && rollingReset != nil && weeklyPercent != nil && weeklyReset != nil {
+		monthlyPercent := extractFloat(`monthlyUsage[^}]*?usagePercent\s*:\s*([0-9]+(?:\.[0-9]+)?)`, text)
+		monthlyReset := extractInt(`monthlyUsage[^}]*?resetInSec\s*:\s*([0-9]+)`, text)
+		usage := usageSnapshot{
+			HasMonthlyUsage:     monthlyPercent != nil || monthlyReset != nil,
+			RollingUsagePercent: clampPercent(*rollingPercent),
+			WeeklyUsagePercent:  clampPercent(*weeklyPercent),
+			RollingResetInSec:   *rollingReset,
+			WeeklyResetInSec:    *weeklyReset,
+			UpdatedAt:           now,
+		}
+		if monthlyPercent != nil {
+			usage.MonthlyUsagePercent = clampPercent(*monthlyPercent)
+		}
+		if monthlyReset != nil {
+			usage.MonthlyResetInSec = *monthlyReset
+		}
+		return usage, nil
 	}
-	monthlyPercent := extractFloat(`monthlyUsage[^}]*?usagePercent\s*:\s*([0-9]+(?:\.[0-9]+)?)`, text)
-	monthlyReset := extractInt(`monthlyUsage[^}]*?resetInSec\s*:\s*([0-9]+)`, text)
-	usage := usageSnapshot{
-		HasMonthlyUsage:     monthlyPercent != nil || monthlyReset != nil,
-		RollingUsagePercent: clampPercent(*rollingPercent),
-		WeeklyUsagePercent:  clampPercent(*weeklyPercent),
-		RollingResetInSec:   *rollingReset,
-		WeeklyResetInSec:    *weeklyReset,
-		UpdatedAt:           now,
+	// /workspace/<id>/go is rendered by Solid Start. If we got past
+	// fetchUsagePage + looksSignedOut and the page lacks any usagePercent
+	// literal, the workspace has no Go subscription. Surface a clear
+	// error instead of the cryptic "missing usage fields" parse-error
+	// (and instead of faking zero usage, which misleads users into
+	// thinking they have a fresh quota).
+	if looksLikeEmptyUsage(text) {
+		return usageSnapshot{}, fmt.Errorf("No active OpenCode Go subscription")
 	}
-	if monthlyPercent != nil {
-		usage.MonthlyUsagePercent = clampPercent(*monthlyPercent)
+	dumpUnknownResponse(text)
+	return usageSnapshot{}, fmt.Errorf("OpenCode Go parse error: missing usage fields")
+}
+
+// looksLikeEmptyUsage reports whether text is a Solid-rendered
+// /workspace/<id>/go page that simply doesn't carry usage numbers.
+// Requires both: no usagePercent literal anywhere AND a recognizable
+// Solid SSR marker, so unrelated HTML / error pages still surface as
+// the original parse error.
+func looksLikeEmptyUsage(text string) bool {
+	if strings.Contains(text, "usagePercent") {
+		return false
 	}
-	if monthlyReset != nil {
-		usage.MonthlyResetInSec = *monthlyReset
+	return strings.Contains(text, "$R") || strings.Contains(text, "server-fn:")
+}
+
+// dumpUnknownResponse appends a truncated /workspace/<id>/go response to
+// a temp file when parseSubscription can't classify it. Owner-only perms
+// (0o600) so the response — which may contain workspace IDs / billing
+// hints — is not world-readable. Append mode + size caps preserve
+// successive shapes for a debugging session without unbounded growth.
+func dumpUnknownResponse(text string) {
+	const (
+		maxSnippetBytes = 16 * 1024
+		maxFileBytes    = 256 * 1024
+	)
+	path := filepath.Join(os.TempDir(), "usagebuttons-opencodego-debug.txt")
+	if info, err := os.Stat(path); err == nil && info.Size() >= maxFileBytes {
+		return
 	}
-	return usage, nil
+	snippet := text
+	truncated := false
+	if len(snippet) > maxSnippetBytes {
+		snippet = snippet[:maxSnippetBytes]
+		truncated = true
+	}
+	body := fmt.Sprintf("[%s] length=%d truncated=%v\n%s\n\n",
+		time.Now().UTC().Format(time.RFC3339), len(text), truncated, snippet)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	_, _ = f.WriteString(body)
 }
 
 // parseSubscriptionJSON parses flexible JSON usage payloads.

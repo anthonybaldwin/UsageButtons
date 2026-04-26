@@ -6,12 +6,14 @@ package opencode
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -187,7 +189,7 @@ func serverText(ctx context.Context, req serverRequest) (string, error) {
 		"Origin":            baseURL,
 		"Referer":           req.Referer,
 		"X-Server-Id":       req.ServerID,
-		"X-Server-Instance": "server-fn:usage-buttons",
+		"X-Server-Instance": "server-fn:" + newRequestID(),
 	}
 	if method != "GET" {
 		headers["Content-Type"] = "application/json"
@@ -260,29 +262,40 @@ func parseSubscription(text string, now time.Time) (usageSnapshot, error) {
 	if looksLikeEmptyUsage(text) {
 		return usageSnapshot{UpdatedAt: now}, nil
 	}
+	dumpUnknownResponse(text)
 	return usageSnapshot{}, fmt.Errorf("OpenCode parse error: missing usage fields")
 }
 
 // looksLikeEmptyUsage reports whether text is an OpenCode _server response
 // that conveys "no rolling/weekly usage" rather than a schema break.
-// Conservative: requires Solid SSR markers and at least one recognized
-// empty-state field, so genuine parser regressions still surface as errors.
-// Whitespace-insensitive so minified or reformatted Solid output still matches.
+// usagePercent is the field every populated response carries — its absence
+// (combined with a Solid SSR marker) is a reliable empty-state signal. The
+// schema key names (rollingUsage/weeklyUsage) can themselves appear with
+// `null` values in empty responses, so we don't short-circuit on those.
 func looksLikeEmptyUsage(text string) bool {
-	if strings.Contains(text, "rollingUsage") || strings.Contains(text, "weeklyUsage") {
+	if strings.Contains(text, "usagePercent") {
 		return false
 	}
 	if !strings.Contains(text, "server-fn:") {
 		return false
 	}
 	compact := strings.Join(strings.Fields(text), "")
+	// Solid SSR may resolve the entire server-fn payload to null —
+	// the response then ends with `,null)` after the array assignment.
+	if strings.HasSuffix(compact, ",null)") {
+		return true
+	}
 	for _, marker := range []string{
+		"rollingUsage:null",
+		"weeklyUsage:null",
 		"subscription:null",
 		"subscriptionPlan:null",
 		"monthlyUsage:null",
 		"monthlyLimit:null",
 		"usage:$R",
+		"usage:[]",
 		"keys:$R",
+		"keys:[]",
 	} {
 		if strings.Contains(compact, marker) {
 			return true
@@ -596,6 +609,50 @@ func errorSnapshot(message string) providers.Snapshot {
 		Status:       "unknown",
 		Error:        message,
 	}
+}
+
+// newRequestID returns a v4-style UUID string used in X-Server-Instance.
+// OpenCode's server appears to expect a unique ID per call (CodexBar parity).
+// crypto/rand.Read failures are best-effort: an all-zero buffer still formats
+// as a valid v4-shape, so the header value stays UUID-shaped either way.
+func newRequestID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// dumpUnknownResponse appends a truncated OpenCode response to a temp file
+// when parseSubscription can't classify it. Helps diagnose new empty-state
+// shapes without asking the user to enable verbose logging. Owner-only perms
+// (0o600) so the response — which may contain workspace IDs / billing data —
+// is not world-readable. Append mode preserves earlier shapes; a per-call
+// snippet cap and total-file cap keep growth bounded.
+func dumpUnknownResponse(text string) {
+	const (
+		maxSnippetBytes = 16 * 1024
+		maxFileBytes    = 256 * 1024
+	)
+	path := filepath.Join(os.TempDir(), "usagebuttons-opencode-debug.txt")
+	if info, err := os.Stat(path); err == nil && info.Size() >= maxFileBytes {
+		return
+	}
+	snippet := text
+	truncated := false
+	if len(snippet) > maxSnippetBytes {
+		snippet = snippet[:maxSnippetBytes]
+		truncated = true
+	}
+	body := fmt.Sprintf("[%s] length=%d truncated=%v\n%s\n\n",
+		time.Now().UTC().Format(time.RFC3339), len(text), truncated, snippet)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	_, _ = f.WriteString(body)
 }
 
 // init registers the OpenCode provider with the package registry.

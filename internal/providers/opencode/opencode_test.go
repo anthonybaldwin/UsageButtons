@@ -64,6 +64,42 @@ func TestParseSubscription_NoSubscription_BillingShape(t *testing.T) {
 	}
 }
 
+func TestParseSubscription_NullPayload_SolidWrapped(t *testing.T) {
+	now := time.Now().UTC()
+	// Real shape captured from an unsubscribed account hitting the
+	// subscription server-fn — entire payload resolves to null after the
+	// Solid SSR wrapper. 93 bytes total, no usage fields anywhere.
+	text := `;0x00000051;((self.$R=self.$R||{})["server-fn:00000000-0000-4000-8000-000000000000"]=[],null)`
+	usage, err := parseSubscription(text, now)
+	if err != nil {
+		t.Fatalf("expected no error for Solid-wrapped null payload, got: %v", err)
+	}
+	if usage.RollingUsagePercent != 0 || usage.WeeklyUsagePercent != 0 {
+		t.Errorf("expected zero percents, got rolling=%v weekly=%v",
+			usage.RollingUsagePercent, usage.WeeklyUsagePercent)
+	}
+}
+
+func TestParseSubscription_NullUsageFields(t *testing.T) {
+	now := time.Now().UTC()
+	// Subscription endpoint shape we believe applies to unsubscribed
+	// accounts: schema keys present, values null, no usagePercent anywhere.
+	text := `;0x000000aa;
+((self.$R = self.$R || {})["server-fn:3"] = [],
+($R => $R[0] = {
+    rollingUsage: null,
+    weeklyUsage: null
+})($R["server-fn:3"]))`
+	usage, err := parseSubscription(text, now)
+	if err != nil {
+		t.Fatalf("expected no error for null-usage response, got: %v", err)
+	}
+	if usage.RollingUsagePercent != 0 || usage.WeeklyUsagePercent != 0 {
+		t.Errorf("expected zero percents, got rolling=%v weekly=%v",
+			usage.RollingUsagePercent, usage.WeeklyUsagePercent)
+	}
+}
+
 func TestParseSubscription_NoSubscription_Minified(t *testing.T) {
 	now := time.Now().UTC()
 	// Same shape as the billing response but without spaces after colons —

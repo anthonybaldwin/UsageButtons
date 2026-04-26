@@ -84,7 +84,7 @@ func renderStarfield() string {
 	// gets a different streak but every render of the same cycle picks
 	// the same one (deterministic).
 	const (
-		shootCycle = 4.0 // one streak every 4s
+		shootCycle = 9.0 // one streak every 9s
 		shootDur   = 1.2 // streak visible for 1.2s
 		shootSpeed = 220.0
 		tailLen    = 28.0

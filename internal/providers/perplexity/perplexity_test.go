@@ -398,7 +398,7 @@ func TestSnapshotFromUsage_OnlySomeRateLimits(t *testing.T) {
 	snap := snapshotFromUsage(usage)
 	// 1 pro count + comet-spend + balance + spend = 4
 	if len(snap.Metrics) != 4 {
-		t.Fatalf("expected 3 metrics, got %d", len(snap.Metrics))
+		t.Fatalf("expected 4 metrics, got %d", len(snap.Metrics))
 	}
 }
 

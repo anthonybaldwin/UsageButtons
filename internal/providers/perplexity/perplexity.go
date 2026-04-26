@@ -593,9 +593,9 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	addCount("labs-remaining", "LABS", "Perplexity Labs queries remaining today", usage.LabsRemain)
 	addCount("agentic-research-remaining", "AGENTIC", "Perplexity Agentic Research queries remaining today", usage.AgenticRemain)
 	metrics = append(metrics,
-		dollarMetric("comet-spend", "COMET", "Spend", "Perplexity Comet (computer-use) spend (all-time)", usage.CometSpendCents, now),
-		dollarMetric("api-balance", "API", "Balance", "Perplexity API balance", usage.BalanceCents, now),
-		dollarMetric("api-spend", "API", "Spend", "Perplexity API spend (all-time)", usage.SpendCents, now),
+		dollarMetric("comet-spend", "COMET", "Spend", "Perplexity Comet (computer-use) spend (all-time)", usage.CometSpendCents, "low", now),
+		dollarMetric("api-balance", "API", "Balance", "Perplexity API balance", usage.BalanceCents, "high", now),
+		dollarMetric("api-spend", "API", "Spend", "Perplexity API spend (all-time)", usage.SpendCents, "low", now),
 	)
 	return providers.Snapshot{
 		ProviderID:   "perplexity",
@@ -636,7 +636,13 @@ func countMetric(id, label, name string, remaining int, now string) providers.Me
 // api-balance and api-spend can share the "API" title and still
 // disambiguate via the subtitle (same trick Grok uses for GROK 3
 // queries vs GROK 3 tokens).
-func dollarMetric(id, label, caption, name string, cents float64, now string) providers.MetricValue {
+//
+// goodWhen flips threshold semantics: "high" for balance (lower is
+// worse — you're running out), "low" for spend (lower is better —
+// you've spent less). With "low" + no NumericMax, the threshold
+// defaults don't fire, so a $0 spend stays neutral rather than
+// painting the tile critical-red on accounts with no API activity.
+func dollarMetric(id, label, caption, name string, cents float64, goodWhen, now string) providers.MetricValue {
 	dollars := cents / 100
 	ratio := 1.0
 	return providers.MetricValue{
@@ -646,7 +652,7 @@ func dollarMetric(id, label, caption, name string, cents float64, now string) pr
 		Value:           fmt.Sprintf("$%.2f", dollars),
 		NumericValue:    &dollars,
 		NumericUnit:     "dollars",
-		NumericGoodWhen: "high",
+		NumericGoodWhen: goodWhen,
 		Ratio:           &ratio,
 		Caption:         caption,
 		UpdatedAt:       now,

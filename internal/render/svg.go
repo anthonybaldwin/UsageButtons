@@ -602,6 +602,8 @@ func xmlEscape(s string) string {
 }
 
 // FormatCountdown formats seconds into a human-readable countdown.
+// Always carries the next-smaller unit so e.g. "4d" never hides up to
+// 23 extra hours; values render as "4d 12h", "12h 5m", "5m", "30s".
 func FormatCountdown(seconds float64) string {
 	if seconds < 60 {
 		return fmt.Sprintf("%ds", int(seconds))
@@ -614,5 +616,5 @@ func FormatCountdown(seconds float64) string {
 	if hours < 24 {
 		return fmt.Sprintf("%dh %dm", hours, mins%60)
 	}
-	return fmt.Sprintf("%dd", hours/24)
+	return fmt.Sprintf("%dd %dh", hours/24, hours%24)
 }

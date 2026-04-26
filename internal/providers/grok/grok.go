@@ -57,16 +57,16 @@ func (Provider) ID() string { return "grok" }
 // Name returns the human-readable provider name.
 func (Provider) Name() string { return "Grok" }
 
-// BrandColor returns the accent color used on button faces. Grok/xAI's
-// brand mark is monochrome; we render the mark white against a near-
-// black canvas so the watermark stays visible at every fill ratio
-// (including the empty / loading state). Inverting that — white bg
-// with black mark — looks fine when filled but the watermark vanishes
-// against a near-white empty face.
-func (Provider) BrandColor() string { return "#ffffff" }
+// BrandColor returns the accent color used on button faces. Grok / xAI
+// is monochrome; the inverse of Ollama's near-white-on-near-black —
+// black mark on a white canvas. Smart contrast (enabled for grok in
+// settings.providerDefaultSmartContrast) auto-flips text/watermark
+// over the dark fill bar at high meter ratios so the icon stays
+// visible regardless of the ratio.
+func (Provider) BrandColor() string { return "#000000" }
 
 // BrandBg returns the background color used on button faces.
-func (Provider) BrandBg() string { return "#0b0b0b" }
+func (Provider) BrandBg() string { return "#ffffff" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {

@@ -698,9 +698,13 @@ func snapshotFromStatus(status geminiStatus) providers.Snapshot {
 }
 
 // quotaMetric turns one model quota into a remaining-percent metric.
+// Suppresses the reset countdown when the quota is effectively idle —
+// "100% remaining for 24h" is meaningless when nothing's been consumed
+// yet; the daily reset only matters once usage starts.
 func quotaMetric(id, label, name string, quota modelQuota, now string) providers.MetricValue {
 	usedPct := 100 - quota.PercentLeft
-	return providerutil.PercentRemainingMetric(id, label, name, usedPct, quota.ResetTime, quota.ModelID, now)
+	resetAt := providerutil.ResetTimeWhenUsed(usedPct, quota.ResetTime)
+	return providerutil.PercentRemainingMetric(id, label, name, usedPct, resetAt, quota.ModelID, now)
 }
 
 // lowestMatchingQuota returns the lowest remaining quota accepted by match.

@@ -602,19 +602,37 @@ func xmlEscape(s string) string {
 }
 
 // FormatCountdown formats seconds into a human-readable countdown.
-// Always carries the next-smaller unit so e.g. "4d" never hides up to
-// 23 extra hours; values render as "4d 12h", "12h 5m", "5m", "30s".
+// Carries the next-smaller unit when it carries information, but skips
+// trailing zeros so "1d 0h" / "1h 0m" never appear. When the immediate
+// secondary unit is zero, falls through to the next non-zero adjacent
+// unit so e.g. 1d 0h 30m → "1d 30m" (not "1d 0h" or just "1d").
+//
+//	30s, 5m, 5m 30s, 5h, 5h 30m, 1d, 1d 5h, 1d 30m, 4d 12h.
 func FormatCountdown(seconds float64) string {
-	if seconds < 60 {
-		return fmt.Sprintf("%ds", int(seconds))
+	s := int(seconds)
+	if s < 0 {
+		s = 0
 	}
-	mins := int(seconds) / 60
+	if s < 60 {
+		return fmt.Sprintf("%ds", s)
+	}
+	mins := s / 60
 	if mins < 60 {
 		return fmt.Sprintf("%dm", mins)
 	}
 	hours := mins / 60
 	if hours < 24 {
-		return fmt.Sprintf("%dh %dm", hours, mins%60)
+		if m := mins % 60; m > 0 {
+			return fmt.Sprintf("%dh %dm", hours, m)
+		}
+		return fmt.Sprintf("%dh", hours)
 	}
-	return fmt.Sprintf("%dd %dh", hours/24, hours%24)
+	days := hours / 24
+	if h := hours % 24; h > 0 {
+		return fmt.Sprintf("%dd %dh", days, h)
+	}
+	if m := mins % 60; m > 0 {
+		return fmt.Sprintf("%dd %dm", days, m)
+	}
+	return fmt.Sprintf("%dd", days)
 }

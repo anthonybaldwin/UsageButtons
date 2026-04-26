@@ -4,18 +4,21 @@
 // session. Endpoints (Perplexity removed /rest/billing/credits in 2026 —
 // the new flow mirrors what perplexity.ai/account/usage itself fetches):
 //
-//	GET /rest/pplx-api/v2/groups            — pick first group ID
-//	GET /rest/pplx-api/v2/groups/{groupId}  — balance + subscription tier
-//	GET /rest/rate-limit/all                — per-tier query quotas
+//	GET /rest/pplx-api/v2/groups                                — discover org/group ID
+//	GET /rest/pplx-api/v2/groups/{groupId}                      — balance + plan tier
+//	GET /rest/pplx-api/v2/groups/{groupId}/usage-analytics      — meter cost summaries
+//	GET /rest/rate-limit/all                                    — per-tier query quotas
 package perplexity
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -30,29 +33,45 @@ const (
 	groupsURL    = "https://www.perplexity.ai/rest/pplx-api/v2/groups"
 	groupURLBase = "https://www.perplexity.ai/rest/pplx-api/v2/groups/"
 	rateLimitURL = "https://www.perplexity.ai/rest/rate-limit/all"
+	// usageAnalyticsSuffix appends to the per-group URL to fetch the
+	// meter event summaries used for the API-spend calculation.
+	usageAnalyticsSuffix = "/usage-analytics"
 
 	groupIDOverrideEnv = "USAGEBUTTONS_PERPLEXITY_GROUP_ID"
-
-	// rateLimitDailyDefault is a conservative per-tier daily allotment used
-	// to compute a percent-remaining value when the API only returns the
-	// remaining count (no explicit limit). Pro plans currently grant a
-	// shared 600/day pool — this is the visible-on-the-page default.
-	rateLimitDailyDefault = 600
 )
 
 // usageSnapshot is the normalized Perplexity quota state.
+//
+// /rest/rate-limit/all only returns the *remaining* counts per tier —
+// not a daily limit — so each rate-limit field is rendered as a count
+// metric (the number itself is the value, no false percentage). Tier
+// limits would have to be guessed per plan, and that's actively
+// misleading when wrong (e.g. a fresh-day "200 remaining" rendering as
+// "33% remaining" because we assumed a 600/day cap).
 type usageSnapshot struct {
-	BalanceCents     float64
+	// BalanceCents is customerInfo.balance × 100. $0 for Pro plan users
+	// who haven't used the API platform.
+	BalanceCents float64
+	// SpendCents is customerInfo.spend.total_spend × 100 — all-time API
+	// platform spend.
+	SpendCents float64
+	// CometSpendCents is cost from the `comet_cloud_duration_hours` meter
+	// (Perplexity Comet — computer-use / AI-browser usage), USD * 100.
+	// Tracked separately so users can see Comet activity at a glance
+	// rather than buried in the aggregate api-spend.
+	CometSpendCents float64
+	// SubscriptionTier is "Pro" / "Max" / "Enterprise" / "" derived from
+	// customerInfo.is_pro / is_max booleans.
 	SubscriptionTier string
-	ProRemaining     *int
-	ProLimit         int
-	ResearchRemain   *int
-	ResearchLimit    int
-	LabsRemain       *int
-	LabsLimit        int
-	AgenticRemain    *int
-	AgenticLimit     int
-	UpdatedAt        time.Time
+	// FreeQueriesAvailable mirrors free_queries.available — Pro plan's
+	// "unlimited basic searches" flag.
+	FreeQueriesAvailable bool
+	// Per-tier remaining counts. nil when the API didn't return that key.
+	ProRemaining   *int
+	ResearchRemain *int
+	LabsRemain     *int
+	AgenticRemain  *int
+	UpdatedAt      time.Time
 }
 
 // Provider fetches Perplexity usage data.
@@ -77,7 +96,9 @@ func (Provider) MetricIDs() []string {
 		"deep-research-remaining",
 		"labs-remaining",
 		"agentic-research-remaining",
-		"balance",
+		"comet-spend",
+		"api-balance",
+		"api-spend",
 	}
 }
 
@@ -97,15 +118,40 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	if err != nil {
 		return mapHTTPError(err), nil
 	}
+	groupURL := groupURLBase + url.PathEscape(groupID)
 	groupMap := map[string]any{}
-	if err := cookies.FetchJSON(ctx, groupURLBase+url.PathEscape(groupID), headers, &groupMap); err != nil {
+	if err := cookies.FetchJSON(ctx, groupURL, headers, &groupMap); err != nil {
 		return mapHTTPError(err), nil
 	}
 	rateMap := map[string]any{}
 	if err := cookies.FetchJSON(ctx, rateLimitURL, headers, &rateMap); err != nil {
 		return mapHTTPError(err), nil
 	}
-	return snapshotFromUsage(usageFromResponses(groupMap, rateMap, time.Now().UTC())), nil
+	// usage-analytics is best-effort — Pro accounts often have no
+	// recorded meters yet (empty meter_event_summaries) and we still
+	// want to render the rest of the dashboard. Errors only suppress
+	// the api-spend metric.
+	var analyticsAny any
+	_, _ = fetchAny(ctx, groupURL+usageAnalyticsSuffix, headers, &analyticsAny)
+	return snapshotFromUsage(usageFromResponses(groupMap, rateMap, analyticsAny, time.Now().UTC())), nil
+}
+
+// fetchAny performs a best-effort GET and unmarshals into dst (any-typed
+// so it accepts arrays or objects). Returns the raw bytes for diagnostic
+// dumping plus any error so callers may distinguish "no data" from a
+// real network failure.
+func fetchAny(ctx context.Context, target string, headers map[string]string, dst *any) ([]byte, error) {
+	resp, err := cookies.Fetch(ctx, cookies.Request{URL: target, Method: "GET", Headers: headers})
+	if err != nil {
+		return nil, err
+	}
+	if resp.Status < 200 || resp.Status >= 300 {
+		return resp.Body, &httputil.Error{Status: resp.Status, StatusText: resp.StatusText, Body: string(resp.Body), URL: target}
+	}
+	if len(resp.Body) == 0 {
+		return resp.Body, nil
+	}
+	return resp.Body, json.Unmarshal(resp.Body, dst)
 }
 
 // resolveGroupID returns the user-overridden group ID or discovers the
@@ -114,47 +160,104 @@ func resolveGroupID(ctx context.Context, headers map[string]string) (string, err
 	if override := strings.TrimSpace(os.Getenv(groupIDOverrideEnv)); override != "" {
 		return override, nil
 	}
-	root := map[string]any{}
-	if err := cookies.FetchJSON(ctx, groupsURL, headers, &root); err != nil {
+	// Use raw fetch + Unmarshal-into-any so we accept either an envelope
+	// object ({"orgs":[…]}, {"groups":[…]}, …) or a plain root array.
+	resp, err := cookies.Fetch(ctx, cookies.Request{URL: groupsURL, Method: "GET", Headers: headers})
+	if err != nil {
 		return "", err
 	}
-	if id := firstGroupID(root); id != "" {
+	if resp.Status < 200 || resp.Status >= 300 {
+		return "", &httputil.Error{Status: resp.Status, StatusText: resp.StatusText, Body: string(resp.Body), URL: groupsURL}
+	}
+	var raw any
+	if err := json.Unmarshal(resp.Body, &raw); err != nil {
+		dumpUnknownGroups(resp.Body)
+		return "", fmt.Errorf("Perplexity: groups response not JSON")
+	}
+	if id := firstGroupID(raw); id != "" {
 		return id, nil
 	}
+	dumpUnknownGroups(resp.Body)
 	return "", fmt.Errorf("Perplexity: no groups returned")
 }
 
-// firstGroupID walks the groups response looking for the first group's ID.
-// Perplexity's payload nests the array under common envelope keys, and
-// each entry may use id / group_id / groupId / uuid for the identifier.
-func firstGroupID(root map[string]any) string {
+// firstGroupID walks the groups response looking for the active
+// (default) group ID, falling back to the first viable ID. The response
+// shape varies — it may be a raw array, or an object envelope under
+// `orgs`, `groups`, `results`, `items`, `data`, `result`, etc. Each
+// entry may identify itself with `api_org_id` / `apiOrgId` / `org_id` /
+// `orgId` / `id` / `group_id` / `groupId` / `uuid` / `_id`. When any
+// entry has `is_default_org: true` (or camelCase), prefer it over the
+// first-seen id.
+func firstGroupID(root any) string {
+	if arr, ok := root.([]any); ok {
+		return idFromArray(arr)
+	}
+	m, ok := root.(map[string]any)
+	if !ok {
+		return ""
+	}
 	envelopes := [][]string{
-		{"groups"}, {"data", "groups"}, {"result", "groups"},
-		{"data"}, {"result"}, {"items"},
+		{"orgs"}, {"groups"}, {"results"}, {"items"},
+		{"data", "orgs"}, {"data", "groups"}, {"data", "results"}, {"data", "items"},
+		{"result", "orgs"}, {"result", "groups"}, {"result", "results"}, {"result", "items"},
+		{"data"}, {"result"},
 	}
 	for _, path := range envelopes {
-		if arr, ok := nestedArray(root, path...); ok {
-			if id := firstIDFromArray(arr); id != "" {
+		if arr, ok := nestedArray(m, path...); ok {
+			if id := idFromArray(arr); id != "" {
 				return id
 			}
 		}
 	}
+	// Single-object response (no envelope, no array).
+	if id := idFromObj(m); id != "" {
+		return id
+	}
 	return ""
 }
 
-// firstIDFromArray pulls the first identifier-shaped string out of an
-// array of group-like objects.
-func firstIDFromArray(arr []any) string {
+// idFromArray returns the default org's ID when one is flagged, else the
+// first object that yields any id-shaped string.
+func idFromArray(arr []any) string {
+	var first string
 	for _, item := range arr {
 		obj, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
-		if id := providerutil.FirstString(obj, "id", "group_id", "groupId", "uuid", "_id"); id != "" {
+		id := idFromObj(obj)
+		if id == "" {
+			continue
+		}
+		if first == "" {
+			first = id
+		}
+		if isDefaultOrg(obj) {
 			return id
 		}
 	}
-	return ""
+	return first
+}
+
+// idFromObj reads an id-shaped string from a single group/org object.
+func idFromObj(obj map[string]any) string {
+	return providerutil.FirstString(obj,
+		"api_org_id", "apiOrgId",
+		"org_id", "orgId",
+		"id", "group_id", "groupId",
+		"uuid", "_id",
+	)
+}
+
+// isDefaultOrg reports whether obj is flagged as the user's default org.
+func isDefaultOrg(obj map[string]any) bool {
+	for _, k := range []string{"is_default_org", "isDefaultOrg"} {
+		if v, ok := obj[k].(bool); ok && v {
+			return true
+		}
+	}
+	return false
 }
 
 // nestedArray walks keys to return an array value when present.
@@ -171,16 +274,222 @@ func nestedArray(root map[string]any, keys ...string) ([]any, bool) {
 	return arr, ok
 }
 
-// usageFromResponses normalizes group + rate-limit JSON into usageSnapshot.
-func usageFromResponses(groupMap, rateMap map[string]any, now time.Time) usageSnapshot {
+// dumpUnknownGroups appends a snippet of an unrecognized groups response
+// to a temp file so a future debug pass can be precise. Owner-only perms,
+// append mode with size caps; only fires when the groups call returns a
+// shape we can't extract a group ID from.
+func dumpUnknownGroups(body []byte) {
+	const (
+		maxSnippetBytes = 16 * 1024
+		maxFileBytes    = 256 * 1024
+	)
+	path := filepath.Join(os.TempDir(), "usagebuttons-perplexity-debug.txt")
+	if info, err := os.Stat(path); err == nil && info.Size() >= maxFileBytes {
+		return
+	}
+	snippet := body
+	truncated := false
+	if len(snippet) > maxSnippetBytes {
+		snippet = snippet[:maxSnippetBytes]
+		truncated = true
+	}
+	header := fmt.Sprintf("[%s] groups endpoint: length=%d truncated=%v\n",
+		time.Now().UTC().Format(time.RFC3339), len(body), truncated)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	_, _ = f.WriteString(header)
+	_, _ = f.Write(snippet)
+	_, _ = f.WriteString("\n\n")
+}
+
+// usageFromResponses normalizes group + rate-limit + usage-analytics JSON
+// into usageSnapshot.
+func usageFromResponses(groupMap, rateMap map[string]any, analytics any, now time.Time) usageSnapshot {
 	usage := usageSnapshot{UpdatedAt: now}
 	usage.BalanceCents = readBalanceCents(groupMap)
+	usage.SpendCents = readSpendCents(groupMap)
 	usage.SubscriptionTier = readSubscriptionTier(groupMap)
-	usage.ProRemaining, usage.ProLimit = readRateLimit(rateMap, "remaining_pro", "pro")
-	usage.ResearchRemain, usage.ResearchLimit = readRateLimit(rateMap, "remaining_research", "research", "deep_research")
-	usage.LabsRemain, usage.LabsLimit = readRateLimit(rateMap, "remaining_labs", "labs")
-	usage.AgenticRemain, usage.AgenticLimit = readRateLimit(rateMap, "remaining_agentic_research", "agentic_research", "agentic")
+	usage.FreeQueriesAvailable = readFreeQueriesAvailable(rateMap)
+	usage.ProRemaining = readRemainingCount(rateMap, "remaining_pro", "pro")
+	usage.ResearchRemain = readRemainingCount(rateMap, "remaining_research", "research", "deep_research")
+	usage.LabsRemain = readRemainingCount(rateMap, "remaining_labs", "labs")
+	usage.AgenticRemain = readRemainingCount(rateMap, "remaining_agentic_research", "agentic_research", "agentic")
+	if cost, ok := sumUsageCostCents(analytics); ok {
+		// usage-analytics cost is paid API spend — overrides
+		// customerInfo.spend.total_spend when present, since the
+		// analytics endpoint is the more granular source.
+		usage.SpendCents = cost
+	}
+	usage.CometSpendCents = sumMeterCostCents(analytics, "comet_cloud_duration_hours", "cometCloudDurationHours")
 	return usage
+}
+
+// sumMeterCostCents totals `cost` (USD) across one specific meter's
+// meter_event_summaries entries — used to break out Comet (computer-use)
+// spend from the aggregate API spend. Returns 0 when the named meter
+// is absent or has no summaries.
+func sumMeterCostCents(root any, names ...string) float64 {
+	arr, ok := analyticsArray(root)
+	if !ok {
+		return 0
+	}
+	wantName := func(n string) bool {
+		for _, w := range names {
+			if n == w {
+				return true
+			}
+		}
+		return false
+	}
+	var total float64
+	for _, item := range arr {
+		meter, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := meter["name"].(string)
+		if !wantName(name) {
+			continue
+		}
+		summaries, ok := firstAny(meter, "meter_event_summaries", "meterEventSummaries").([]any)
+		if !ok {
+			continue
+		}
+		for _, s := range summaries {
+			obj, ok := s.(map[string]any)
+			if !ok {
+				continue
+			}
+			if v, ok := providerutil.FirstFloat(obj, "cost", "amount", "amount_usd", "amountUsd"); ok {
+				total += v
+			}
+		}
+	}
+	return math.Round(total * 100)
+}
+
+// readSpendCents reads customerInfo.spend.total_spend × 100. Falls back
+// across nested wrappers in case the response is restructured.
+func readSpendCents(root map[string]any) float64 {
+	wrappers := [][]string{
+		{"customerInfo", "spend"}, {"customer_info", "spend"},
+		{"apiOrganization", "customerInfo", "spend"},
+		{"apiOrganization", "customer_info", "spend"},
+		{"spend"},
+	}
+	for _, path := range wrappers {
+		m, ok := providerutil.NestedMap(root, path...)
+		if !ok {
+			continue
+		}
+		if v, ok := providerutil.FirstFloat(m, "total_spend", "totalSpend", "amount", "amount_usd"); ok {
+			return math.Round(v * 100)
+		}
+	}
+	return 0
+}
+
+// readFreeQueriesAvailable returns the rate-limit response's
+// `free_queries.available` flag — Pro plan's "unlimited basic queries"
+// indicator. Currently informational; not surfaced as a metric.
+func readFreeQueriesAvailable(rate map[string]any) bool {
+	fq, ok := providerutil.NestedMap(rate, "free_queries")
+	if !ok {
+		return false
+	}
+	v, _ := fq["available"].(bool)
+	return v
+}
+
+// readRemainingCount returns the first matching `remaining_*` key from
+// the rate-limit response. Searches the root and any common envelope.
+func readRemainingCount(rate map[string]any, keys ...string) *int {
+	pools := []map[string]any{rate}
+	for _, p := range []string{"rateLimits", "rate_limits", "data", "result"} {
+		if nested, ok := providerutil.NestedMap(rate, p); ok {
+			pools = append(pools, nested)
+		}
+	}
+	for _, m := range pools {
+		if v, ok := providerutil.FirstFloat(m, keys...); ok {
+			n := int(math.Round(math.Max(0, v)))
+			return &n
+		}
+	}
+	return nil
+}
+
+// sumUsageCostCents walks the usage-analytics response and totals
+// `cost` (USD) across all `meter_event_summaries[]` arrays. Returns
+// (cents, true) on success — including the legitimate "no usage yet"
+// zero. Returns (_, false) when the response shape is unrecognized
+// so the provider can omit the derived metric.
+func sumUsageCostCents(root any) (float64, bool) {
+	arr, ok := analyticsArray(root)
+	if !ok {
+		return 0, false
+	}
+	var total float64
+	hasMeter := len(arr) == 0
+	hasCost := false
+	for _, item := range arr {
+		meter, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		summaries, ok := firstAny(meter, "meter_event_summaries", "meterEventSummaries").([]any)
+		if !ok {
+			continue
+		}
+		hasMeter = true
+		for _, s := range summaries {
+			obj, ok := s.(map[string]any)
+			if !ok {
+				continue
+			}
+			if v, ok := providerutil.FirstFloat(obj, "cost", "amount", "amount_usd", "amountUsd"); ok {
+				total += v
+				hasCost = true
+			}
+		}
+	}
+	if !hasMeter && !hasCost {
+		return 0, false
+	}
+	return math.Round(total * 100), true
+}
+
+// analyticsArray returns the meter list from a usage-analytics response.
+// Accepts a top-level array or an envelope object under common keys.
+func analyticsArray(root any) ([]any, bool) {
+	if arr, ok := root.([]any); ok {
+		return arr, true
+	}
+	m, ok := root.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	for _, key := range []string{"usage_analytics", "usageAnalytics", "data", "result", "items"} {
+		if v, ok := m[key]; ok {
+			if arr, ok := v.([]any); ok {
+				return arr, true
+			}
+		}
+	}
+	return nil, false
+}
+
+// firstAny returns the first present value among keys.
+func firstAny(m map[string]any, keys ...string) any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			return v
+		}
+	}
+	return nil
 }
 
 // readBalanceCents extracts a USD balance from the group payload's nested
@@ -189,19 +498,17 @@ func usageFromResponses(groupMap, rateMap map[string]any, now time.Time) usageSn
 func readBalanceCents(root map[string]any) float64 {
 	wrappers := [][]string{
 		nil,
-		{"apiOrganization"},
-		{"api_organization"},
-		{"group"},
-		{"org"},
-		{"organization"},
-		{"data"},
-		{"result"},
-		{"item"},
-		{"customerInfo"},
-		{"customer_info"},
-		{"wallet"},
-		{"billing"},
-		{"usage"},
+		{"apiOrganization"}, {"api_organization"},
+		{"group"}, {"org"}, {"organization"},
+		{"data"}, {"result"}, {"item"},
+		{"customerInfo"}, {"customer_info"},
+		{"wallet"}, {"billing"}, {"usage"},
+		// Nested: customerInfo lives under apiOrganization in the
+		// real per-group response shape captured 2026-04.
+		{"apiOrganization", "customerInfo"}, {"apiOrganization", "customer_info"},
+		{"api_organization", "customerInfo"}, {"api_organization", "customer_info"},
+		{"organization", "customerInfo"}, {"organization", "customer_info"},
+		{"data", "customerInfo"}, {"data", "customer_info"},
 	}
 	keys := []string{"balance_usd", "balanceUsd", "balance", "pending_balance", "pendingBalance"}
 	for _, path := range wrappers {
@@ -221,11 +528,23 @@ func readBalanceCents(root map[string]any) float64 {
 }
 
 // readSubscriptionTier returns "Pro" / "Max" / "Enterprise" / "" from the
-// group payload, matching the strings Perplexity uses on its own UI.
+// group payload. customerInfo.is_max / is_pro booleans take precedence
+// over string fields (matches openusage's detectPlanLabel). Walks both
+// top-level wrappers AND nested customerInfo combinations because the
+// per-group response often nests the customerInfo under apiOrganization.
 func readSubscriptionTier(root map[string]any) string {
-	for _, path := range [][]string{
-		nil, {"apiOrganization"}, {"organization"}, {"customerInfo"}, {"customer_info"}, {"data"}, {"result"},
-	} {
+	wrappers := [][]string{
+		nil,
+		{"customerInfo"}, {"customer_info"},
+		{"apiOrganization"}, {"api_organization"},
+		{"organization"}, {"org"},
+		{"data"}, {"result"},
+		{"apiOrganization", "customerInfo"}, {"apiOrganization", "customer_info"},
+		{"api_organization", "customerInfo"}, {"api_organization", "customer_info"},
+		{"organization", "customerInfo"}, {"organization", "customer_info"},
+		{"data", "customerInfo"}, {"data", "customer_info"},
+	}
+	for _, path := range wrappers {
 		m := root
 		if len(path) > 0 {
 			n, ok := providerutil.NestedMap(root, path...)
@@ -234,6 +553,18 @@ func readSubscriptionTier(root map[string]any) string {
 			}
 			m = n
 		}
+		if v, ok := m["is_max"].(bool); ok && v {
+			return "Max"
+		}
+		if v, ok := m["isMax"].(bool); ok && v {
+			return "Max"
+		}
+		if v, ok := m["is_pro"].(bool); ok && v {
+			return "Pro"
+		}
+		if v, ok := m["isPro"].(bool); ok && v {
+			return "Pro"
+		}
 		if tier := providerutil.FirstString(m, "subscriptionTier", "subscription_tier", "tier", "plan", "subscription"); tier != "" {
 			return strings.TrimSpace(tier)
 		}
@@ -241,68 +572,31 @@ func readSubscriptionTier(root map[string]any) string {
 	return ""
 }
 
-// readRateLimit returns (remaining, limit) for one tier from the
-// /rest/rate-limit/all payload. The endpoint may nest values under a
-// `rateLimits` key or place them at the root, and the explicit limit
-// may live in a different pool than the remaining count — so we
-// search all pools for both.
-func readRateLimit(root map[string]any, keys ...string) (*int, int) {
-	pools := []map[string]any{root}
-	for _, p := range []string{"rateLimits", "rate_limits", "data", "result"} {
-		if nested, ok := providerutil.NestedMap(root, p); ok {
-			pools = append(pools, nested)
-		}
-	}
-	limitKeys := make([]string, 0, len(keys)*2)
-	for _, k := range keys {
-		limitKeys = append(limitKeys, "limit_"+k, k+"_limit")
-	}
-	var remaining *int
-	for _, m := range pools {
-		if v, ok := providerutil.FirstFloat(m, keys...); ok {
-			r := int(math.Round(math.Max(0, v)))
-			remaining = &r
-			break
-		}
-	}
-	if remaining == nil {
-		return nil, 0
-	}
-	limit := rateLimitDailyDefault
-	for _, m := range pools {
-		if lim, ok := providerutil.FirstFloat(m, limitKeys...); ok && lim > 0 {
-			limit = int(math.Round(lim))
-			break
-		}
-	}
-	return remaining, limit
-}
-
 // snapshotFromUsage maps Perplexity quotas into Stream Deck metrics.
+//
+// Rate-limit categories render as count metrics (full bar, count as
+// the value) since /rest/rate-limit/all returns no daily caps to
+// percent-against. Balance + spend render as dollar metrics, always
+// emitted (even at $0) so users can see they have no API platform
+// activity.
 func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	now := usage.UpdatedAt.UTC().Format(time.RFC3339)
 	var metrics []providers.MetricValue
-	addRate := func(id, label, name string, remaining *int, limit int) {
+	addCount := func(id, label, name string, remaining *int) {
 		if remaining == nil {
 			return
 		}
-		used := math.Max(0, float64(limit-*remaining))
-		usedPct := 100.0
-		if limit > 0 {
-			usedPct = math.Max(0, math.Min(100, used/float64(limit)*100))
-		}
-		caption := fmt.Sprintf("%d/%d left", *remaining, limit)
-		m := providerutil.PercentRemainingMetric(id, label, name, usedPct, nil, caption, now)
-		m = providerutil.RawCounts(m, *remaining, limit)
-		metrics = append(metrics, m)
+		metrics = append(metrics, countMetric(id, label, name, *remaining, now))
 	}
-	addRate("pro-queries-remaining", "QUERIES", "Perplexity Pro queries remaining", usage.ProRemaining, usage.ProLimit)
-	addRate("deep-research-remaining", "DEEP", "Perplexity Deep Research queries remaining", usage.ResearchRemain, usage.ResearchLimit)
-	addRate("labs-remaining", "LABS", "Perplexity Labs queries remaining", usage.LabsRemain, usage.LabsLimit)
-	addRate("agentic-research-remaining", "AGENTIC", "Perplexity Agentic Research queries remaining", usage.AgenticRemain, usage.AgenticLimit)
-	if usage.BalanceCents > 0 || len(metrics) == 0 {
-		metrics = append(metrics, balanceMetric(usage, now))
-	}
+	addCount("pro-queries-remaining", "QUERIES", "Perplexity Pro queries remaining today", usage.ProRemaining)
+	addCount("deep-research-remaining", "DEEP", "Perplexity Deep Research queries remaining today", usage.ResearchRemain)
+	addCount("labs-remaining", "LABS", "Perplexity Labs queries remaining today", usage.LabsRemain)
+	addCount("agentic-research-remaining", "AGENTIC", "Perplexity Agentic Research queries remaining today", usage.AgenticRemain)
+	metrics = append(metrics,
+		dollarMetric("comet-spend", "COMET", "Perplexity Comet (computer-use) spend (all-time)", usage.CometSpendCents, now),
+		dollarMetric("api-balance", "BALANCE", "Perplexity API balance", usage.BalanceCents, now),
+		dollarMetric("api-spend", "SPEND", "Perplexity API spend (all-time)", usage.SpendCents, now),
+	)
 	return providers.Snapshot{
 		ProviderID:   "perplexity",
 		ProviderName: providerName(usage),
@@ -312,15 +606,45 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	}
 }
 
-// balanceMetric renders the API balance as a USD-formatted card.
-func balanceMetric(usage usageSnapshot, now string) providers.MetricValue {
-	dollars := usage.BalanceCents / 100
-	caption := fmt.Sprintf("$%.2f", dollars)
-	m := providerutil.PercentRemainingMetric("balance", "BALANCE", "Perplexity API balance",
-		0, nil, caption, now)
-	cents := int(math.Round(usage.BalanceCents))
-	m.RawCount = &cents
-	return m
+// countMetric builds a "remaining queries" count tile. The count itself
+// is the prominent value; the bar renders full because /rest/rate-limit
+// doesn't expose the daily cap (a guessed cap would mis-fill the bar
+// when wrong, which is worse than a static full bar).
+func countMetric(id, label, name string, remaining int, now string) providers.MetricValue {
+	val := float64(remaining)
+	ratio := 1.0
+	return providers.MetricValue{
+		ID:              id,
+		Label:           label,
+		Name:            name,
+		Value:           val,
+		NumericValue:    &val,
+		NumericUnit:     "count",
+		NumericGoodWhen: "high",
+		Ratio:           &ratio,
+		Caption:         "remaining today",
+		UpdatedAt:       now,
+	}
+}
+
+// dollarMetric renders a USD-valued tile (balance, spend). Always emitted
+// — a $0.00 value is itself useful information for accounts with no API
+// platform activity.
+func dollarMetric(id, label, name string, cents float64, now string) providers.MetricValue {
+	dollars := cents / 100
+	ratio := 1.0
+	return providers.MetricValue{
+		ID:              id,
+		Label:           label,
+		Name:            name,
+		Value:           dollars,
+		NumericValue:    &dollars,
+		NumericUnit:     "dollars",
+		NumericGoodWhen: "high",
+		Ratio:           &ratio,
+		Caption:         fmt.Sprintf("$%.2f", dollars),
+		UpdatedAt:       now,
+	}
 }
 
 // providerName decorates the display name with the inferred plan tier.

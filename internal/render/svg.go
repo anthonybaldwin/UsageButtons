@@ -3,10 +3,54 @@ package render
 import (
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+// renderStarfield returns SVG `<circle>` elements approximating xAI's
+// stationary starfield motif. Static — Stream Deck buttons render once
+// per poll, so the per-frame flicker / shooting-star animation from
+// upstream HTML5-canvas implementations isn't reproducible here.
+//
+// Visual borrowed (positioning logic + opacity-flicker varied across
+// stars) from UsmanDevCraft/grok-shooting-stars (MIT) — see
+// THIRD_PARTY_LICENSES.md.
+//
+// Pattern is deterministic so positions don't shuffle between polls.
+// Different layers (back / front of glyph) call this with different
+// seeds when a layered effect is desired; for now the starfield only
+// renders behind the glyph (paint order is bg → starfield → glyph →
+// fill → text), so a single seed suffices.
+func renderStarfield() string {
+	r := rand.New(rand.NewPCG(0xfeed, 0xface))
+	const count = 45
+	parts := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		x := r.Float64() * float64(Canvas)
+		y := r.Float64() * float64(Canvas)
+		// Stream Deck rasterizes the 144-unit canvas down to ~72px,
+		// so sub-pixel radii vanish. Bias to 0.9..2.4 so every star
+		// covers at least one rendered pixel.
+		radius := 0.9 + r.Float64()*1.5
+		// Each star flickers between a dim and bright opacity on its
+		// own desynced cycle so the field shimmers instead of pulsing
+		// in unison. SMIL `<animate>` is supported by the WebKit shell
+		// Stream Deck uses to render SVG `<image>` payloads.
+		dim := 0.30 + r.Float64()*0.20
+		bright := 0.70 + r.Float64()*0.25
+		dur := 1.6 + r.Float64()*2.4    // 1.6s..4.0s — varied periods
+		offset := -r.Float64() * dur    // negative begin desyncs phases
+		parts = append(parts, fmt.Sprintf(
+			`<circle cx="%.1f" cy="%.1f" r="%.2f" fill="#ffffff" opacity="%.2f">`+
+				`<animate attributeName="opacity" values="%.2f;%.2f;%.2f" dur="%.2fs" begin="%.2fs" repeatCount="indefinite"/>`+
+				`</circle>`,
+			x, y, radius, dim,
+			dim, bright, dim, dur, offset))
+	}
+	return strings.Join(parts, "")
+}
 
 // Canvas is the edge length (in SVG user units) of a Stream Deck button face.
 const Canvas = 144
@@ -66,6 +110,14 @@ type ButtonInput struct {
 	// (default on), and main.go threads that runtime decision into
 	// this field at each render site.
 	SmartContrast bool
+	// Starfield, when true, paints a fixed white-dot starfield over the
+	// bg rect, sitting BEHIND the watermark glyph and text layers
+	// (paint order: bg → starfield → glyph → meter fill → text). Used
+	// by Grok to echo the xAI / grok.com on-page starfield motif.
+	// Static — Stream Deck buttons render once per poll, so the
+	// per-frame flicker / shooting-star animation from the upstream
+	// canvas implementation isn't reproducible at this layer.
+	Starfield bool
 }
 
 // valueFontSizes maps a ButtonInput.ValueSize to a starting pixel size.
@@ -323,6 +375,11 @@ func RenderButton(in ButtonInput) string {
 		textFill = renderLabels(fgFill) + renderValue(fgFill) + renderSubvalue(fgFill)
 	}
 
+	starfield := ""
+	if in.Starfield {
+		starfield = renderStarfield()
+	}
+
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" opacity="%s">
   <defs>
     <clipPath id="card">
@@ -337,6 +394,7 @@ func RenderButton(in ButtonInput) string {
   </defs>
   <g clip-path="url(#card)">
     <rect width="%d" height="%d" fill="%s"/>
+    %s
     %s
     <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s"/>
   </g>
@@ -357,6 +415,7 @@ func RenderButton(in ButtonInput) string {
 		Canvas, Canvas,
 		rect.X, rect.Y, rect.W, rect.H,
 		Canvas, Canvas, bg,
+		starfield,
 		glyphBack,
 		rect.X, rect.Y, rect.W, rect.H, fill,
 		borderElement,
@@ -367,13 +426,17 @@ func RenderButton(in ButtonInput) string {
 }
 
 // RenderLoading produces a loading face with just the provider glyph.
-func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, showBorder *bool) string {
+func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, showBorder *bool, starfield bool) string {
 	fg := def(fgColor, "#f9fafb")
 	bg := def(bgColor, "#111827")
 	border := showBorder == nil || *showBorder
 	glyphColor := fillColor
 	if glyphColor == "" {
 		glyphColor = fg
+	}
+	stars := ""
+	if starfield {
+		stars = renderStarfield()
 	}
 
 	// Use the same glyph zone as RenderButton's watermark so the
@@ -418,12 +481,14 @@ func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, sho
   <g clip-path="url(#card-loading)">
     <rect width="%d" height="%d" fill="%s"/>
     %s
+    %s
   </g>
   %s
 </svg>`,
 		Canvas, Canvas,
 		Canvas, Canvas,
 		Canvas, Canvas, bg,
+		stars,
 		glyphElement,
 		borderEl,
 	)

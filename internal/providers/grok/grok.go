@@ -241,7 +241,7 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	now := usage.UpdatedAt.UTC().Format(time.RFC3339)
 	var metrics []providers.MetricValue
 	if m, ok := countMetric(
-		"grok3-queries-remaining", "GROK 3", "Searches",
+		"grok3-queries-remaining", "GROK 3", "Queries",
 		"Grok 3 queries remaining (window)",
 		usage.Grok3.RemainingQueries, usage.Grok3.TotalQueries,
 		usage.Grok3.WaitTimeSeconds, now); ok {
@@ -255,7 +255,7 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 		metrics = append(metrics, m)
 	}
 	if m, ok := countMetric(
-		"grok4-heavy-queries-remaining", "GROK 4", "Heavy",
+		"grok4-heavy-queries-remaining", "GROK 4", "Queries",
 		"Grok 4 Heavy queries remaining (window)",
 		usage.Grok4.RemainingQueries, usage.Grok4.TotalQueries,
 		usage.Grok4.WaitTimeSeconds, now); ok {
@@ -273,7 +273,7 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 // countMetric renders one rate-limit category as a count tile:
 // "139/140" is the prominent value, the meter fill scales to
 // remaining/total, and the caption is a one-word category
-// ("Searches" / "Heavy" / "Tokens").
+// ("Queries" / "Tokens").
 //
 // Why count, not percent: grok.com's totals are small (140-cap on
 // grok-3, 20-cap on grok-4 Heavy). "10% remaining" of 20 = 2 — the
@@ -312,7 +312,7 @@ func countMetric(id, label, category, name string, remaining, total, waitSecs *i
 		NumericValue:    &num,
 		NumericUnit:     "count",
 		NumericGoodWhen: "high",
-		Caption:         category, // "Searches" / "Tokens" / "Heavy"
+		Caption:         category, // "Queries" / "Tokens"
 		UpdatedAt:       now,
 	}
 	if rem == 0 && waitSecs != nil && *waitSecs > 0 {

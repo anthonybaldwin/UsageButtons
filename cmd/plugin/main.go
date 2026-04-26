@@ -962,7 +962,7 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 	ks := settings.EffectiveSettings(key.settings, prov.ID())
 	hideLabel := key.showTitle
 	customTitle := key.customTitle
-	metricID := resolveMetricID(ks)
+	metricID := effectiveMetricID(ks, prov.ID())
 	title := deriveLabelFromMetricID(metricID)
 
 	if snapshot.Error != "" && len(snapshot.Metrics) == 0 {
@@ -1122,6 +1122,7 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 	in := render.ButtonInput{
 		Value:         valueStr,
 		SmartContrast: settings.SmartContrastFor(prov.ID()),
+		Starfield:     settings.StarfieldEnabled(prov.ID(), ks),
 	}
 
 	// Label: render in SVG unless the user has set a custom native
@@ -1302,6 +1303,7 @@ func placeholderFace(prov providers.Provider, label, value, subvalue string, ks 
 		Fill:          fill,
 		Bg:            bg,
 		SmartContrast: settings.SmartContrastFor(prov.ID()),
+		Starfield:     settings.StarfieldEnabled(prov.ID(), ks),
 	}
 	if subvalue != "" {
 		in.Subvalue = subvalue
@@ -1375,7 +1377,13 @@ func loadingFaceFor(providerID string, ks *settings.KeySettings) string {
 			border = ks.ShowBorder
 		}
 	}
-	return render.RenderLoading(glyph, fillColor, bg, fg, border)
+	starfield := false
+	if ks != nil {
+		starfield = settings.StarfieldEnabled(providerID, *ks)
+	} else {
+		starfield = settings.StarfieldEnabled(providerID, settings.KeySettings{})
+	}
+	return render.RenderLoading(glyph, fillColor, bg, fg, border, starfield)
 }
 
 // --- Threshold logic ---
@@ -1465,15 +1473,8 @@ func resolveShowRawCounts(metric providers.MetricValue, ks settings.KeySettings)
 	return false
 }
 
-func resolveMetricID(ks settings.KeySettings) string {
-	if ks.MetricID != "" {
-		return ks.MetricID
-	}
-	return defaultMetric
-}
-
-// effectiveMetricID is resolveMetricID with provider-aware fallback.
-// When the key has no saved MetricID, picks the first entry from the
+// effectiveMetricID resolves the metric ID a key should display. When
+// the key has no saved MetricID, picks the first entry from the
 // provider's MetricIDs() so a freshly-dropped action lands on a metric
 // that actually exists for that provider — not the Claude-flavored
 // "session-percent" default. Falls back to defaultMetric when the
@@ -1570,7 +1571,8 @@ var knownLabels = map[string]string{
 	"tokens-session-percent":  "5-HOUR",
 	"team-ondemand-spent":     "TEAM",
 	// Grok / xAI: title identifies the model; the subvalue caption
-	// disambiguates Searches / Tokens / Heavy at a glance.
+	// disambiguates Queries / Tokens at a glance. (Grok 4 Heavy is
+	// the only Grok 4 tier we track, so the title is plain "GROK 4".)
 	"grok3-queries-remaining":       "GROK 3",
 	"grok3-tokens-remaining":        "GROK 3",
 	"grok4-heavy-queries-remaining": "GROK 4",
@@ -1605,9 +1607,9 @@ var knownCaptions = map[string]string{
 	"team-ondemand-spent":     "Team spend",
 	// Grok placeholder captions match the live-tile subvalue so a
 	// dashed-out Grok button still tells you which category it is.
-	"grok3-queries-remaining":       "Searches",
+	"grok3-queries-remaining":       "Queries",
 	"grok3-tokens-remaining":        "Tokens",
-	"grok4-heavy-queries-remaining": "Heavy",
+	"grok4-heavy-queries-remaining": "Queries",
 }
 
 func metricCaptionForPlaceholder(metricID string) string {

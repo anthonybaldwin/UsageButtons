@@ -102,7 +102,7 @@ func TestCountMetric_SkipsWhenZeroTotal(t *testing.T) {
 func TestCountMetric_BuildsForValidShape(t *testing.T) {
 	r := 30
 	tot := 50
-	m, ok := countMetric("grok3-queries-remaining", "GROK 3", "Searches", "Grok 3 queries", &r, &tot, nil, "")
+	m, ok := countMetric("grok3-queries-remaining", "GROK 3", "Queries", "Grok 3 queries", &r, &tot, nil, "")
 	if !ok {
 		t.Fatal("expected metric to be produced")
 	}
@@ -132,8 +132,8 @@ func TestCountMetric_BuildsForValidShape(t *testing.T) {
 	if m.ResetInSeconds != nil {
 		t.Errorf("ResetInSeconds should be nil while remaining > 0, got %v", *m.ResetInSeconds)
 	}
-	if m.Caption != "Searches" {
-		t.Errorf("Caption: got %q, want %q", m.Caption, "Searches")
+	if m.Caption != "Queries" {
+		t.Errorf("Caption: got %q, want %q", m.Caption, "Queries")
 	}
 }
 

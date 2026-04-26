@@ -99,6 +99,11 @@ type ProviderSettings struct {
 	// force-on toggle (GlobalSettings.SmartContrast == true) wins
 	// over anything set here.
 	SmartContrast *bool `json:"smartContrast,omitempty"`
+	// Starfield toggles the static white-dot starfield decoration on
+	// the button face. Built-in default is true for Grok and false for
+	// every other provider — see StarfieldEnabled. Per-button setting
+	// of the same name overrides this when set.
+	Starfield *bool `json:"starfield,omitempty"`
 }
 
 // providerDefaultSmartContrast is the built-in smart-contrast default
@@ -169,6 +174,10 @@ type KeySettings struct {
 	ShowResetTimer  *bool    `json:"showResetTimer,omitempty"`
 	ShowRawCounts   *bool    `json:"showRawCounts,omitempty"`
 	HideSubvalue    *bool    `json:"hideSubvalue,omitempty"`
+	// Starfield is a per-button override for the starfield background
+	// decoration. nil = inherit (provider override > built-in default).
+	// Currently only the Grok provider opts into starfields by default.
+	Starfield *bool `json:"starfield,omitempty"`
 }
 
 // EffectiveSettings merges provider-tier overrides under per-button
@@ -235,6 +244,10 @@ func EffectiveSettings(ks KeySettings, providerID string) KeySettings {
 	if ks.HideSubvalue == nil && ps.HideSubvalue != nil {
 		v := *ps.HideSubvalue
 		ks.HideSubvalue = &v
+	}
+	if ks.Starfield == nil && ps.Starfield != nil {
+		v := *ps.Starfield
+		ks.Starfield = &v
 	}
 	return ks
 }
@@ -334,6 +347,31 @@ func SmartContrastFor(providerID string) bool {
 		}
 	}
 	return providerDefaultSmartContrast[providerID]
+}
+
+// providerDefaultStarfield is the built-in starfield default keyed by
+// provider ID. Only providers whose brand actively features a
+// starfield motif (Grok / xAI) get true; every other provider stays
+// off so the decoration doesn't bleed into unrelated brand looks.
+var providerDefaultStarfield = map[string]bool{
+	"grok": true,
+}
+
+// StarfieldEnabled returns the effective starfield toggle for the
+// given provider+button. Per-button override (Starfield) wins, then
+// per-provider override, then the built-in default.
+func StarfieldEnabled(providerID string, ks KeySettings) bool {
+	if ks.Starfield != nil {
+		return *ks.Starfield
+	}
+	mu.RLock()
+	defer mu.RUnlock()
+	if current.ProviderSettings != nil {
+		if ps, ok := current.ProviderSettings[providerID]; ok && ps.Starfield != nil {
+			return *ps.Starfield
+		}
+	}
+	return providerDefaultStarfield[providerID]
 }
 
 // ShowGlyphsEnabled returns the global show-glyphs toggle.

@@ -682,6 +682,22 @@
       </div>
     </div>
 
+    <!-- Starfield decoration. Built-in default is on for Grok and off
+         for every other provider — see settings.providerDefaultStarfield. -->
+    <div class="override-row" data-provider-override="starfield">
+      <label class="override-label">
+        <input type="checkbox" id="po-starfield-enabled">
+        Starfield decoration (xAI-style white-dot field behind glyph)
+        <span class="override-inherit" id="po-starfield-inherit"></span>
+      </label>
+      <div class="override-control">
+        <select id="po-starfield">
+          <option value="true">On</option>
+          <option value="false">Off</option>
+        </select>
+      </div>
+    </div>
+
     <div class="override-row" data-provider-override="warnBelow">
       <label class="override-label">
         <input type="checkbox" id="po-warnBelow-enabled">
@@ -1598,6 +1614,15 @@
       bindOverrideValue("smartContrast",
         ps.smartContrast != null ? String(!!ps.smartContrast) : String(scDefault),
         ps.smartContrast != null);
+
+      // Starfield: tri-state (inherit built-in default, on, off). Built-in
+      // default differs per provider — only Grok defaults on.
+      const sfDefault = STARFIELD_DEFAULTS[currentProviderId] === true;
+      setText("po-starfield-inherit",
+        "inherits built-in default: " + (sfDefault ? "on" : "off"));
+      bindOverrideValue("starfield",
+        ps.starfield != null ? String(!!ps.starfield) : String(sfDefault),
+        ps.starfield != null);
       bindOverrideValue("warnBelow",
         ps.warnBelow != null ? String(ps.warnBelow) : "",
         ps.warnBelow != null);
@@ -1658,6 +1683,12 @@
       ollama: true,
     };
 
+    // STARFIELD_DEFAULTS mirrors providerDefaultStarfield in
+    // internal/settings/settings.go. Currently only Grok opts in.
+    const STARFIELD_DEFAULTS = {
+      grok: true,
+    };
+
     function applyInverseCheckbox(prefix, name, savedValue) {
       const el = document.getElementById(prefix + "-inv-" + name);
       if (!el) return false;
@@ -1703,6 +1734,7 @@
         if (v !== undefined) ps[name] = v;
       });
       if (enabled("smartContrast")) ps.smartContrast = val("smartContrast") === "true";
+      if (enabled("starfield")) ps.starfield = val("starfield") === "true";
       if (enabled("warnBelow")) {
         const n = parseNum(val("warnBelow"));
         if (n !== undefined) ps.warnBelow = n;
@@ -2204,7 +2236,7 @@
       "po-refreshMinutes", "po-fillDirection",
       "po-valueSize", "po-subvalueSize",
       "po-fillColor", "po-bgColor", "po-textColor",
-      "po-smartContrast",
+      "po-smartContrast", "po-starfield",
       "po-warnBelow", "po-warnColor",
       "po-criticalBelow", "po-criticalColor",
     ].forEach((id) => {

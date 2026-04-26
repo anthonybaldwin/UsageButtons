@@ -81,3 +81,18 @@ surrounding Go map structure / SVG wrapper is ours.
 Authoritative license text:
 <https://github.com/lobehub/lobe-icons/blob/master/LICENSE>
 
+## UsmanDevCraft/grok-shooting-stars — MIT
+
+<https://github.com/UsmanDevCraft/grok-shooting-stars>
+
+The static white-dot starfield rendered behind the Grok button face
+(see `renderStarfield` in `internal/render/svg.go`) is a Go re-creation
+of the positioning + opacity-flicker pattern from upstream's HTML5
+canvas implementation. Stream Deck buttons are rasterized once per
+poll, so the per-frame flicker / shooting-star animation isn't
+reproducible at this layer; only the static field is borrowed. No
+upstream code is bundled — the SVG-emitting Go is ours.
+
+Authoritative license text:
+<https://github.com/UsmanDevCraft/grok-shooting-stars/blob/main/LICENSE>
+

@@ -30,15 +30,17 @@ See `README.md`.
 ## Build & run
 
 ```
-# Plugin binary
-go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/
+# Plugin binary (Windows builds use -H=windowsgui to mark the binary as
+# GUI subsystem — defensive, so it can never attach a console if launched
+# from cmd/PowerShell/a debugger. CI and dev.sh use the same flag.)
+go build -ldflags="-H=windowsgui" -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/
 GOOS=darwin GOARCH=arm64 go build -o ...sdPlugin/bin/plugin-mac-arm64 ./cmd/plugin/
 GOOS=darwin GOARCH=amd64 go build -o ...sdPlugin/bin/plugin-mac-x64 ./cmd/plugin/
 
 # Native-messaging host binary (ships alongside the plugin as the
 # bridge to the Usage Buttons Helper extension). See internal/cookies/
 # and chrome-extension/.
-go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/usagebuttons-native-host-win.exe ./cmd/native-host/
+go build -ldflags="-H=windowsgui" -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/usagebuttons-native-host-win.exe ./cmd/native-host/
 GOOS=darwin GOARCH=arm64 go build -o ...sdPlugin/bin/usagebuttons-native-host-mac-arm64 ./cmd/native-host/
 GOOS=darwin GOARCH=amd64 go build -o ...sdPlugin/bin/usagebuttons-native-host-mac-x64 ./cmd/native-host/
 

@@ -54,7 +54,7 @@ jobs:
         env:
           GOOS: windows
           GOARCH: amd64
-        run: go build -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/
+        run: go build -ldflags="-H=windowsgui" -o io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe ./cmd/plugin/
 
       - name: Build macOS arm64 binary
         env:

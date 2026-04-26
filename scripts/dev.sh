@@ -17,10 +17,14 @@ for arg in "$@"; do
   fi
 done
 
+LDFLAGS=()
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*|Windows_NT)
     BIN="io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-win.exe"
     NATIVE_HOST="io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/usagebuttons-native-host-win.exe"
+    # GUI subsystem so neither binary flashes a console window when
+    # Stream Deck launches the plugin or Chrome launches the native-host.
+    LDFLAGS=(-ldflags "-H=windowsgui")
     ;;
   Darwin)
     BIN="io.github.anthonybaldwin.UsageButtons.sdPlugin/bin/plugin-mac-$(uname -m)"
@@ -33,11 +37,11 @@ case "$(uname -s)" in
 esac
 
 echo "→ building $BIN"
-go build -o "$ROOT/$BIN" "$ROOT/cmd/plugin/"
+go build ${LDFLAGS[@]+"${LDFLAGS[@]}"} -o "$ROOT/$BIN" "$ROOT/cmd/plugin/"
 echo "✓ built"
 
 echo "→ building $NATIVE_HOST"
-go build -o "$ROOT/$NATIVE_HOST" "$ROOT/cmd/native-host/"
+go build ${LDFLAGS[@]+"${LDFLAGS[@]}"} -o "$ROOT/$NATIVE_HOST" "$ROOT/cmd/native-host/"
 echo "✓ built"
 
 if $RESTART; then

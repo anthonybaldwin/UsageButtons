@@ -376,13 +376,18 @@ func extractOAuthCredentialsFromLegacyPaths(realGeminiPath string) (oauthClientC
 	binDir := filepath.Dir(realGeminiPath)
 	baseDir := filepath.Dir(binDir)
 	oauthFile := filepath.Join("dist", "src", "code_assist", "oauth2.js")
-	oauthSubpath := filepath.Join("node_modules", "@google", "gemini-cli", "node_modules", "@google", "gemini-cli-core", oauthFile)
+	corePath := filepath.Join("@google", "gemini-cli-core", oauthFile)
+	oauthSubpath := filepath.Join("node_modules", "@google", "gemini-cli", "node_modules", corePath)
 	candidates := []string{
 		filepath.Join(baseDir, "libexec", "lib", oauthSubpath),
 		filepath.Join(baseDir, "lib", oauthSubpath),
-		filepath.Join(baseDir, "share", "gemini-cli", "node_modules", "@google", "gemini-cli-core", oauthFile),
+		filepath.Join(baseDir, "share", "gemini-cli", "node_modules", corePath),
 		filepath.Join(baseDir, "..", "gemini-cli-core", oauthFile),
-		filepath.Join(baseDir, "node_modules", "@google", "gemini-cli-core", oauthFile),
+		filepath.Join(baseDir, "node_modules", corePath),
+		// Windows npm-prefix layout: gemini.cmd lives next to node_modules.
+		filepath.Join(binDir, "node_modules", corePath),
+		// Bun global install: ~/.bun/install/global/node_modules/...
+		filepath.Join(baseDir, "install", "global", "node_modules", corePath),
 	}
 	for _, path := range candidates {
 		if creds, ok := parseOAuthCredentialsFile(path); ok {
@@ -403,9 +408,16 @@ func findGeminiPackageRoot(start string) string {
 		if isGeminiPackageRoot(current) {
 			return current
 		}
-		globalRoot := filepath.Join(current, "lib", "node_modules", "@google", "gemini-cli")
-		if isGeminiPackageRoot(globalRoot) {
-			return globalRoot
+		// Try common global-install layouts: Unix-style (lib/node_modules),
+		// Windows npm-prefix (sibling node_modules), and Bun global.
+		for _, sub := range []string{
+			filepath.Join("lib", "node_modules", "@google", "gemini-cli"),
+			filepath.Join("node_modules", "@google", "gemini-cli"),
+			filepath.Join("install", "global", "node_modules", "@google", "gemini-cli"),
+		} {
+			if root := filepath.Join(current, sub); isGeminiPackageRoot(root) {
+				return root
+			}
 		}
 		parent := filepath.Dir(current)
 		if parent == current {

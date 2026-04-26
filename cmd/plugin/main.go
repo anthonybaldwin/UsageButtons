@@ -294,10 +294,7 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	var ks settings.KeySettings
 	json.Unmarshal(payload.Settings, &ks)
 
-	metricID := ks.MetricID
-	if metricID == "" {
-		metricID = defaultMetric
-	}
+	metricID := effectiveMetricID(ks, providerID)
 
 	// Check if the user has "Show Title" enabled for this key.
 	var tp streamdeck.WillAppearTitleParameters
@@ -477,10 +474,11 @@ func handleTitleParametersDidChange(conn *streamdeck.Connection, ev streamdeck.E
 	key, ok := visibleKeys[ev.Context]
 	if ok {
 		key.showTitle = payload.TitleParameters.ShowTitle
+		providerID := streamdeck.ProviderIDFromAction(key.action)
 		key.customTitle = isCustomTitle(
 			payload.Title,
 			key.lastAutoTitle,
-			deriveLabelFromMetricID(resolveMetricID(key.settings)),
+			deriveLabelFromMetricID(effectiveMetricID(key.settings, providerID)),
 		)
 	}
 	mu.Unlock()
@@ -898,10 +896,6 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 	customTitle := key.customTitle
 	mu.Unlock()
 
-	metricID := ks.MetricID
-	if metricID == "" {
-		metricID = defaultMetric
-	}
 	if providerID == "" {
 		return
 	}
@@ -1474,6 +1468,26 @@ func resolveShowRawCounts(metric providers.MetricValue, ks settings.KeySettings)
 func resolveMetricID(ks settings.KeySettings) string {
 	if ks.MetricID != "" {
 		return ks.MetricID
+	}
+	return defaultMetric
+}
+
+// effectiveMetricID is resolveMetricID with provider-aware fallback.
+// When the key has no saved MetricID, picks the first entry from the
+// provider's MetricIDs() so a freshly-dropped action lands on a metric
+// that actually exists for that provider — not the Claude-flavored
+// "session-percent" default. Falls back to defaultMetric when the
+// provider isn't registered or has no metrics declared.
+func effectiveMetricID(ks settings.KeySettings, providerID string) string {
+	if ks.MetricID != "" {
+		return ks.MetricID
+	}
+	if providerID != "" {
+		if prov := providers.Get(providerID); prov != nil {
+			if ids := prov.MetricIDs(); len(ids) > 0 {
+				return ids[0]
+			}
+		}
 	}
 	return defaultMetric
 }

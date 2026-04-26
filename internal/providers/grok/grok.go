@@ -299,6 +299,13 @@ func countMetric(id, label, category, name string, remaining, total, waitSecs *i
 	val := fmt.Sprintf("%d/%d", rem, tot)
 	num := float64(rem)
 	ratio := math.Max(0, math.Min(1, float64(rem)/float64(tot)))
+	// Note: deliberately NOT setting RawCount / RawMax. The button's
+	// Value already carries "X/Y" as the focal text, and surfacing
+	// the same fraction again as a rawCounts subvalue would override
+	// our Caption ("Searches" / "Tokens" / "Heavy") via the
+	// resolveShowRawCounts path in renderMetric. Threshold logic uses
+	// NumericValue / Ratio, so dropping the raw fields doesn't lose
+	// any meter functionality for this provider.
 	m := providers.MetricValue{
 		ID:              id,
 		Label:           label,
@@ -310,8 +317,6 @@ func countMetric(id, label, category, name string, remaining, total, waitSecs *i
 		Ratio:           &ratio,
 		Caption:         category, // "Searches" / "Tokens" / "Heavy"
 		UpdatedAt:       now,
-		RawCount:        &rem,
-		RawMax:          &tot,
 	}
 	if rem == 0 && waitSecs != nil && *waitSecs > 0 {
 		secs := float64(*waitSecs)

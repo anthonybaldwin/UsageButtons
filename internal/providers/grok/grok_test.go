@@ -122,11 +122,14 @@ func TestCountMetric_BuildsForValidShape(t *testing.T) {
 	if got := math.Round(*m.Ratio*100) / 100; got != 0.6 {
 		t.Errorf("Ratio: got %v, want 0.6 (30/50)", got)
 	}
-	if m.RawCount == nil || *m.RawCount != 30 {
-		t.Errorf("RawCount: got %v", m.RawCount)
+	// RawCount/RawMax intentionally NOT set — the button's Value is
+	// already "X/Y" so surfacing the same fraction via the rawCounts
+	// override would clobber the category caption.
+	if m.RawCount != nil {
+		t.Errorf("RawCount should be nil so caption isn't overridden, got %v", *m.RawCount)
 	}
-	if m.RawMax == nil || *m.RawMax != 50 {
-		t.Errorf("RawMax: got %v", m.RawMax)
+	if m.RawMax != nil {
+		t.Errorf("RawMax should be nil so caption isn't overridden, got %v", *m.RawMax)
 	}
 	if m.ResetInSeconds != nil {
 		t.Errorf("ResetInSeconds should be nil while remaining > 0, got %v", *m.ResetInSeconds)

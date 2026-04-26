@@ -709,16 +709,16 @@ func snapshotFromStatus(status geminiStatus) providers.Snapshot {
 // "100% remaining for 24h" is meaningless when nothing's been consumed
 // yet; the daily reset only matters once usage starts.
 //
-// Caption is left empty so the renderer's percent-metric fallback
-// fills in "Remaining" automatically. Once usage starts and resetAt
-// becomes non-nil, the countdown takes over the subvalue slot. The
-// model ID was previously used as the caption but on small button
-// faces it just collided with the title; the per-model identity is
-// already carried in the title (PRO / FLASH / FLASH LITE).
+// Caption is set to "Remaining" explicitly (rather than relying on
+// the renderer's percent-unit fallback) so it survives the
+// resolveShowRawCounts override path. The previous behavior used the
+// raw model ID (gemini-2.5-pro) which collided visually with the
+// title — the per-model identity is already carried in the title
+// (PRO / FLASH / FLASH LITE).
 func quotaMetric(id, label, name string, quota modelQuota, now string) providers.MetricValue {
 	usedPct := 100 - quota.PercentLeft
 	resetAt := providerutil.ResetTimeWhenUsed(usedPct, quota.ResetTime)
-	return providerutil.PercentRemainingMetric(id, label, name, usedPct, resetAt, "", now)
+	return providerutil.PercentRemainingMetric(id, label, name, usedPct, resetAt, "Remaining", now)
 }
 
 // lowestMatchingQuota returns the lowest remaining quota accepted by match.

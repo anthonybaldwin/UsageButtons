@@ -7,8 +7,12 @@
 // (and the JoshuaWang2211/grok-usage-watch extension) fetches limits.
 //
 // Unlike Perplexity's rate-limit endpoint, Grok's response includes
-// total* values alongside remaining*, so we can render honest percent
-// metrics with a reset countdown derived from windowSizeSeconds.
+// total* values alongside remaining*, so we render honest count tiles
+// (X/Y) per category. windowSizeSeconds is the rolling-window length
+// and is intentionally NOT used as a reset countdown — it doesn't say
+// when the current window opened, so deriving "time until reset" from
+// it would re-anchor on every poll. The countdown only fires when the
+// API explicitly hands us a waitTimeSeconds (rate-limited state).
 package grok
 
 import (
@@ -261,12 +265,21 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 		usage.Grok4.WaitTimeSeconds, now); ok {
 		metrics = append(metrics, m)
 	}
+	// Guard against an unexpected schema change: a 2xx that parses but
+	// surfaces no recognised remaining/total pairs would otherwise
+	// render an "operational" tile with nothing on it. "unknown" lets
+	// the renderer fall through to its dashed-out placeholder face so
+	// the user can tell something's off.
+	status := "operational"
+	if len(metrics) == 0 {
+		status = "unknown"
+	}
 	return providers.Snapshot{
 		ProviderID:   "grok",
 		ProviderName: "Grok",
 		Source:       "cookie",
 		Metrics:      metrics,
-		Status:       "operational",
+		Status:       status,
 	}
 }
 

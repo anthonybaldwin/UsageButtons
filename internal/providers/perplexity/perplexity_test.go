@@ -115,6 +115,19 @@ func TestReadRateLimit_ExplicitLimit(t *testing.T) {
 	}
 }
 
+func TestReadRateLimit_LimitInDifferentPool(t *testing.T) {
+	// remaining lives at root, explicit limit lives in nested rateLimits —
+	// the cross-pool lookup must find both.
+	root := mustParse(t, `{"remaining_pro":50,"rateLimits":{"limit_remaining_pro":250}}`)
+	rem, limit := readRateLimit(root, "remaining_pro")
+	if rem == nil || *rem != 50 {
+		t.Errorf("expected remaining=50, got %v", rem)
+	}
+	if limit != 250 {
+		t.Errorf("expected limit=250, got %d", limit)
+	}
+}
+
 func TestReadRateLimit_AbsentField(t *testing.T) {
 	root := mustParse(t, `{"rateLimits":{"remaining_pro":1}}`)
 	rem, limit := readRateLimit(root, "remaining_research")

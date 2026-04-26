@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -97,7 +98,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		return mapHTTPError(err), nil
 	}
 	groupMap := map[string]any{}
-	if err := cookies.FetchJSON(ctx, groupURLBase+groupID, headers, &groupMap); err != nil {
+	if err := cookies.FetchJSON(ctx, groupURLBase+url.PathEscape(groupID), headers, &groupMap); err != nil {
 		return mapHTTPError(err), nil
 	}
 	rateMap := map[string]any{}
@@ -136,13 +137,6 @@ func firstGroupID(root map[string]any) string {
 			if id := firstIDFromArray(arr); id != "" {
 				return id
 			}
-		}
-	}
-	// Fall back to scanning the whole tree for the first wrk-shaped or
-	// uuid-shaped string under an id-like key.
-	if arr, ok := root["groups"].([]any); ok {
-		if id := firstIDFromArray(arr); id != "" {
-			return id
 		}
 	}
 	return ""
@@ -249,7 +243,9 @@ func readSubscriptionTier(root map[string]any) string {
 
 // readRateLimit returns (remaining, limit) for one tier from the
 // /rest/rate-limit/all payload. The endpoint may nest values under a
-// `rateLimits` key or place them at the root.
+// `rateLimits` key or place them at the root, and the explicit limit
+// may live in a different pool than the remaining count — so we
+// search all pools for both.
 func readRateLimit(root map[string]any, keys ...string) (*int, int) {
 	pools := []map[string]any{root}
 	for _, p := range []string{"rateLimits", "rate_limits", "data", "result"} {
@@ -261,17 +257,25 @@ func readRateLimit(root map[string]any, keys ...string) (*int, int) {
 	for _, k := range keys {
 		limitKeys = append(limitKeys, "limit_"+k, k+"_limit")
 	}
+	var remaining *int
 	for _, m := range pools {
 		if v, ok := providerutil.FirstFloat(m, keys...); ok {
-			remaining := int(math.Round(math.Max(0, v)))
-			limit := rateLimitDailyDefault
-			if lim, ok := providerutil.FirstFloat(m, limitKeys...); ok && lim > 0 {
-				limit = int(math.Round(lim))
-			}
-			return &remaining, limit
+			r := int(math.Round(math.Max(0, v)))
+			remaining = &r
+			break
 		}
 	}
-	return nil, 0
+	if remaining == nil {
+		return nil, 0
+	}
+	limit := rateLimitDailyDefault
+	for _, m := range pools {
+		if lim, ok := providerutil.FirstFloat(m, limitKeys...); ok && lim > 0 {
+			limit = int(math.Round(lim))
+			break
+		}
+	}
+	return remaining, limit
 }
 
 // snapshotFromUsage maps Perplexity quotas into Stream Deck metrics.

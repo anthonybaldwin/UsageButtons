@@ -24,6 +24,7 @@ account or API response includes that quota lane.
 | Cursor | Usage Buttons Helper from the signed-in Cursor web session. | Total plan usage remaining %, Auto / Composer usage remaining %, API / named model usage remaining %, on-demand spend ($), team on-demand spend ($). |
 | Droid / Factory | Droid bearer token from the Provider tab, `FACTORY_TOKEN`, or Usage Buttons Helper from `app.factory.ai`. Optional API base URL override in the Provider tab / `FACTORY_BASE_URL`. | Standard tokens remaining %, premium tokens remaining %. |
 | Gemini | Gemini CLI OAuth from `~/.gemini/oauth_creds.json`. Run `gemini` and sign in with Google. | Pro quota remaining %, Flash quota remaining %, Flash Lite quota remaining %. |
+| Grok | Usage Buttons Helper from `grok.com`. | Grok 3 queries remaining %, Grok 3 tokens remaining %, Grok 4 Heavy queries remaining %. |
 | JetBrains AI | Local JetBrains IDE quota files. Optional overrides: `CODEXBAR_JETBRAINS_IDE_BASE_PATH` or `JETBRAINS_QUOTA_FILE`. | Current credits remaining %. |
 | Kilo | Kilo API key from the Provider tab, `KILO_API_KEY`, or `~/.local/share/kilo/auth.json`. | Credits remaining %, Kilo Pass remaining %. |
 | Kimi | `kimi-auth` token from the Provider tab, Usage Buttons Helper from `kimi.com`, `KIMI_AUTH_TOKEN`, or `KIMI_MANUAL_COOKIE`. | Weekly coding quota remaining %, 5-hour rate limit remaining %. |

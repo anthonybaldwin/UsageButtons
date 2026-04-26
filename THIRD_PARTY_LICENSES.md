@@ -70,10 +70,13 @@ kind.
 
 <https://github.com/lobehub/lobe-icons>
 
-The `"codex"` entry in `internal/icons/icons.go` embeds the `d`
-attribute of the Codex monochrome glyph from lobe-icons, distributed
-under the MIT license. The path data is unmodified from upstream;
-only the surrounding Go map structure is ours.
+The `"codex"` and `"grok"` entries in `internal/icons/icons.go` embed
+the `d` attribute of those providers' monochrome glyphs from
+lobe-icons, distributed under the MIT license. The same path data is
+also embedded in `io.github.anthonybaldwin.UsageButtons.sdPlugin/assets/action-grok.svg`
+and `action-grok-key.svg` for the Stream Deck action thumbnail / key
+preview. The path data is unmodified from upstream; only the
+surrounding Go map structure / SVG wrapper is ours.
 
 Authoritative license text:
 <https://github.com/lobehub/lobe-icons/blob/master/LICENSE>

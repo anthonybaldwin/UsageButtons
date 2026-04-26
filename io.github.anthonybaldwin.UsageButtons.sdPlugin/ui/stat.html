@@ -426,6 +426,11 @@
       <p class="hint">Via extension from <code>perplexity.ai</code>.</p>
     </div>
 
+    <!-- Grok auth -->
+    <div id="authConfig-grok" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>grok.com</code>.</p>
+    </div>
+
     <!-- Warp auth -->
     <div id="authConfig-warp" class="auth-config" style="display:none">
       <label for="warpKey">Warp API key</label>
@@ -983,6 +988,11 @@
         ["weekly-percent",  "Bonus credits remaining %",     "pct"],
         ["opus-percent",    "Purchased credits remaining %", "pct"],
       ],
+      grok: [
+        ["grok3-queries-percent",       "Grok 3 queries remaining %",      "pct"],
+        ["grok3-tokens-percent",        "Grok 3 tokens remaining %",       "pct"],
+        ["grok4-heavy-queries-percent", "Grok 4 Heavy queries remaining %","pct"],
+      ],
       warp: [
         ["credits-percent", "Credits remaining %",       "pct"],
         ["bonus-credits",   "Bonus credits remaining %", "pct"],
@@ -1043,6 +1053,7 @@
       opencodego: "#3b82f6",
       openrouter: "#6467f2",
       perplexity: "#20b2aa",
+      grok:       "#ffffff",
       warp:       "#938bb4",
       zai:        "#e85a6a",
       kimi:       "#fe603c",
@@ -1076,6 +1087,7 @@
       opencodego: "#081a33",
       openrouter: "#101028",
       perplexity: "#082423",
+      grok:       "#0b0b0b",
       warp:       "#171521",
       zai:        "#211012",
       kimi:       "#260d08",
@@ -1089,7 +1101,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -1110,6 +1122,7 @@
       opencodego: "OpenCode Go",
       openrouter: "OpenRouter",
       perplexity: "Perplexity",
+      grok:       "Grok",
       warp:       "Warp",
       zai:        "z.ai",
       kimi:       "Kimi",

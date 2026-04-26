@@ -21,6 +21,7 @@ var Allowed = []string{
 	"augmentcode.com",
 	"ampcode.com",
 	"perplexity.ai",
+	"grok.com",
 	"opencode.ai",
 	"kimi.com",
 	"minimax.io",

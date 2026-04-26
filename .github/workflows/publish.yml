@@ -116,8 +116,8 @@ jobs:
           GOOS: windows
           GOARCH: amd64
         run: |
-          go build -o $BIN_DIR/plugin-win.exe ./cmd/plugin/
-          go build -o $BIN_DIR/usagebuttons-native-host-win.exe ./cmd/native-host/
+          go build -ldflags="-H=windowsgui" -o $BIN_DIR/plugin-win.exe ./cmd/plugin/
+          go build -ldflags="-H=windowsgui" -o $BIN_DIR/usagebuttons-native-host-win.exe ./cmd/native-host/
 
       - name: Build macOS binaries
         run: |

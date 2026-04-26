@@ -192,6 +192,13 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 // percentMetric builds a remaining-percent metric. Returns ok=false
 // when the response didn't include enough data (e.g. grok-4-heavy on
 // free tier).
+//
+// `windowSecs` is intentionally unused: grok.com returns the window
+// *length* (e.g. 7200 for a 2-hour rolling window), not the seconds
+// until the next reset. Adding it to time.Now() each poll would show
+// a constantly-resetting "2h" countdown that's misleading. Until the
+// API exposes an absolute reset timestamp, we just surface the
+// rolling-window length in the caption.
 func percentMetric(id, label, name string, remaining, total, windowSecs *int, now string) (providers.MetricValue, bool) {
 	if remaining == nil || total == nil || *total <= 0 {
 		return providers.MetricValue{}, false
@@ -199,12 +206,10 @@ func percentMetric(id, label, name string, remaining, total, windowSecs *int, no
 	used := math.Max(0, float64(*total-*remaining))
 	usedPct := math.Max(0, math.Min(100, used/float64(*total)*100))
 	caption := fmt.Sprintf("%d/%d left", *remaining, *total)
-	var resetAt *time.Time
 	if windowSecs != nil && *windowSecs > 0 {
-		t := time.Now().Add(time.Duration(*windowSecs) * time.Second)
-		resetAt = &t
+		caption += fmt.Sprintf(" · %dh window", *windowSecs/3600)
 	}
-	m := providerutil.PercentRemainingMetric(id, label, name, usedPct, resetAt, caption, now)
+	m := providerutil.PercentRemainingMetric(id, label, name, usedPct, nil, caption, now)
 	m = providerutil.RawCounts(m, *remaining, *total)
 	return m, true
 }

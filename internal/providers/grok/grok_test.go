@@ -116,8 +116,14 @@ func TestPercentMetric_BuildsForValidShape(t *testing.T) {
 	if m.RawMax == nil || *m.RawMax != 50 {
 		t.Errorf("RawMax: got %v", m.RawMax)
 	}
-	if m.ResetInSeconds == nil {
-		t.Error("expected non-nil ResetInSeconds with windowSecs=3600")
+	// windowSecs is intentionally NOT a reset countdown — Grok's API
+	// returns the window *length*, not the time until next reset, so
+	// we surface it in the caption only.
+	if m.ResetInSeconds != nil {
+		t.Errorf("ResetInSeconds should be nil (windowSecs is window length, not reset time), got %v", *m.ResetInSeconds)
+	}
+	if !strings.Contains(m.Caption, "1h window") {
+		t.Errorf("Caption should mention rolling window length, got %q", m.Caption)
 	}
 }
 

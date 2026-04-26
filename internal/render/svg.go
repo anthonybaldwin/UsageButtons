@@ -262,6 +262,16 @@ func RenderButton(in ButtonInput) string {
 				frontColor = glyphBg
 				frontOpacity = 0.40
 			}
+			// SmartContrast: pick the front layer color that actually
+			// contrasts with the fill (not just with bg). Fixes the
+			// inverse-Ollama case (white bg + dark fill, e.g. Grok)
+			// where glyphBg had been auto-flipped dark to contrast bg
+			// — and ended up identical to the dark fill, making the
+			// front layer invisible. contrastOver picks black or white
+			// against the fill, so it's always readable.
+			if in.SmartContrast {
+				frontColor = contrastOver(glyphBg, fill)
+			}
 
 			glyphBack = glyphPathMarkup(xf, glyphBg, 0.70, in.Glyph)
 			glyphFront = glyphPathMarkup(xf, frontColor, frontOpacity, in.Glyph)

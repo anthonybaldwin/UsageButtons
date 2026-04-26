@@ -9,6 +9,10 @@ you can tell at a glance how much runway you have left.
 ![Usage Buttons in Stream Deck](docs/main.png)
 
 Inspired by [CodexBar](https://github.com/steipete/CodexBar) for macOS.
+Endpoint mappings for the Perplexity provider follow
+[openusage](https://github.com/robinebers/openusage)'s reverse-engineered
+research after Perplexity retired its older `/rest/billing/credits`
+endpoint.
 Runs on **Windows and macOS**.
 
 ## Settings

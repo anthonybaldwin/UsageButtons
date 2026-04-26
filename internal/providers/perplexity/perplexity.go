@@ -1,7 +1,12 @@
 // Package perplexity implements the Perplexity usage provider.
 //
 // Auth: Usage Buttons Helper extension with the user's perplexity.ai browser
-// session. Endpoint: GET /rest/billing/credits.
+// session. Endpoints (Perplexity removed /rest/billing/credits in 2026 —
+// the new flow mirrors what perplexity.ai/account/usage itself fetches):
+//
+//	GET /rest/pplx-api/v2/groups            — pick first group ID
+//	GET /rest/pplx-api/v2/groups/{groupId}  — balance + subscription tier
+//	GET /rest/rate-limit/all                — per-tier query quotas
 package perplexity
 
 import (
@@ -9,6 +14,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -19,35 +26,33 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/providers/providerutil"
 )
 
-const creditsURL = "https://www.perplexity.ai/rest/billing/credits?version=2.18&source=default"
+const (
+	groupsURL    = "https://www.perplexity.ai/rest/pplx-api/v2/groups"
+	groupURLBase = "https://www.perplexity.ai/rest/pplx-api/v2/groups/"
+	rateLimitURL = "https://www.perplexity.ai/rest/rate-limit/all"
 
-// creditsResponse is Perplexity's credits endpoint payload.
-type creditsResponse struct {
-	BalanceCents                float64       `json:"balance_cents"`
-	RenewalDateTS               float64       `json:"renewal_date_ts"`
-	CurrentPeriodPurchasedCents float64       `json:"current_period_purchased_cents"`
-	CreditGrants                []creditGrant `json:"credit_grants"`
-	TotalUsageCents             float64       `json:"total_usage_cents"`
-}
+	groupIDOverrideEnv = "USAGEBUTTONS_PERPLEXITY_GROUP_ID"
 
-// creditGrant is one Perplexity grant bucket.
-type creditGrant struct {
-	Type        string   `json:"type"`
-	AmountCents float64  `json:"amount_cents"`
-	ExpiresAtTS *float64 `json:"expires_at_ts"`
-}
+	// rateLimitDailyDefault is a conservative per-tier daily allotment used
+	// to compute a percent-remaining value when the API only returns the
+	// remaining count (no explicit limit). Pro plans currently grant a
+	// shared 600/day pool — this is the visible-on-the-page default.
+	rateLimitDailyDefault = 600
+)
 
-// usageSnapshot is the normalized Perplexity credit state.
+// usageSnapshot is the normalized Perplexity quota state.
 type usageSnapshot struct {
-	RecurringTotal float64
-	RecurringUsed  float64
-	PromoTotal     float64
-	PromoUsed      float64
-	PurchasedTotal float64
-	PurchasedUsed  float64
-	RenewalDate    time.Time
-	PromoExpiresAt *time.Time
-	UpdatedAt      time.Time
+	BalanceCents     float64
+	SubscriptionTier string
+	ProRemaining     *int
+	ProLimit         int
+	ResearchRemain   *int
+	ResearchLimit    int
+	LabsRemain       *int
+	LabsLimit        int
+	AgenticRemain    *int
+	AgenticLimit     int
+	UpdatedAt        time.Time
 }
 
 // Provider fetches Perplexity usage data.
@@ -67,114 +72,237 @@ func (Provider) BrandBg() string { return "#082423" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
-	return []string{"session-percent", "weekly-percent", "opus-percent"}
+	return []string{
+		"pro-queries-remaining",
+		"deep-research-remaining",
+		"labs-remaining",
+		"agentic-research-remaining",
+		"balance",
+	}
 }
 
 // Fetch returns the latest Perplexity quota snapshot.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if !cookies.HostAvailable(ctx) {
 		return errorSnapshot(cookieaux.MissingMessage("perplexity.ai")), nil
 	}
-	var resp creditsResponse
-	err := cookies.FetchJSON(ctx, creditsURL, map[string]string{
+	headers := map[string]string{
 		"Accept":  "application/json",
 		"Origin":  "https://www.perplexity.ai",
 		"Referer": "https://www.perplexity.ai/account/usage",
-	}, &resp)
+	}
+	groupID, err := resolveGroupID(ctx, headers)
 	if err != nil {
-		var httpErr *httputil.Error
-		if errors.As(err, &httpErr) && (httpErr.Status == 401 || httpErr.Status == 403) {
-			return errorSnapshot(cookieaux.StaleMessage("perplexity.ai")), nil
-		}
-		return providers.Snapshot{}, err
+		return mapHTTPError(err), nil
 	}
-	return snapshotFromUsage(usageFromResponse(resp)), nil
+	groupMap := map[string]any{}
+	if err := cookies.FetchJSON(ctx, groupURLBase+url.PathEscape(groupID), headers, &groupMap); err != nil {
+		return mapHTTPError(err), nil
+	}
+	rateMap := map[string]any{}
+	if err := cookies.FetchJSON(ctx, rateLimitURL, headers, &rateMap); err != nil {
+		return mapHTTPError(err), nil
+	}
+	return snapshotFromUsage(usageFromResponses(groupMap, rateMap, time.Now().UTC())), nil
 }
 
-// usageFromResponse attributes Perplexity usage across credit grant pools.
-func usageFromResponse(resp creditsResponse) usageSnapshot {
-	now := time.Now().UTC()
-	var recurringSum, promoSum, purchasedFromGrants float64
-	var promoExpiry *time.Time
-	for _, grant := range resp.CreditGrants {
-		amount := math.Max(0, grant.AmountCents)
-		switch strings.ToLower(strings.TrimSpace(grant.Type)) {
-		case "recurring":
-			recurringSum += amount
-		case "promotional":
-			if grant.ExpiresAtTS == nil || *grant.ExpiresAtTS > float64(now.Unix()) {
-				promoSum += amount
-				if grant.ExpiresAtTS != nil {
-					expires := unixSeconds(*grant.ExpiresAtTS)
-					if promoExpiry == nil || expires.Before(*promoExpiry) {
-						promoExpiry = &expires
-					}
-				}
+// resolveGroupID returns the user-overridden group ID or discovers the
+// first group from the groups list endpoint.
+func resolveGroupID(ctx context.Context, headers map[string]string) (string, error) {
+	if override := strings.TrimSpace(os.Getenv(groupIDOverrideEnv)); override != "" {
+		return override, nil
+	}
+	root := map[string]any{}
+	if err := cookies.FetchJSON(ctx, groupsURL, headers, &root); err != nil {
+		return "", err
+	}
+	if id := firstGroupID(root); id != "" {
+		return id, nil
+	}
+	return "", fmt.Errorf("Perplexity: no groups returned")
+}
+
+// firstGroupID walks the groups response looking for the first group's ID.
+// Perplexity's payload nests the array under common envelope keys, and
+// each entry may use id / group_id / groupId / uuid for the identifier.
+func firstGroupID(root map[string]any) string {
+	envelopes := [][]string{
+		{"groups"}, {"data", "groups"}, {"result", "groups"},
+		{"data"}, {"result"}, {"items"},
+	}
+	for _, path := range envelopes {
+		if arr, ok := nestedArray(root, path...); ok {
+			if id := firstIDFromArray(arr); id != "" {
+				return id
 			}
-		case "purchased":
-			purchasedFromGrants += amount
 		}
 	}
-	purchasedSum := math.Max(purchasedFromGrants, math.Max(0, resp.CurrentPeriodPurchasedCents))
-
-	remainingUsage := math.Max(0, resp.TotalUsageCents)
-	recurringUsed := math.Min(remainingUsage, recurringSum)
-	remainingUsage -= recurringUsed
-	purchasedUsed := math.Min(remainingUsage, purchasedSum)
-	remainingUsage -= purchasedUsed
-	promoUsed := math.Min(remainingUsage, promoSum)
-
-	return usageSnapshot{
-		RecurringTotal: recurringSum,
-		RecurringUsed:  recurringUsed,
-		PromoTotal:     promoSum,
-		PromoUsed:      promoUsed,
-		PurchasedTotal: purchasedSum,
-		PurchasedUsed:  purchasedUsed,
-		RenewalDate:    unixSeconds(resp.RenewalDateTS),
-		PromoExpiresAt: promoExpiry,
-		UpdatedAt:      now,
-	}
+	return ""
 }
 
-// snapshotFromUsage maps Perplexity credit pools into Stream Deck metrics.
+// firstIDFromArray pulls the first identifier-shaped string out of an
+// array of group-like objects.
+func firstIDFromArray(arr []any) string {
+	for _, item := range arr {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if id := providerutil.FirstString(obj, "id", "group_id", "groupId", "uuid", "_id"); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+// nestedArray walks keys to return an array value when present.
+func nestedArray(root map[string]any, keys ...string) ([]any, bool) {
+	current := any(root)
+	for _, k := range keys {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		current = m[k]
+	}
+	arr, ok := current.([]any)
+	return arr, ok
+}
+
+// usageFromResponses normalizes group + rate-limit JSON into usageSnapshot.
+func usageFromResponses(groupMap, rateMap map[string]any, now time.Time) usageSnapshot {
+	usage := usageSnapshot{UpdatedAt: now}
+	usage.BalanceCents = readBalanceCents(groupMap)
+	usage.SubscriptionTier = readSubscriptionTier(groupMap)
+	usage.ProRemaining, usage.ProLimit = readRateLimit(rateMap, "remaining_pro", "pro")
+	usage.ResearchRemain, usage.ResearchLimit = readRateLimit(rateMap, "remaining_research", "research", "deep_research")
+	usage.LabsRemain, usage.LabsLimit = readRateLimit(rateMap, "remaining_labs", "labs")
+	usage.AgenticRemain, usage.AgenticLimit = readRateLimit(rateMap, "remaining_agentic_research", "agentic_research", "agentic")
+	return usage
+}
+
+// readBalanceCents extracts a USD balance from the group payload's nested
+// shape and converts to cents. Mirrors openusage's flexible lookup so we
+// keep working when Perplexity tweaks wrapper key names.
+func readBalanceCents(root map[string]any) float64 {
+	wrappers := [][]string{
+		nil,
+		{"apiOrganization"},
+		{"api_organization"},
+		{"group"},
+		{"org"},
+		{"organization"},
+		{"data"},
+		{"result"},
+		{"item"},
+		{"customerInfo"},
+		{"customer_info"},
+		{"wallet"},
+		{"billing"},
+		{"usage"},
+	}
+	keys := []string{"balance_usd", "balanceUsd", "balance", "pending_balance", "pendingBalance"}
+	for _, path := range wrappers {
+		m := root
+		if len(path) > 0 {
+			n, ok := providerutil.NestedMap(root, path...)
+			if !ok {
+				continue
+			}
+			m = n
+		}
+		if v, ok := providerutil.FirstFloat(m, keys...); ok {
+			return math.Round(v * 100)
+		}
+	}
+	return 0
+}
+
+// readSubscriptionTier returns "Pro" / "Max" / "Enterprise" / "" from the
+// group payload, matching the strings Perplexity uses on its own UI.
+func readSubscriptionTier(root map[string]any) string {
+	for _, path := range [][]string{
+		nil, {"apiOrganization"}, {"organization"}, {"customerInfo"}, {"customer_info"}, {"data"}, {"result"},
+	} {
+		m := root
+		if len(path) > 0 {
+			n, ok := providerutil.NestedMap(root, path...)
+			if !ok {
+				continue
+			}
+			m = n
+		}
+		if tier := providerutil.FirstString(m, "subscriptionTier", "subscription_tier", "tier", "plan", "subscription"); tier != "" {
+			return strings.TrimSpace(tier)
+		}
+	}
+	return ""
+}
+
+// readRateLimit returns (remaining, limit) for one tier from the
+// /rest/rate-limit/all payload. The endpoint may nest values under a
+// `rateLimits` key or place them at the root, and the explicit limit
+// may live in a different pool than the remaining count — so we
+// search all pools for both.
+func readRateLimit(root map[string]any, keys ...string) (*int, int) {
+	pools := []map[string]any{root}
+	for _, p := range []string{"rateLimits", "rate_limits", "data", "result"} {
+		if nested, ok := providerutil.NestedMap(root, p); ok {
+			pools = append(pools, nested)
+		}
+	}
+	limitKeys := make([]string, 0, len(keys)*2)
+	for _, k := range keys {
+		limitKeys = append(limitKeys, "limit_"+k, k+"_limit")
+	}
+	var remaining *int
+	for _, m := range pools {
+		if v, ok := providerutil.FirstFloat(m, keys...); ok {
+			r := int(math.Round(math.Max(0, v)))
+			remaining = &r
+			break
+		}
+	}
+	if remaining == nil {
+		return nil, 0
+	}
+	limit := rateLimitDailyDefault
+	for _, m := range pools {
+		if lim, ok := providerutil.FirstFloat(m, limitKeys...); ok && lim > 0 {
+			limit = int(math.Round(lim))
+			break
+		}
+	}
+	return remaining, limit
+}
+
+// snapshotFromUsage maps Perplexity quotas into Stream Deck metrics.
 func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	now := usage.UpdatedAt.UTC().Format(time.RFC3339)
 	var metrics []providers.MetricValue
-	if usage.RecurringTotal > 0 {
-		metrics = append(metrics, creditMetric(
-			"session-percent",
-			"CREDITS",
-			"Perplexity recurring credits remaining",
-			usage.RecurringUsed,
-			usage.RecurringTotal,
-			&usage.RenewalDate,
-			"",
-			now,
-		))
+	addRate := func(id, label, name string, remaining *int, limit int) {
+		if remaining == nil {
+			return
+		}
+		used := math.Max(0, float64(limit-*remaining))
+		usedPct := 100.0
+		if limit > 0 {
+			usedPct = math.Max(0, math.Min(100, used/float64(limit)*100))
+		}
+		caption := fmt.Sprintf("%d/%d left", *remaining, limit)
+		m := providerutil.PercentRemainingMetric(id, label, name, usedPct, nil, caption, now)
+		m = providerutil.RawCounts(m, *remaining, limit)
+		metrics = append(metrics, m)
 	}
-	metrics = append(metrics, creditMetric(
-		"weekly-percent",
-		"BONUS",
-		"Perplexity bonus credits remaining",
-		usage.PromoUsed,
-		usage.PromoTotal,
-		nil,
-		promoCaption(usage),
-		now,
-	))
-	metrics = append(metrics, creditMetric(
-		"opus-percent",
-		"PURCHASED",
-		"Perplexity purchased credits remaining",
-		usage.PurchasedUsed,
-		usage.PurchasedTotal,
-		nil,
-		"",
-		now,
-	))
+	addRate("pro-queries-remaining", "QUERIES", "Perplexity Pro queries remaining", usage.ProRemaining, usage.ProLimit)
+	addRate("deep-research-remaining", "DEEP", "Perplexity Deep Research queries remaining", usage.ResearchRemain, usage.ResearchLimit)
+	addRate("labs-remaining", "LABS", "Perplexity Labs queries remaining", usage.LabsRemain, usage.LabsLimit)
+	addRate("agentic-research-remaining", "AGENTIC", "Perplexity Agentic Research queries remaining", usage.AgenticRemain, usage.AgenticLimit)
+	if usage.BalanceCents > 0 || len(metrics) == 0 {
+		metrics = append(metrics, balanceMetric(usage, now))
+	}
 	return providers.Snapshot{
 		ProviderID:   "perplexity",
 		ProviderName: providerName(usage),
@@ -184,44 +312,47 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	}
 }
 
-// creditMetric builds one Perplexity remaining-credit metric.
-func creditMetric(id, label, name string, used, total float64, resetAt *time.Time, extraCaption string, now string) providers.MetricValue {
-	usedPct := 100.0
-	if total > 0 {
-		usedPct = math.Max(0, math.Min(100, used/total*100))
-	}
-	caption := fmt.Sprintf("%s/%s credits", wholeNumber(used), wholeNumber(total))
-	if extraCaption != "" {
-		caption += " " + extraCaption
-	}
-	m := providerutil.PercentRemainingMetric(id, label, name, usedPct, resetAt, caption, now)
-	if total > 0 {
-		remaining := int(math.Round(math.Max(0, total-used)))
-		maximum := int(math.Round(total))
-		m.RawCount = &remaining
-		m.RawMax = &maximum
-	}
+// balanceMetric renders the API balance as a USD-formatted card.
+func balanceMetric(usage usageSnapshot, now string) providers.MetricValue {
+	dollars := usage.BalanceCents / 100
+	caption := fmt.Sprintf("$%.2f", dollars)
+	m := providerutil.PercentRemainingMetric("balance", "BALANCE", "Perplexity API balance",
+		0, nil, caption, now)
+	cents := int(math.Round(usage.BalanceCents))
+	m.RawCount = &cents
 	return m
 }
 
-// promoCaption returns a compact bonus expiry note.
-func promoCaption(usage usageSnapshot) string {
-	if usage.PromoExpiresAt == nil {
-		return ""
-	}
-	return "exp. " + usage.PromoExpiresAt.Format("Jan 2")
-}
-
-// providerName returns Perplexity with an inferred plan when available.
+// providerName decorates the display name with the inferred plan tier.
 func providerName(usage usageSnapshot) string {
+	tier := strings.ToLower(usage.SubscriptionTier)
 	switch {
-	case usage.RecurringTotal <= 0:
-		return "Perplexity"
-	case usage.RecurringTotal < 5000:
+	case strings.Contains(tier, "max"):
+		return "Perplexity Max"
+	case strings.Contains(tier, "enterprise"):
+		return "Perplexity Enterprise"
+	case strings.Contains(tier, "pro"):
 		return "Perplexity Pro"
 	default:
-		return "Perplexity Max"
+		return "Perplexity"
 	}
+}
+
+// mapHTTPError turns a Fetch error into the most useful provider snapshot.
+// 401/403 → stale cookie; 404 with feature_not_available → "API removed";
+// anything else → "Perplexity HTTP <code>" without dumping the body.
+func mapHTTPError(err error) providers.Snapshot {
+	var httpErr *httputil.Error
+	if !errors.As(err, &httpErr) {
+		return errorSnapshot(err.Error())
+	}
+	if httpErr.Status == 401 || httpErr.Status == 403 {
+		return errorSnapshot(cookieaux.StaleMessage("perplexity.ai"))
+	}
+	if httpErr.Status == 404 && strings.Contains(httpErr.Body, "feature_not_available") {
+		return errorSnapshot("Perplexity usage API not available on this account")
+	}
+	return errorSnapshot(fmt.Sprintf("Perplexity HTTP %d", httpErr.Status))
 }
 
 // errorSnapshot returns a Perplexity setup or auth failure snapshot.
@@ -234,16 +365,6 @@ func errorSnapshot(message string) providers.Snapshot {
 		Status:       "unknown",
 		Error:        message,
 	}
-}
-
-// unixSeconds converts Unix seconds into time.Time.
-func unixSeconds(seconds float64) time.Time {
-	return time.Unix(0, int64(seconds*1_000_000_000)).UTC()
-}
-
-// wholeNumber formats credit counts without decimals.
-func wholeNumber(value float64) string {
-	return fmt.Sprintf("%.0f", math.Round(value))
 }
 
 // init registers the Perplexity provider with the package registry.

@@ -108,7 +108,10 @@ func fetchUsage(ctx context.Context) (usageSnapshot, error) {
 	if looksSignedOut(text) {
 		return usageSnapshot{}, fmt.Errorf("OpenCode session is signed out")
 	}
-	if isNullPayload(text) || !subscriptionLooksUsable(text) {
+	// POST fallback only when the GET response is null or unrecognized.
+	// Recognized empty-state payloads (no subscription / no recorded
+	// windows) are valid responses, so don't waste a second round-trip.
+	if (isNullPayload(text) || !subscriptionLooksUsable(text)) && !looksLikeEmptyUsage(text) {
 		fallback, fallbackErr := serverText(ctx, serverRequest{
 			ServerID: subscriptionServerID,
 			Args:     []any{workspaceID},
@@ -241,16 +244,51 @@ func parseSubscription(text string, now time.Time) (usageSnapshot, error) {
 	rollingReset := extractInt(`rollingUsage[^}]*?resetInSec\s*:\s*([0-9]+)`, text)
 	weeklyPercent := extractFloat(`weeklyUsage[^}]*?usagePercent\s*:\s*([0-9]+(?:\.[0-9]+)?)`, text)
 	weeklyReset := extractInt(`weeklyUsage[^}]*?resetInSec\s*:\s*([0-9]+)`, text)
-	if rollingPercent == nil || rollingReset == nil || weeklyPercent == nil || weeklyReset == nil {
-		return usageSnapshot{}, fmt.Errorf("OpenCode parse error: missing usage fields")
+	if rollingPercent != nil && rollingReset != nil && weeklyPercent != nil && weeklyReset != nil {
+		return usageSnapshot{
+			RollingUsagePercent: clampPercent(*rollingPercent),
+			WeeklyUsagePercent:  clampPercent(*weeklyPercent),
+			RollingResetInSec:   *rollingReset,
+			WeeklyResetInSec:    *weeklyReset,
+			UpdatedAt:           now,
+		}, nil
 	}
-	return usageSnapshot{
-		RollingUsagePercent: clampPercent(*rollingPercent),
-		WeeklyUsagePercent:  clampPercent(*weeklyPercent),
-		RollingResetInSec:   *rollingReset,
-		WeeklyResetInSec:    *weeklyReset,
-		UpdatedAt:           now,
-	}, nil
+	// Workspaces with no active subscription or no recorded windows return
+	// Solid SSR hydration payloads that lack rollingUsage/weeklyUsage entirely
+	// (e.g. {usage:[],keys:[...]} or {subscription:null,...}). Surface these
+	// as zero usage rather than a parse error so the button stays useful.
+	if looksLikeEmptyUsage(text) {
+		return usageSnapshot{UpdatedAt: now}, nil
+	}
+	return usageSnapshot{}, fmt.Errorf("OpenCode parse error: missing usage fields")
+}
+
+// looksLikeEmptyUsage reports whether text is an OpenCode _server response
+// that conveys "no rolling/weekly usage" rather than a schema break.
+// Conservative: requires Solid SSR markers and at least one recognized
+// empty-state field, so genuine parser regressions still surface as errors.
+// Whitespace-insensitive so minified or reformatted Solid output still matches.
+func looksLikeEmptyUsage(text string) bool {
+	if strings.Contains(text, "rollingUsage") || strings.Contains(text, "weeklyUsage") {
+		return false
+	}
+	if !strings.Contains(text, "server-fn:") {
+		return false
+	}
+	compact := strings.Join(strings.Fields(text), "")
+	for _, marker := range []string{
+		"subscription:null",
+		"subscriptionPlan:null",
+		"monthlyUsage:null",
+		"monthlyLimit:null",
+		"usage:$R",
+		"keys:$R",
+	} {
+		if strings.Contains(compact, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseSubscriptionJSON parses flexible JSON usage payloads.

@@ -87,7 +87,7 @@ func TestParseModelStats_EmptyResponse(t *testing.T) {
 
 func TestCountMetric_SkipsWhenTotalAbsent(t *testing.T) {
 	r := 5
-	if _, ok := countMetric("x", "X", "X", &r, nil, nil, ""); ok {
+	if _, ok := countMetric("x", "X", "Cat", "X", &r, nil, nil, ""); ok {
 		t.Error("expected countMetric to skip when total is nil")
 	}
 }
@@ -95,7 +95,7 @@ func TestCountMetric_SkipsWhenTotalAbsent(t *testing.T) {
 func TestCountMetric_SkipsWhenZeroTotal(t *testing.T) {
 	r := 5
 	z := 0
-	if _, ok := countMetric("x", "X", "X", &r, &z, nil, ""); ok {
+	if _, ok := countMetric("x", "X", "Cat", "X", &r, &z, nil, ""); ok {
 		t.Error("expected countMetric to skip when total <= 0")
 	}
 }
@@ -103,15 +103,15 @@ func TestCountMetric_SkipsWhenZeroTotal(t *testing.T) {
 func TestCountMetric_BuildsForValidShape(t *testing.T) {
 	r := 30
 	tot := 50
-	m, ok := countMetric("grok3-queries-remaining", "GROK 3", "Grok 3 queries", &r, &tot, nil, "")
+	m, ok := countMetric("grok3-queries-remaining", "GROK 3", "Searches", "Grok 3 queries", &r, &tot, nil, "")
 	if !ok {
 		t.Fatal("expected metric to be produced")
 	}
 	if m.ID != "grok3-queries-remaining" {
 		t.Errorf("ID: got %q", m.ID)
 	}
-	if v, ok := m.Value.(float64); !ok || v != 30 {
-		t.Errorf("Value: got %v (%T), want 30 float64", m.Value, m.Value)
+	if v, ok := m.Value.(string); !ok || v != "30/50" {
+		t.Errorf("Value: got %v (%T), want \"30/50\" string", m.Value, m.Value)
 	}
 	if m.NumericUnit != "count" {
 		t.Errorf("NumericUnit: got %q, want count", m.NumericUnit)
@@ -131,8 +131,8 @@ func TestCountMetric_BuildsForValidShape(t *testing.T) {
 	if m.ResetInSeconds != nil {
 		t.Errorf("ResetInSeconds should be nil while remaining > 0, got %v", *m.ResetInSeconds)
 	}
-	if m.Caption != "30 / 50" {
-		t.Errorf("Caption: got %q, want %q", m.Caption, "30 / 50")
+	if m.Caption != "Searches" {
+		t.Errorf("Caption: got %q, want %q", m.Caption, "Searches")
 	}
 }
 
@@ -140,7 +140,7 @@ func TestCountMetric_SetsCountdownOnlyWhenRateLimited(t *testing.T) {
 	zero := 0
 	tot := 50
 	wait := 540
-	m, ok := countMetric("x", "X", "X", &zero, &tot, &wait, "")
+	m, ok := countMetric("x", "X", "Cat", "X", &zero, &tot, &wait, "")
 	if !ok {
 		t.Fatal("metric should still build with remaining=0")
 	}
@@ -156,7 +156,7 @@ func TestCountMetric_NoCountdownWhileQuotaRemains(t *testing.T) {
 	r := 5
 	tot := 50
 	wait := 999 // present but should be ignored while r > 0
-	m, _ := countMetric("x", "X", "X", &r, &tot, &wait, "")
+	m, _ := countMetric("x", "X", "Cat", "X", &r, &tot, &wait, "")
 	if m.ResetInSeconds != nil {
 		t.Errorf("ResetInSeconds should be nil while remaining=%d > 0, got %v", r, *m.ResetInSeconds)
 	}

@@ -242,19 +242,22 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	now := usage.UpdatedAt.UTC().Format(time.RFC3339)
 	var metrics []providers.MetricValue
 	if m, ok := countMetric(
-		"grok3-queries-remaining", "GROK 3", "Grok 3 queries remaining (window)",
+		"grok3-queries-remaining", "GROK 3", "Searches",
+		"Grok 3 queries remaining (window)",
 		usage.Grok3.RemainingQueries, usage.Grok3.TotalQueries,
 		usage.Grok3.WaitTimeSeconds, now); ok {
 		metrics = append(metrics, m)
 	}
 	if m, ok := countMetric(
-		"grok3-tokens-remaining", "GROK 3 TOK", "Grok 3 tokens remaining (window) — API tier only",
+		"grok3-tokens-remaining", "GROK 3", "Tokens",
+		"Grok 3 tokens remaining (window) — API tier only",
 		usage.Grok3.RemainingTokens, usage.Grok3.TotalTokens,
 		usage.Grok3.WaitTimeSeconds, now); ok {
 		metrics = append(metrics, m)
 	}
 	if m, ok := countMetric(
-		"grok4-heavy-queries-remaining", "GROK 4 H", "Grok 4 Heavy queries remaining (window)",
+		"grok4-heavy-queries-remaining", "GROK 4", "Heavy",
+		"Grok 4 Heavy queries remaining (window)",
 		usage.Grok4.RemainingQueries, usage.Grok4.TotalQueries,
 		usage.Grok4.WaitTimeSeconds, now); ok {
 		metrics = append(metrics, m)
@@ -268,44 +271,44 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	}
 }
 
-// countMetric renders one rate-limit category as a count tile: the
-// remaining count is the prominent value, the meter fill bar scales
-// to remaining/total, and the caption surfaces both ("139 / 140").
+// countMetric renders one rate-limit category as a count tile:
+// "139/140" is the prominent value, the meter fill scales to
+// remaining/total, and the caption is a one-word category
+// ("Searches" / "Heavy" / "Tokens").
 //
 // Why count, not percent: grok.com's totals are small (140-cap on
 // grok-3, 20-cap on grok-4 Heavy). "10% remaining" of 20 = 2 — the
-// user has to do that math in their head to know what's actionable.
-// Showing the count directly mirrors what grok.com's own /usage page
-// shows.
+// user has to do that math in their head. Showing X/Y directly
+// mirrors what grok.com's own /usage page shows.
 //
-// Reset countdown: only fires when the account has actually hit the
-// limit (remaining = 0) and the API surfaces waitTimeSeconds in one
-// of the effort-tier rate-limit blocks. That's the API's own answer
-// to "next slot opens in N seconds" and re-anchors per poll
-// correctly. The static windowSizeSeconds on a healthy response is
-// the rolling-window length, not a countdown, and is intentionally
-// not surfaced.
+// Reset countdown: fires only when the account has hit the limit
+// (remaining = 0) and the API surfaces waitTimeSeconds in one of
+// the effort-tier rate-limit blocks. That's the API's own
+// "next slot opens in N seconds" and re-anchors per poll correctly.
+// windowSizeSeconds on a healthy response is the rolling-window
+// length, not a countdown, and is intentionally not surfaced.
 //
 // Returns ok=false when the response didn't include enough data
 // (grok-4-heavy on free tier; tokens on consumer-chat tier).
-func countMetric(id, label, name string, remaining, total, waitSecs *int, now string) (providers.MetricValue, bool) {
+func countMetric(id, label, category, name string, remaining, total, waitSecs *int, now string) (providers.MetricValue, bool) {
 	if remaining == nil || total == nil || *total <= 0 {
 		return providers.MetricValue{}, false
 	}
-	val := float64(*remaining)
-	ratio := math.Max(0, math.Min(1, float64(*remaining)/float64(*total)))
 	rem := *remaining
 	tot := *total
+	val := fmt.Sprintf("%d/%d", rem, tot)
+	num := float64(rem)
+	ratio := math.Max(0, math.Min(1, float64(rem)/float64(tot)))
 	m := providers.MetricValue{
 		ID:              id,
 		Label:           label,
 		Name:            name,
-		Value:           val,
-		NumericValue:    &val,
+		Value:           val, // "139/140" — Stream Deck title (label) sits above
+		NumericValue:    &num,
 		NumericUnit:     "count",
 		NumericGoodWhen: "high",
 		Ratio:           &ratio,
-		Caption:         fmt.Sprintf("%d / %d", rem, tot),
+		Caption:         category, // "Searches" / "Tokens" / "Heavy"
 		UpdatedAt:       now,
 		RawCount:        &rem,
 		RawMax:          &tot,

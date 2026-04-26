@@ -59,11 +59,18 @@ func (Provider) ID() string { return providerID }
 // Name returns the human-readable provider name.
 func (Provider) Name() string { return providerName }
 
-// BrandColor returns the accent color used on button faces.
-func (Provider) BrandColor() string { return "#ab87ea" }
+// BrandColor returns the accent color used on button faces. Picks the
+// blue stop from the Gemini spark gradient (Google blue #4285f4),
+// matching Google's wordmark presentation. CodexBar uses #ab87ea
+// (purple), which was a different stop from the same gradient — we
+// diverge here because the rest of Gemini's surface (logo, web UI)
+// reads as blue/multicolor, not purple.
+func (Provider) BrandColor() string { return "#4285f4" }
 
 // BrandBg returns the background color used on button faces.
-func (Provider) BrandBg() string { return "#1b102a" }
+// Dark blue-black to complement the Google-blue accent, replacing
+// the previous purple-tinted bg that came with the CodexBar palette.
+func (Provider) BrandBg() string { return "#0a1326" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
@@ -701,10 +708,17 @@ func snapshotFromStatus(status geminiStatus) providers.Snapshot {
 // Suppresses the reset countdown when the quota is effectively idle —
 // "100% remaining for 24h" is meaningless when nothing's been consumed
 // yet; the daily reset only matters once usage starts.
+//
+// Caption is left empty so the renderer's percent-metric fallback
+// fills in "Remaining" automatically. Once usage starts and resetAt
+// becomes non-nil, the countdown takes over the subvalue slot. The
+// model ID was previously used as the caption but on small button
+// faces it just collided with the title; the per-model identity is
+// already carried in the title (PRO / FLASH / FLASH LITE).
 func quotaMetric(id, label, name string, quota modelQuota, now string) providers.MetricValue {
 	usedPct := 100 - quota.PercentLeft
 	resetAt := providerutil.ResetTimeWhenUsed(usedPct, quota.ResetTime)
-	return providerutil.PercentRemainingMetric(id, label, name, usedPct, resetAt, quota.ModelID, now)
+	return providerutil.PercentRemainingMetric(id, label, name, usedPct, resetAt, "", now)
 }
 
 // lowestMatchingQuota returns the lowest remaining quota accepted by match.

@@ -1555,6 +1555,11 @@ var knownLabels = map[string]string{
 	"cost-30d":                "30 DAYS",
 	"tokens-session-percent":  "5-HOUR",
 	"team-ondemand-spent":     "TEAM",
+	// Grok / xAI: title identifies the model; the subvalue caption
+	// disambiguates Searches / Tokens / Heavy at a glance.
+	"grok3-queries-remaining":       "GROK 3",
+	"grok3-tokens-remaining":        "GROK 3",
+	"grok4-heavy-queries-remaining": "GROK 4",
 }
 
 // metricCaptionForPlaceholder returns a short caption for dashed-out
@@ -1584,6 +1589,11 @@ var knownCaptions = map[string]string{
 	"cost-30d":                "Cost (local)",
 	"tokens-session-percent":  "Remaining",
 	"team-ondemand-spent":     "Team spend",
+	// Grok placeholder captions match the live-tile subvalue so a
+	// dashed-out Grok button still tells you which category it is.
+	"grok3-queries-remaining":       "Searches",
+	"grok3-tokens-remaining":        "Tokens",
+	"grok4-heavy-queries-remaining": "Heavy",
 }
 
 func metricCaptionForPlaceholder(metricID string) string {

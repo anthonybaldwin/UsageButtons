@@ -1556,14 +1556,16 @@ var knownLabels = map[string]string{
 	"team-ondemand-spent":     "TEAM",
 	// Perplexity: per-feature daily quotas + Comet/API dollar metrics.
 	// Titles match the live-tile labels emitted from snapshotFromUsage
-	// so a placeholder Perplexity tile reads identically to the live one.
-	"pro-queries-remaining":      "QUERIES",
-	"deep-research-remaining":    "DEEP",
+	// so a placeholder Perplexity tile reads identically to the live
+	// one. api-balance / api-spend share the "API" title — caption
+	// disambiguates (Balance vs Spend), same trick Grok uses.
+	"pro-queries-remaining":      "PRO",
+	"deep-research-remaining":    "DEEP RSRCH.",
 	"labs-remaining":             "LABS",
 	"agentic-research-remaining": "AGENTIC",
 	"comet-spend":                "COMET",
-	"api-balance":                "BALANCE",
-	"api-spend":                  "SPEND",
+	"api-balance":                "API",
+	"api-spend":                  "API",
 }
 
 // metricCaptionForPlaceholder returns a short caption for dashed-out
@@ -1593,15 +1595,17 @@ var knownCaptions = map[string]string{
 	"cost-30d":                "Cost (local)",
 	"tokens-session-percent":  "Remaining",
 	"team-ondemand-spent":     "Team spend",
-	// Perplexity placeholder captions mirror the live-tile subvalue
-	// ("remaining today" for daily quotas, dollar amount for spends).
-	"pro-queries-remaining":      "remaining today",
-	"deep-research-remaining":    "remaining today",
-	"labs-remaining":             "remaining today",
-	"agentic-research-remaining": "remaining today",
-	"comet-spend":                "All-time",
+	// Perplexity placeholder captions mirror the live-tile subvalue —
+	// constant "Queries" for the per-feature counts, "Balance"/"Spend"
+	// for the dollar metrics so a row of Perplexity tiles reads as
+	// parallel and api-balance vs api-spend stay disambiguated.
+	"pro-queries-remaining":      "Queries",
+	"deep-research-remaining":    "Queries",
+	"labs-remaining":             "Queries",
+	"agentic-research-remaining": "Queries",
+	"comet-spend":                "Spend",
 	"api-balance":                "Balance",
-	"api-spend":                  "All-time",
+	"api-spend":                  "Spend",
 }
 
 func metricCaptionForPlaceholder(metricID string) string {

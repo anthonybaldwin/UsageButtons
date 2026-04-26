@@ -588,14 +588,14 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 		}
 		metrics = append(metrics, countMetric(id, label, name, *remaining, now))
 	}
-	addCount("pro-queries-remaining", "QUERIES", "Perplexity Pro queries remaining today", usage.ProRemaining)
-	addCount("deep-research-remaining", "DEEP", "Perplexity Deep Research queries remaining today", usage.ResearchRemain)
+	addCount("pro-queries-remaining", "PRO", "Perplexity Pro queries remaining today", usage.ProRemaining)
+	addCount("deep-research-remaining", "DEEP RSRCH.", "Perplexity Deep Research queries remaining today", usage.ResearchRemain)
 	addCount("labs-remaining", "LABS", "Perplexity Labs queries remaining today", usage.LabsRemain)
 	addCount("agentic-research-remaining", "AGENTIC", "Perplexity Agentic Research queries remaining today", usage.AgenticRemain)
 	metrics = append(metrics,
-		dollarMetric("comet-spend", "COMET", "Perplexity Comet (computer-use) spend (all-time)", usage.CometSpendCents, now),
-		dollarMetric("api-balance", "BALANCE", "Perplexity API balance", usage.BalanceCents, now),
-		dollarMetric("api-spend", "SPEND", "Perplexity API spend (all-time)", usage.SpendCents, now),
+		dollarMetric("comet-spend", "COMET", "Spend", "Perplexity Comet (computer-use) spend (all-time)", usage.CometSpendCents, now),
+		dollarMetric("api-balance", "API", "Balance", "Perplexity API balance", usage.BalanceCents, now),
+		dollarMetric("api-spend", "API", "Spend", "Perplexity API spend (all-time)", usage.SpendCents, now),
 	)
 	return providers.Snapshot{
 		ProviderID:   "perplexity",
@@ -609,7 +609,10 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 // countMetric builds a "remaining queries" count tile. The count itself
 // is the prominent value; the bar renders full because /rest/rate-limit
 // doesn't expose the daily cap (a guessed cap would mis-fill the bar
-// when wrong, which is worse than a static full bar).
+// when wrong, which is worse than a static full bar). Caption mirrors
+// the Grok pattern — title carries the feature name (PRO / DEEP RSRCH. /
+// LABS / AGENTIC), subtitle is the constant "Queries" so a row of
+// Perplexity tiles reads as parallel.
 func countMetric(id, label, name string, remaining int, now string) providers.MetricValue {
 	val := float64(remaining)
 	ratio := 1.0
@@ -622,27 +625,30 @@ func countMetric(id, label, name string, remaining int, now string) providers.Me
 		NumericUnit:     "count",
 		NumericGoodWhen: "high",
 		Ratio:           &ratio,
-		Caption:         "remaining today",
+		Caption:         "Queries",
 		UpdatedAt:       now,
 	}
 }
 
 // dollarMetric renders a USD-valued tile (balance, spend). Always emitted
 // — a $0.00 value is itself useful information for accounts with no API
-// platform activity.
-func dollarMetric(id, label, name string, cents float64, now string) providers.MetricValue {
+// platform activity. Caption is a short word ("Balance" / "Spend") so
+// api-balance and api-spend can share the "API" title and still
+// disambiguate via the subtitle (same trick Grok uses for GROK 3
+// queries vs GROK 3 tokens).
+func dollarMetric(id, label, caption, name string, cents float64, now string) providers.MetricValue {
 	dollars := cents / 100
 	ratio := 1.0
 	return providers.MetricValue{
 		ID:              id,
 		Label:           label,
 		Name:            name,
-		Value:           dollars,
+		Value:           fmt.Sprintf("$%.2f", dollars),
 		NumericValue:    &dollars,
 		NumericUnit:     "dollars",
 		NumericGoodWhen: "high",
 		Ratio:           &ratio,
-		Caption:         fmt.Sprintf("$%.2f", dollars),
+		Caption:         caption,
 		UpdatedAt:       now,
 	}
 }

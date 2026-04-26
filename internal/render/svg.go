@@ -46,36 +46,36 @@ func renderStarfield() string {
 	canvas := float64(Canvas)
 	parts := make([]string, 0, count+3)
 
-	// Drifting starfield: each star has a base position, a small
-	// velocity, and an opacity flicker on its own period.
+	// Rotating starfield: each star orbits the canvas center on its
+	// own radius, at its own angular velocity, with its own initial
+	// phase and opacity flicker. The whole field reads as a slow
+	// galactic swirl rather than independent linear drift.
+	cx, cy := canvas/2, canvas/2
 	for i := 0; i < count; i++ {
-		x0 := r.Float64() * canvas
-		y0 := r.Float64() * canvas
-		// Bias radius to 0.9..2.4 so every star covers at least one
-		// rendered pixel after the 144→~72 downscale.
-		radius := 0.9 + r.Float64()*1.5
+		// Polar seed: pick a radius from the center and an initial
+		// angle. Radii bias toward the canvas extents so stars cover
+		// the corners (sqrt skews uniform sampling outward).
+		orbitR := math.Sqrt(r.Float64()) * (canvas * 0.7)
+		theta0 := r.Float64() * 2 * math.Pi
+		// Angular velocity (rad/sec). Sign per star so neighbors can
+		// drift opposite directions; magnitude small (0.05..0.18 rad/s,
+		// i.e. ~3..10 deg/s) so the swirl reads as gentle motion.
+		omega := (0.05 + r.Float64()*0.13) * (1.0 - 2.0*float64(i%2))
+		angle := theta0 + omega*now
+		x := cx + orbitR*math.Cos(angle)
+		y := cy + orbitR*math.Sin(angle)
+
+		// Star draw parameters — radius / opacity flicker.
+		dotR := 0.9 + r.Float64()*1.5
 		dim := 0.30 + r.Float64()*0.20
 		bright := 0.70 + r.Float64()*0.25
 		period := 1.6 + r.Float64()*2.4
 		offset := r.Float64() * period
-		// Per-star drift velocity in px/sec. Slow (-4..4) so the field
-		// reads as gentle motion, not chaos.
-		vx := (r.Float64() - 0.5) * 8
-		vy := (r.Float64() - 0.5) * 8
-		x := math.Mod(x0+vx*now, canvas)
-		if x < 0 {
-			x += canvas
-		}
-		y := math.Mod(y0+vy*now, canvas)
-		if y < 0 {
-			y += canvas
-		}
-		// sin(2π·(t+offset)/period) ∈ [-1,1] → [0,1] → [dim..bright]
 		wave := (math.Sin(2*math.Pi*(now+offset)/period) + 1) / 2
 		opacity := dim + wave*(bright-dim)
 		parts = append(parts, fmt.Sprintf(
 			`<circle cx="%.1f" cy="%.1f" r="%.2f" fill="#ffffff" opacity="%.2f"/>`,
-			x, y, radius, opacity))
+			x, y, dotR, opacity))
 	}
 
 	// Shooting star: every shootCycle seconds a streak fires along a

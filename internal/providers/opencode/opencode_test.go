@@ -64,6 +64,21 @@ func TestParseSubscription_NoSubscription_BillingShape(t *testing.T) {
 	}
 }
 
+func TestParseSubscription_NoSubscription_Minified(t *testing.T) {
+	now := time.Now().UTC()
+	// Same shape as the billing response but without spaces after colons —
+	// what we'd see if OpenCode minifies the Solid SSR output.
+	text := `;0x000001f9;((self.$R=self.$R||{})["server-fn:6"]=[],($R=>$R[0]={customerID:null,balance:0,monthlyLimit:null,monthlyUsage:null,subscription:null,subscriptionID:null,subscriptionPlan:null})($R["server-fn:6"]))`
+	usage, err := parseSubscription(text, now)
+	if err != nil {
+		t.Fatalf("expected no error for minified no-subscription response, got: %v", err)
+	}
+	if usage.RollingUsagePercent != 0 || usage.WeeklyUsagePercent != 0 {
+		t.Errorf("expected zero percents, got rolling=%v weekly=%v",
+			usage.RollingUsagePercent, usage.WeeklyUsagePercent)
+	}
+}
+
 func TestParseSubscription_BrokenResponse_StillErrors(t *testing.T) {
 	now := time.Now().UTC()
 	// No Solid markers, no empty-state markers — looks like a genuine

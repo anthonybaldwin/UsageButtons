@@ -193,22 +193,20 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 // when the response didn't include enough data (e.g. grok-4-heavy on
 // free tier).
 //
-// `windowSecs` is intentionally unused: grok.com returns the window
-// *length* (e.g. 7200 for a 2-hour rolling window), not the seconds
-// until the next reset. Adding it to time.Now() each poll would show
-// a constantly-resetting "2h" countdown that's misleading. Until the
-// API exposes an absolute reset timestamp, we just surface the
-// rolling-window length in the caption.
-func percentMetric(id, label, name string, remaining, total, windowSecs *int, now string) (providers.MetricValue, bool) {
+// windowSecs is intentionally unused: grok.com returns the window
+// *length*, not seconds-until-next-reset. Adding it to time.Now()
+// would render a fake countdown that resets to ~2h on every poll
+// (and on every Stream Deck restart, since the cached button image
+// re-evaluates against a fresh "now" once the plugin reconnects).
+// Surfacing the length in the caption was equally confusing — users
+// read "· 2h window" as a timer — so the caption is just the count.
+func percentMetric(id, label, name string, remaining, total, _ *int, now string) (providers.MetricValue, bool) {
 	if remaining == nil || total == nil || *total <= 0 {
 		return providers.MetricValue{}, false
 	}
 	used := math.Max(0, float64(*total-*remaining))
 	usedPct := math.Max(0, math.Min(100, used/float64(*total)*100))
 	caption := fmt.Sprintf("%d/%d left", *remaining, *total)
-	if windowSecs != nil && *windowSecs > 0 {
-		caption += fmt.Sprintf(" · %dh window", *windowSecs/3600)
-	}
 	m := providerutil.PercentRemainingMetric(id, label, name, usedPct, nil, caption, now)
 	m = providerutil.RawCounts(m, *remaining, *total)
 	return m, true

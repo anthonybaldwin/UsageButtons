@@ -110,6 +110,11 @@ type ProviderSettings struct {
 var providerDefaultSmartContrast = map[string]bool{
 	"ollama":    true,
 	"synthetic": true,
+	// Grok's brand is monochrome white-on-near-black. When the meter
+	// fill bar is high (≥ ~80%), the white fill covers the watermark
+	// and text drawn in the same white BrandColor — invisible until
+	// smart contrast flips them to dark over the light fill.
+	"grok": true,
 }
 
 // ProviderKeys holds user-entered credentials and endpoint overrides

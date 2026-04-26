@@ -64,10 +64,10 @@ const (
 	// starfieldFrameTick is the per-frame interval for the animated
 	// starfield decoration. Stream Deck rasterizes each SetImage SVG
 	// to a static PNG, so animation has to come from re-sending the
-	// SVG every frame. 4 Hz is slow enough to stay quiet (≤ 4 SetImage
-	// calls/sec per visible Grok key) and fast enough to read as
-	// shimmer rather than as discrete steps.
-	starfieldFrameTick = 250 * time.Millisecond
+	// SVG every frame. 10 Hz keeps drift + shooting-star streaks
+	// readable as continuous motion (4 Hz is too choppy for cross-
+	// canvas movement, even though it's fine for opacity flicker).
+	starfieldFrameTick = 100 * time.Millisecond
 )
 
 // visibleKey tracks a key currently on-screen.

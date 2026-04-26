@@ -24,29 +24,33 @@ import (
 // seeds when a layered effect is desired; for now the starfield only
 // renders behind the glyph (paint order is bg → starfield → glyph →
 // fill → text), so a single seed suffices.
-// renderStarfield emits 45 white circles as the Grok button's
-// shimmering background. Stream Deck rasterizes the SVG to a static
-// PNG before display, so SMIL `<animate>` doesn't tick — animation has
-// to come from re-rendering the SVG every frame and re-sending it via
-// SetImage. Each call samples time.Now() as the phase source so a
-// driver loop calling RenderButton at e.g. 4 Hz produces smooth
-// flicker without needing to thread a phase parameter through.
+// renderStarfield emits the animated Grok background: a slowly drifting
+// star field plus a periodic shooting-star streak across the canvas.
+// Stream Deck rasterizes the SVG to a static PNG before display, so SMIL
+// `<animate>` doesn't tick — animation has to come from re-rendering the
+// SVG every frame and re-sending it via SetImage. Each call samples
+// time.Now(), so a driver loop calling RenderButton at e.g. 8 Hz
+// produces smooth motion without needing to thread a phase parameter.
 //
-// Per-star period (1.6s..4.0s) and offset are deterministic from a
-// fixed PCG seed so the same star pulses on the same cycle frame to
-// frame; only the time argument changes between calls.
+// Star positions, velocities, periods, and offsets are deterministic
+// from a fixed PCG seed so the same star drifts on the same trajectory
+// frame to frame; only the time argument changes between calls.
 //
 // Visual borrowed from UsmanDevCraft/grok-shooting-stars (MIT) — the
 // upstream HTML5-canvas implementation does the same dim/bright sin
-// flicker with per-star phase offsets. See THIRD_PARTY_LICENSES.md.
+// flicker, slow drift, and periodic streak. See THIRD_PARTY_LICENSES.md.
 func renderStarfield() string {
 	const count = 45
 	r := rand.New(rand.NewPCG(0xfeed, 0xface))
 	now := float64(time.Now().UnixMilli()) / 1000.0
-	parts := make([]string, 0, count)
+	canvas := float64(Canvas)
+	parts := make([]string, 0, count+3)
+
+	// Drifting starfield: each star has a base position, a small
+	// velocity, and an opacity flicker on its own period.
 	for i := 0; i < count; i++ {
-		x := r.Float64() * float64(Canvas)
-		y := r.Float64() * float64(Canvas)
+		x0 := r.Float64() * canvas
+		y0 := r.Float64() * canvas
 		// Bias radius to 0.9..2.4 so every star covers at least one
 		// rendered pixel after the 144→~72 downscale.
 		radius := 0.9 + r.Float64()*1.5
@@ -54,6 +58,18 @@ func renderStarfield() string {
 		bright := 0.70 + r.Float64()*0.25
 		period := 1.6 + r.Float64()*2.4
 		offset := r.Float64() * period
+		// Per-star drift velocity in px/sec. Slow (-4..4) so the field
+		// reads as gentle motion, not chaos.
+		vx := (r.Float64() - 0.5) * 8
+		vy := (r.Float64() - 0.5) * 8
+		x := math.Mod(x0+vx*now, canvas)
+		if x < 0 {
+			x += canvas
+		}
+		y := math.Mod(y0+vy*now, canvas)
+		if y < 0 {
+			y += canvas
+		}
 		// sin(2π·(t+offset)/period) ∈ [-1,1] → [0,1] → [dim..bright]
 		wave := (math.Sin(2*math.Pi*(now+offset)/period) + 1) / 2
 		opacity := dim + wave*(bright-dim)
@@ -61,6 +77,50 @@ func renderStarfield() string {
 			`<circle cx="%.1f" cy="%.1f" r="%.2f" fill="#ffffff" opacity="%.2f"/>`,
 			x, y, radius, opacity))
 	}
+
+	// Shooting star: every shootCycle seconds a streak fires along a
+	// random direction for shootDur seconds, then disappears. Direction
+	// + start position are seeded from the cycle index so each cycle
+	// gets a different streak but every render of the same cycle picks
+	// the same one (deterministic).
+	const (
+		shootCycle = 4.0 // one streak every 4s
+		shootDur   = 1.2 // streak visible for 1.2s
+		shootSpeed = 220.0
+		tailLen    = 28.0
+	)
+	cycleProgress := math.Mod(now, shootCycle)
+	if cycleProgress < shootDur {
+		cycleIdx := uint64(now / shootCycle)
+		sr := rand.New(rand.NewPCG(cycleIdx, 0xbabe))
+		// Start somewhere in the upper-left half so most streaks travel
+		// across the visible canvas before exiting.
+		startX := sr.Float64() * canvas * 0.6
+		startY := sr.Float64() * canvas * 0.6
+		// Angle biased toward down-right (the canonical "shooting star"
+		// streak direction in xAI's branding).
+		angle := math.Pi/4 + (sr.Float64()-0.5)*math.Pi/3
+		dx := math.Cos(angle) * shootSpeed * cycleProgress
+		dy := math.Sin(angle) * shootSpeed * cycleProgress
+		hx := startX + dx
+		hy := startY + dy
+		tx := hx - math.Cos(angle)*tailLen
+		ty := hy - math.Sin(angle)*tailLen
+		// Fade in/out at the streak's start and end so it doesn't pop.
+		alpha := 1.0
+		if cycleProgress < 0.15 {
+			alpha = cycleProgress / 0.15
+		} else if cycleProgress > shootDur-0.25 {
+			alpha = (shootDur - cycleProgress) / 0.25
+		}
+		parts = append(parts, fmt.Sprintf(
+			`<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round" opacity="%.2f"/>`,
+			tx, ty, hx, hy, alpha*0.7))
+		parts = append(parts, fmt.Sprintf(
+			`<circle cx="%.1f" cy="%.1f" r="1.8" fill="#ffffff" opacity="%.2f"/>`,
+			hx, hy, alpha))
+	}
+
 	return strings.Join(parts, "")
 }
 

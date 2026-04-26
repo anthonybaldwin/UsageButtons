@@ -72,16 +72,15 @@ func (Provider) ID() string { return "grok" }
 // Name returns the human-readable provider name.
 func (Provider) Name() string { return "Grok" }
 
-// BrandColor returns the accent color used on button faces. Grok / xAI
-// is monochrome; the inverse of Ollama's near-white-on-near-black —
-// black mark on a white canvas. Smart contrast (enabled for grok in
-// settings.providerDefaultSmartContrast) auto-flips text/watermark
-// over the dark fill bar at high meter ratios so the icon stays
-// visible regardless of the ratio.
-func (Provider) BrandColor() string { return "#000000" }
+// BrandColor returns the accent color used on button faces. Grok
+// renders as a reference card (no meter fill — see Ratio=nil in
+// countMetric), so BrandColor only colors the watermark glyph, value
+// text, and caption. White on a black canvas matches xAI's monochrome
+// presentation.
+func (Provider) BrandColor() string { return "#ffffff" }
 
 // BrandBg returns the background color used on button faces.
-func (Provider) BrandBg() string { return "#ffffff" }
+func (Provider) BrandBg() string { return "#000000" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
@@ -298,14 +297,13 @@ func countMetric(id, label, category, name string, remaining, total, waitSecs *i
 	tot := *total
 	val := fmt.Sprintf("%d/%d", rem, tot)
 	num := float64(rem)
-	ratio := math.Max(0, math.Min(1, float64(rem)/float64(tot)))
-	// Note: deliberately NOT setting RawCount / RawMax. The button's
-	// Value already carries "X/Y" as the focal text, and surfacing
-	// the same fraction again as a rawCounts subvalue would override
-	// our Caption ("Searches" / "Tokens" / "Heavy") via the
-	// resolveShowRawCounts path in renderMetric. Threshold logic uses
-	// NumericValue / Ratio, so dropping the raw fields doesn't lose
-	// any meter functionality for this provider.
+	// Note: deliberately NOT setting Ratio (which would draw a meter
+	// fill bar) or RawCount/RawMax (which would override the caption
+	// via the resolveShowRawCounts path). For Grok we render as a
+	// reference card — flat brand canvas with the count + glyph +
+	// category caption — because the totals are small and a partially-
+	// filled bar at "139/140" would just look like a flicker against
+	// the always-monochrome Grok presentation.
 	m := providers.MetricValue{
 		ID:              id,
 		Label:           label,
@@ -314,7 +312,6 @@ func countMetric(id, label, category, name string, remaining, total, waitSecs *i
 		NumericValue:    &num,
 		NumericUnit:     "count",
 		NumericGoodWhen: "high",
-		Ratio:           &ratio,
 		Caption:         category, // "Searches" / "Tokens" / "Heavy"
 		UpdatedAt:       now,
 	}

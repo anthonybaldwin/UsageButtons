@@ -3,7 +3,6 @@ package grok
 import (
 	"encoding/json"
 	"errors"
-	"math"
 	"strings"
 	"testing"
 	"time"
@@ -116,11 +115,10 @@ func TestCountMetric_BuildsForValidShape(t *testing.T) {
 	if m.NumericUnit != "count" {
 		t.Errorf("NumericUnit: got %q, want count", m.NumericUnit)
 	}
-	if m.Ratio == nil {
-		t.Fatal("Ratio should be set so the meter still fills proportionally")
-	}
-	if got := math.Round(*m.Ratio*100) / 100; got != 0.6 {
-		t.Errorf("Ratio: got %v, want 0.6 (30/50)", got)
+	// Ratio intentionally NOT set — Grok renders as a reference
+	// card (no meter fill bar). The count itself is the focal text.
+	if m.Ratio != nil {
+		t.Errorf("Ratio should be nil (reference card), got %v", *m.Ratio)
 	}
 	// RawCount/RawMax intentionally NOT set — the button's Value is
 	// already "X/Y" so surfacing the same fraction via the rawCounts

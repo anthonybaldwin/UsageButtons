@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // renderStarfield returns SVG `<circle>` elements approximating xAI's
@@ -23,31 +24,42 @@ import (
 // seeds when a layered effect is desired; for now the starfield only
 // renders behind the glyph (paint order is bg → starfield → glyph →
 // fill → text), so a single seed suffices.
+// renderStarfield emits 45 white circles as the Grok button's
+// shimmering background. Stream Deck rasterizes the SVG to a static
+// PNG before display, so SMIL `<animate>` doesn't tick — animation has
+// to come from re-rendering the SVG every frame and re-sending it via
+// SetImage. Each call samples time.Now() as the phase source so a
+// driver loop calling RenderButton at e.g. 4 Hz produces smooth
+// flicker without needing to thread a phase parameter through.
+//
+// Per-star period (1.6s..4.0s) and offset are deterministic from a
+// fixed PCG seed so the same star pulses on the same cycle frame to
+// frame; only the time argument changes between calls.
+//
+// Visual borrowed from UsmanDevCraft/grok-shooting-stars (MIT) — the
+// upstream HTML5-canvas implementation does the same dim/bright sin
+// flicker with per-star phase offsets. See THIRD_PARTY_LICENSES.md.
 func renderStarfield() string {
-	r := rand.New(rand.NewPCG(0xfeed, 0xface))
 	const count = 45
+	r := rand.New(rand.NewPCG(0xfeed, 0xface))
+	now := float64(time.Now().UnixMilli()) / 1000.0
 	parts := make([]string, 0, count)
 	for i := 0; i < count; i++ {
 		x := r.Float64() * float64(Canvas)
 		y := r.Float64() * float64(Canvas)
-		// Stream Deck rasterizes the 144-unit canvas down to ~72px,
-		// so sub-pixel radii vanish. Bias to 0.9..2.4 so every star
-		// covers at least one rendered pixel.
+		// Bias radius to 0.9..2.4 so every star covers at least one
+		// rendered pixel after the 144→~72 downscale.
 		radius := 0.9 + r.Float64()*1.5
-		// Each star flickers between a dim and bright opacity on its
-		// own desynced cycle so the field shimmers instead of pulsing
-		// in unison. SMIL `<animate>` is supported by the WebKit shell
-		// Stream Deck uses to render SVG `<image>` payloads.
 		dim := 0.30 + r.Float64()*0.20
 		bright := 0.70 + r.Float64()*0.25
-		dur := 1.6 + r.Float64()*2.4    // 1.6s..4.0s — varied periods
-		offset := -r.Float64() * dur    // negative begin desyncs phases
+		period := 1.6 + r.Float64()*2.4
+		offset := r.Float64() * period
+		// sin(2π·(t+offset)/period) ∈ [-1,1] → [0,1] → [dim..bright]
+		wave := (math.Sin(2*math.Pi*(now+offset)/period) + 1) / 2
+		opacity := dim + wave*(bright-dim)
 		parts = append(parts, fmt.Sprintf(
-			`<circle cx="%.1f" cy="%.1f" r="%.2f" fill="#ffffff" opacity="%.2f">`+
-				`<animate attributeName="opacity" values="%.2f;%.2f;%.2f" dur="%.2fs" begin="%.2fs" repeatCount="indefinite"/>`+
-				`</circle>`,
-			x, y, radius, dim,
-			dim, bright, dim, dur, offset))
+			`<circle cx="%.1f" cy="%.1f" r="%.2f" fill="#ffffff" opacity="%.2f"/>`,
+			x, y, radius, opacity))
 	}
 	return strings.Join(parts, "")
 }

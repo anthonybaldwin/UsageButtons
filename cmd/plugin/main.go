@@ -61,6 +61,13 @@ const (
 	displayRefresh     = 60 * time.Second
 	refreshJitterRatio = 0.20
 	defaultMetric      = "session-percent"
+	// starfieldFrameTick is the per-frame interval for the animated
+	// starfield decoration. Stream Deck rasterizes each SetImage SVG
+	// to a static PNG, so animation has to come from re-sending the
+	// SVG every frame. 4 Hz is slow enough to stay quiet (≤ 4 SetImage
+	// calls/sec per visible Grok key) and fast enough to read as
+	// shimmer rather than as discrete steps.
+	starfieldFrameTick = 250 * time.Millisecond
 )
 
 // visibleKey tracks a key currently on-screen.
@@ -112,6 +119,7 @@ func main() {
 	// Start scheduler and display refresh tickers.
 	go schedulerLoop(conn)
 	go displayRefreshLoop(conn)
+	go starfieldAnimationLoop(conn)
 
 	// Invalidate provider caches when their credential files change,
 	// so a post-login tile update arrives within tens of seconds
@@ -141,6 +149,37 @@ func displayRefreshLoop(conn *streamdeck.Connection) {
 	defer ticker.Stop()
 	for range ticker.C {
 		redrawAllVisible(conn)
+	}
+}
+
+// starfieldAnimationLoop re-renders visible keys whose provider has the
+// starfield decoration enabled (Grok by default) at starfieldFrameTick
+// rate. Each redraw resamples time.Now() inside renderStarfield, so the
+// star opacities advance one frame and the field shimmers. Skips when
+// no global settings yet, and walks only visible keys (so a key that's
+// off-screen burns no cycles even if its provider has stars on).
+func starfieldAnimationLoop(conn *streamdeck.Connection) {
+	ticker := time.NewTicker(starfieldFrameTick)
+	defer ticker.Stop()
+	for range ticker.C {
+		if !globalSettingsLoaded() {
+			continue
+		}
+		mu.Lock()
+		var animateCtxs []string
+		for ctx, key := range visibleKeys {
+			providerID := streamdeck.ProviderIDFromAction(key.action)
+			if providerID == "" {
+				continue
+			}
+			if settings.StarfieldEnabled(providerID, key.settings) {
+				animateCtxs = append(animateCtxs, ctx)
+			}
+		}
+		mu.Unlock()
+		for _, ctx := range animateCtxs {
+			redrawKeyFromCache(conn, ctx)
+		}
 	}
 }
 

@@ -37,11 +37,11 @@ case "$(uname -s)" in
 esac
 
 echo "→ building $BIN"
-go build "${LDFLAGS[@]}" -o "$ROOT/$BIN" "$ROOT/cmd/plugin/"
+go build ${LDFLAGS[@]+"${LDFLAGS[@]}"} -o "$ROOT/$BIN" "$ROOT/cmd/plugin/"
 echo "✓ built"
 
 echo "→ building $NATIVE_HOST"
-go build "${LDFLAGS[@]}" -o "$ROOT/$NATIVE_HOST" "$ROOT/cmd/native-host/"
+go build ${LDFLAGS[@]+"${LDFLAGS[@]}"} -o "$ROOT/$NATIVE_HOST" "$ROOT/cmd/native-host/"
 echo "✓ built"
 
 if $RESTART; then

@@ -17,6 +17,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
@@ -33,12 +35,25 @@ const (
 )
 
 // modelStats is one model's parsed rate-limit response.
+//
+// remainingTokens / totalTokens are present on API-platform accounts but
+// not on consumer-chat (cookie-auth) accounts — the parser returns nil
+// for them on chat tiers and the corresponding metric is silently
+// skipped, leaving query metrics intact. Both code paths are kept so
+// the PI dropdown advertises the same metric set to every user;
+// whichever ones the API actually returns become live.
+//
+// WaitTimeSeconds is populated only when the user has actually hit the
+// rate limit — both effort-tier rate-limit objects are null on a
+// healthy response. When non-nil at remaining=0, this gives a real
+// "retry in N seconds" countdown the API anchors per poll.
 type modelStats struct {
 	RemainingQueries  *int
 	TotalQueries      *int
 	RemainingTokens   *int
 	TotalTokens       *int
 	WindowSizeSeconds *int
+	WaitTimeSeconds   *int
 }
 
 // usageSnapshot is the normalized Grok quota state.
@@ -71,9 +86,9 @@ func (Provider) BrandBg() string { return "#ffffff" }
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
 	return []string{
-		"grok3-queries-percent",
-		"grok3-tokens-percent",
-		"grok4-heavy-queries-percent",
+		"grok3-queries-remaining",
+		"grok3-tokens-remaining",
+		"grok4-heavy-queries-remaining",
 	}
 }
 
@@ -129,15 +144,56 @@ func fetchModel(ctx context.Context, modelName string) (modelStats, error) {
 	}
 	root := map[string]any{}
 	if err := json.Unmarshal(resp.Body, &root); err != nil {
+		dumpUnknownResponse(modelName, resp.Body)
 		return modelStats{}, fmt.Errorf("Grok: %s response not JSON", modelName)
 	}
-	return parseModelStats(root), nil
+	stats := parseModelStats(root)
+	if stats.RemainingQueries == nil && stats.TotalQueries == nil &&
+		stats.RemainingTokens == nil && stats.TotalTokens == nil {
+		// Recognized as JSON but missing every field we know how to
+		// extract — record so a future debug pass can inspect the
+		// real shape (mirrors OpenCode's dumpUnknownResponse pattern).
+		dumpUnknownResponse(modelName, resp.Body)
+	}
+	return stats, nil
 }
 
-// parseModelStats extracts the four rate-limit numbers from a single
-// grok.com /rest/rate-limits response. The endpoint returns flat keys
-// at root for grok-3 and grok-4-heavy alike — no envelope walking
-// needed for the published response shape.
+// dumpUnknownResponse appends a snippet of an unrecognized rate-limits
+// response to a temp file for offline inspection. Owner-only perms,
+// append mode, and a total-size cap keep it from running away if the
+// API permanently changes shape.
+func dumpUnknownResponse(modelName string, body []byte) {
+	const (
+		maxSnippetBytes = 8 * 1024
+		maxFileBytes    = 256 * 1024
+	)
+	path := filepath.Join(os.TempDir(), "usagebuttons-grok-debug.txt")
+	if info, err := os.Stat(path); err == nil && info.Size() >= maxFileBytes {
+		return
+	}
+	snippet := body
+	truncated := false
+	if len(snippet) > maxSnippetBytes {
+		snippet = snippet[:maxSnippetBytes]
+		truncated = true
+	}
+	header := fmt.Sprintf("[%s] modelName=%s length=%d truncated=%v\n",
+		time.Now().UTC().Format(time.RFC3339), modelName, len(body), truncated)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	_, _ = f.WriteString(header)
+	_, _ = f.Write(snippet)
+	_, _ = f.WriteString("\n\n")
+}
+
+// parseModelStats extracts the rate-limit numbers from a single
+// grok.com /rest/rate-limits response. Top-level keys carry the
+// totals; the optional nested `lowEffortRateLimits` /
+// `highEffortRateLimits` objects only populate when the account is
+// actively rate-limited, and that's where we read waitTimeSeconds.
 func parseModelStats(root map[string]any) modelStats {
 	return modelStats{
 		RemainingQueries:  intFromMap(root, "remainingQueries", "remaining_queries"),
@@ -145,7 +201,30 @@ func parseModelStats(root map[string]any) modelStats {
 		RemainingTokens:   intFromMap(root, "remainingTokens", "remaining_tokens"),
 		TotalTokens:       intFromMap(root, "totalTokens", "total_tokens"),
 		WindowSizeSeconds: intFromMap(root, "windowSizeSeconds", "window_size_seconds"),
+		WaitTimeSeconds:   readWaitTimeSeconds(root),
 	}
+}
+
+// readWaitTimeSeconds returns the API-supplied "retry in N seconds"
+// hint when the account is currently throttled. Searches the two
+// effort-tier rate-limit blocks (low and high) and returns the
+// smallest non-zero value — that's the next moment a slot opens.
+func readWaitTimeSeconds(root map[string]any) *int {
+	var smallest *int
+	for _, key := range []string{"lowEffortRateLimits", "highEffortRateLimits"} {
+		nested, ok := providerutil.NestedMap(root, key)
+		if !ok {
+			continue
+		}
+		v := intFromMap(nested, "waitTimeSeconds", "wait_time_seconds")
+		if v == nil || *v <= 0 {
+			continue
+		}
+		if smallest == nil || *v < *smallest {
+			smallest = v
+		}
+	}
+	return smallest
 }
 
 // intFromMap returns the first key's value as a rounded int pointer.
@@ -162,22 +241,22 @@ func intFromMap(m map[string]any, keys ...string) *int {
 func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	now := usage.UpdatedAt.UTC().Format(time.RFC3339)
 	var metrics []providers.MetricValue
-	if m, ok := percentMetric(
-		"grok3-queries-percent", "GROK 3", "Grok 3 queries remaining (window)",
+	if m, ok := countMetric(
+		"grok3-queries-remaining", "GROK 3", "Grok 3 queries remaining (window)",
 		usage.Grok3.RemainingQueries, usage.Grok3.TotalQueries,
-		usage.Grok3.WindowSizeSeconds, now); ok {
+		usage.Grok3.WaitTimeSeconds, now); ok {
 		metrics = append(metrics, m)
 	}
-	if m, ok := percentMetric(
-		"grok3-tokens-percent", "GROK 3 TOK", "Grok 3 tokens remaining (window)",
+	if m, ok := countMetric(
+		"grok3-tokens-remaining", "GROK 3 TOK", "Grok 3 tokens remaining (window) — API tier only",
 		usage.Grok3.RemainingTokens, usage.Grok3.TotalTokens,
-		usage.Grok3.WindowSizeSeconds, now); ok {
+		usage.Grok3.WaitTimeSeconds, now); ok {
 		metrics = append(metrics, m)
 	}
-	if m, ok := percentMetric(
-		"grok4-heavy-queries-percent", "GROK 4 H", "Grok 4 Heavy queries remaining (window)",
+	if m, ok := countMetric(
+		"grok4-heavy-queries-remaining", "GROK 4 H", "Grok 4 Heavy queries remaining (window)",
 		usage.Grok4.RemainingQueries, usage.Grok4.TotalQueries,
-		usage.Grok4.WindowSizeSeconds, now); ok {
+		usage.Grok4.WaitTimeSeconds, now); ok {
 		metrics = append(metrics, m)
 	}
 	return providers.Snapshot{
@@ -189,26 +268,52 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	}
 }
 
-// percentMetric builds a remaining-percent metric. Returns ok=false
-// when the response didn't include enough data (e.g. grok-4-heavy on
-// free tier).
+// countMetric renders one rate-limit category as a count tile: the
+// remaining count is the prominent value, the meter fill bar scales
+// to remaining/total, and the caption surfaces both ("139 / 140").
 //
-// windowSecs is intentionally unused: grok.com returns the window
-// *length*, not seconds-until-next-reset. Adding it to time.Now()
-// would render a fake countdown that resets to ~2h on every poll
-// (and on every Stream Deck restart, since the cached button image
-// re-evaluates against a fresh "now" once the plugin reconnects).
-// Surfacing the length in the caption was equally confusing — users
-// read "· 2h window" as a timer — so the caption is just the count.
-func percentMetric(id, label, name string, remaining, total, _ *int, now string) (providers.MetricValue, bool) {
+// Why count, not percent: grok.com's totals are small (140-cap on
+// grok-3, 20-cap on grok-4 Heavy). "10% remaining" of 20 = 2 — the
+// user has to do that math in their head to know what's actionable.
+// Showing the count directly mirrors what grok.com's own /usage page
+// shows.
+//
+// Reset countdown: only fires when the account has actually hit the
+// limit (remaining = 0) and the API surfaces waitTimeSeconds in one
+// of the effort-tier rate-limit blocks. That's the API's own answer
+// to "next slot opens in N seconds" and re-anchors per poll
+// correctly. The static windowSizeSeconds on a healthy response is
+// the rolling-window length, not a countdown, and is intentionally
+// not surfaced.
+//
+// Returns ok=false when the response didn't include enough data
+// (grok-4-heavy on free tier; tokens on consumer-chat tier).
+func countMetric(id, label, name string, remaining, total, waitSecs *int, now string) (providers.MetricValue, bool) {
 	if remaining == nil || total == nil || *total <= 0 {
 		return providers.MetricValue{}, false
 	}
-	used := math.Max(0, float64(*total-*remaining))
-	usedPct := math.Max(0, math.Min(100, used/float64(*total)*100))
-	caption := fmt.Sprintf("%d/%d left", *remaining, *total)
-	m := providerutil.PercentRemainingMetric(id, label, name, usedPct, nil, caption, now)
-	m = providerutil.RawCounts(m, *remaining, *total)
+	val := float64(*remaining)
+	ratio := math.Max(0, math.Min(1, float64(*remaining)/float64(*total)))
+	rem := *remaining
+	tot := *total
+	m := providers.MetricValue{
+		ID:              id,
+		Label:           label,
+		Name:            name,
+		Value:           val,
+		NumericValue:    &val,
+		NumericUnit:     "count",
+		NumericGoodWhen: "high",
+		Ratio:           &ratio,
+		Caption:         fmt.Sprintf("%d / %d", rem, tot),
+		UpdatedAt:       now,
+		RawCount:        &rem,
+		RawMax:          &tot,
+	}
+	if rem == 0 && waitSecs != nil && *waitSecs > 0 {
+		secs := float64(*waitSecs)
+		m.ResetInSeconds = &secs
+	}
 	return m, true
 }
 

@@ -3,6 +3,7 @@ package grok
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -84,31 +85,42 @@ func TestParseModelStats_EmptyResponse(t *testing.T) {
 	}
 }
 
-func TestPercentMetric_SkipsWhenTotalAbsent(t *testing.T) {
+func TestCountMetric_SkipsWhenTotalAbsent(t *testing.T) {
 	r := 5
-	if _, ok := percentMetric("x", "X", "X", &r, nil, nil, ""); ok {
-		t.Error("expected percentMetric to skip when total is nil")
+	if _, ok := countMetric("x", "X", "X", &r, nil, nil, ""); ok {
+		t.Error("expected countMetric to skip when total is nil")
 	}
 }
 
-func TestPercentMetric_SkipsWhenZeroTotal(t *testing.T) {
+func TestCountMetric_SkipsWhenZeroTotal(t *testing.T) {
 	r := 5
 	z := 0
-	if _, ok := percentMetric("x", "X", "X", &r, &z, nil, ""); ok {
-		t.Error("expected percentMetric to skip when total <= 0")
+	if _, ok := countMetric("x", "X", "X", &r, &z, nil, ""); ok {
+		t.Error("expected countMetric to skip when total <= 0")
 	}
 }
 
-func TestPercentMetric_BuildsForValidShape(t *testing.T) {
+func TestCountMetric_BuildsForValidShape(t *testing.T) {
 	r := 30
 	tot := 50
-	w := 3600
-	m, ok := percentMetric("grok3-queries-percent", "GROK 3", "Grok 3 queries", &r, &tot, &w, "")
+	m, ok := countMetric("grok3-queries-remaining", "GROK 3", "Grok 3 queries", &r, &tot, nil, "")
 	if !ok {
 		t.Fatal("expected metric to be produced")
 	}
-	if m.ID != "grok3-queries-percent" {
+	if m.ID != "grok3-queries-remaining" {
 		t.Errorf("ID: got %q", m.ID)
+	}
+	if v, ok := m.Value.(float64); !ok || v != 30 {
+		t.Errorf("Value: got %v (%T), want 30 float64", m.Value, m.Value)
+	}
+	if m.NumericUnit != "count" {
+		t.Errorf("NumericUnit: got %q, want count", m.NumericUnit)
+	}
+	if m.Ratio == nil {
+		t.Fatal("Ratio should be set so the meter still fills proportionally")
+	}
+	if got := math.Round(*m.Ratio*100) / 100; got != 0.6 {
+		t.Errorf("Ratio: got %v, want 0.6 (30/50)", got)
 	}
 	if m.RawCount == nil || *m.RawCount != 30 {
 		t.Errorf("RawCount: got %v", m.RawCount)
@@ -116,15 +128,56 @@ func TestPercentMetric_BuildsForValidShape(t *testing.T) {
 	if m.RawMax == nil || *m.RawMax != 50 {
 		t.Errorf("RawMax: got %v", m.RawMax)
 	}
-	// windowSecs is intentionally NOT used — Grok's API returns the
-	// window *length*, not the time until next reset. The caption
-	// stays focused on the count itself; a length-only number was
-	// confusing users into reading it as a countdown.
 	if m.ResetInSeconds != nil {
-		t.Errorf("ResetInSeconds should be nil, got %v", *m.ResetInSeconds)
+		t.Errorf("ResetInSeconds should be nil while remaining > 0, got %v", *m.ResetInSeconds)
 	}
-	if m.Caption != "30/50 left" {
-		t.Errorf("Caption: got %q, want %q", m.Caption, "30/50 left")
+	if m.Caption != "30 / 50" {
+		t.Errorf("Caption: got %q, want %q", m.Caption, "30 / 50")
+	}
+}
+
+func TestCountMetric_SetsCountdownOnlyWhenRateLimited(t *testing.T) {
+	zero := 0
+	tot := 50
+	wait := 540
+	m, ok := countMetric("x", "X", "X", &zero, &tot, &wait, "")
+	if !ok {
+		t.Fatal("metric should still build with remaining=0")
+	}
+	if m.ResetInSeconds == nil {
+		t.Fatal("ResetInSeconds should be set when remaining=0 and waitSecs>0")
+	}
+	if *m.ResetInSeconds != 540 {
+		t.Errorf("ResetInSeconds: got %v, want 540", *m.ResetInSeconds)
+	}
+}
+
+func TestCountMetric_NoCountdownWhileQuotaRemains(t *testing.T) {
+	r := 5
+	tot := 50
+	wait := 999 // present but should be ignored while r > 0
+	m, _ := countMetric("x", "X", "X", &r, &tot, &wait, "")
+	if m.ResetInSeconds != nil {
+		t.Errorf("ResetInSeconds should be nil while remaining=%d > 0, got %v", r, *m.ResetInSeconds)
+	}
+}
+
+func TestReadWaitTimeSeconds_PrefersSmaller(t *testing.T) {
+	root := mustParse(t, `{
+		"remainingQueries":0, "totalQueries":50,
+		"lowEffortRateLimits": {"waitTimeSeconds": 540},
+		"highEffortRateLimits": {"waitTimeSeconds": 1800}
+	}`)
+	got := readWaitTimeSeconds(root)
+	if got == nil || *got != 540 {
+		t.Errorf("expected smallest wait (540s), got %v", got)
+	}
+}
+
+func TestReadWaitTimeSeconds_NilOnHealthyResponse(t *testing.T) {
+	root := mustParse(t, `{"lowEffortRateLimits": null, "highEffortRateLimits": null}`)
+	if got := readWaitTimeSeconds(root); got != nil {
+		t.Errorf("expected nil on healthy response, got %v", *got)
 	}
 }
 
@@ -146,7 +199,7 @@ func TestSnapshotFromUsage_Grok3OnlyOmitsHeavy(t *testing.T) {
 		t.Fatalf("expected 2 metrics (grok3 queries + tokens), got %d", len(snap.Metrics))
 	}
 	got := []string{snap.Metrics[0].ID, snap.Metrics[1].ID}
-	want := []string{"grok3-queries-percent", "grok3-tokens-percent"}
+	want := []string{"grok3-queries-remaining", "grok3-tokens-remaining"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Errorf("metric[%d]: got %q, want %q", i, got[i], want[i])
@@ -210,9 +263,9 @@ func TestProviderMetadata(t *testing.T) {
 		t.Error("BrandColor/BrandBg should not be empty")
 	}
 	want := map[string]bool{
-		"grok3-queries-percent":       true,
-		"grok3-tokens-percent":        true,
-		"grok4-heavy-queries-percent": true,
+		"grok3-queries-remaining":       true,
+		"grok3-tokens-remaining":        true,
+		"grok4-heavy-queries-remaining": true,
 	}
 	for _, id := range p.MetricIDs() {
 		if !want[id] {

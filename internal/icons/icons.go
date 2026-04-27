@@ -1,12 +1,13 @@
 // Package icons holds the SVG glyph data used to render provider logos on
-// button faces. Entries are ported from CodexBar's
-// src/providers/provider-icons.generated.ts.
+// button faces. Most entries adapt the path data from CodexBar's
+// Sources/CodexBar/Resources/ProviderIcon-*.svg assets (MIT); a few
+// (codex, grok, hermes) use lobehub/lobe-icons (MIT) — per-entry
+// comments mark those. See THIRD_PARTY_LICENSES.md for attributions.
 package icons
 
 import "github.com/anthonybaldwin/UsageButtons/internal/render"
 
 // ProviderIcons maps provider IDs to their SVG glyph data.
-// Ported from src/providers/provider-icons.generated.ts.
 var ProviderIcons = map[string]*render.ProviderGlyph{
 	"claude": {
 		ViewBox: "0 0 100 100",

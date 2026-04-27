@@ -220,16 +220,22 @@ func snapshotToProvider(u usageSnapshot) providers.Snapshot {
 }
 
 // subCreditsMetric renders the subscription-credits tile. Denominator
-// is monthlyCredits + maxRolloverCredits so a fully-rolled-over balance
-// can sit at 100% without overshooting. The renewal countdown is gated
-// by ResetTimeWhenUsed so an idle account doesn't render a perpetual
-// "27d to renewal" timer next to a full balance — once you've spent
-// half your credits the countdown reappears as a "you'll roll over in
-// X days" hint.
+// is monthlyCredits (the active tier's grant), NOT monthly+rolloverCap —
+// when the user just renewed and hasn't spent, balance == monthly so
+// ratio == 1.0 (full meter) and usedPct == 0 (no countdown). Including
+// rolloverCap in the denominator made a fresh-renewal account look
+// only ~69% full because the empty rollover bucket counted against it.
+// Rollover credits beyond monthly overflow past 100% and clamp at the
+// fill cap so the meter doesn't visually misrepresent the surplus.
+//
+// The renewal countdown is gated by ResetTimeWhenUsed so an idle
+// account doesn't render a perpetual timer beside a full balance —
+// once you've spent ~0.5% of monthly the countdown reappears as a
+// "rolling over in X days" hint.
 func subCreditsMetric(u usageSnapshot, now string) providers.MetricValue {
 	balance := u.SubBalanceCents / 100
-	cap := (u.SubMonthlyCents + u.SubRolloverCapCents) / 100
-	ratio := math.Max(0, math.Min(1, balance/math.Max(cap, 0.01)))
+	monthly := u.SubMonthlyCents / 100
+	ratio := math.Max(0, math.Min(1, balance/math.Max(monthly, 0.01)))
 	usedPct := math.Max(0, math.Min(100, (1-ratio)*100))
 	resetSecs := renewSeconds(providerutil.ResetTimeWhenUsed(usedPct, u.RenewsAt), u.UpdatedAt)
 	m := providers.MetricValue{

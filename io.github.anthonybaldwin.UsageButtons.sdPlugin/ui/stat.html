@@ -1619,8 +1619,17 @@
         ps.smartContrast != null ? String(!!ps.smartContrast) : String(scDefault),
         ps.smartContrast != null);
 
-      // Starfield: tri-state (inherit built-in default, on, off). Built-in
-      // default differs per provider — only Grok defaults on.
+      // Starfield: visually meaningful only for providers whose brand
+      // actively features a starfield motif — currently just Grok.
+      // Hide the row entirely on every other provider so the toggle
+      // doesn't litter unrelated PI tabs (e.g. Perplexity).
+      const sfRow = document.querySelector('[data-provider-override="starfield"]');
+      if (sfRow) {
+        sfRow.style.display =
+          currentProviderId in STARFIELD_DEFAULTS ? "" : "none";
+      }
+      // Tri-state (inherit built-in default, on, off). Built-in default
+      // differs per provider — only Grok defaults on today.
       const sfDefault = STARFIELD_DEFAULTS[currentProviderId] === true;
       setText("po-starfield-inherit",
         "inherits built-in default: " + (sfDefault ? "on" : "off"));

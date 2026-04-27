@@ -1619,14 +1619,22 @@
         ps.smartContrast != null ? String(!!ps.smartContrast) : String(scDefault),
         ps.smartContrast != null);
 
-      // Starfield: tri-state (inherit built-in default, on, off). Built-in
-      // default differs per provider — only Grok defaults on.
-      const sfDefault = STARFIELD_DEFAULTS[currentProviderId] === true;
-      setText("po-starfield-inherit",
-        "inherits built-in default: " + (sfDefault ? "on" : "off"));
-      bindOverrideValue("starfield",
-        ps.starfield != null ? String(!!ps.starfield) : String(sfDefault),
-        ps.starfield != null);
+      // Starfield: Grok-only motif (xAI's animated shooting-star
+      // backdrop). Hide the row entirely on every other provider so
+      // the toggle doesn't litter unrelated PI tabs.
+      const sfRow = document.querySelector('[data-provider-override="starfield"]');
+      const sfIsGrok = currentProviderId === "grok";
+      if (sfRow) {
+        sfRow.style.display = sfIsGrok ? "" : "none";
+      }
+      if (sfIsGrok) {
+        // Default is on for Grok; the override flips it off when the
+        // user doesn't want the animation.
+        setText("po-starfield-inherit", "inherits built-in default: on");
+        bindOverrideValue("starfield",
+          ps.starfield != null ? String(!!ps.starfield) : "true",
+          ps.starfield != null);
+      }
       bindOverrideValue("warnBelow",
         ps.warnBelow != null ? String(ps.warnBelow) : "",
         ps.warnBelow != null);
@@ -1685,12 +1693,6 @@
     // the inherit hint shows. Keep the two lists in sync.
     const SMART_CONTRAST_DEFAULTS = {
       ollama: true,
-    };
-
-    // STARFIELD_DEFAULTS mirrors providerDefaultStarfield in
-    // internal/settings/settings.go. Currently only Grok opts in.
-    const STARFIELD_DEFAULTS = {
-      grok: true,
     };
 
     function applyInverseCheckbox(prefix, name, savedValue) {

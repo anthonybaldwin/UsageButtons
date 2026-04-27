@@ -99,10 +99,11 @@ type ProviderSettings struct {
 	// force-on toggle (GlobalSettings.SmartContrast == true) wins
 	// over anything set here.
 	SmartContrast *bool `json:"smartContrast,omitempty"`
-	// Starfield toggles the static white-dot starfield decoration on
-	// the button face. Built-in default is true for Grok and false for
-	// every other provider — see StarfieldEnabled. Per-button setting
-	// of the same name overrides this when set.
+	// Starfield toggles the animated xAI-style starfield decoration
+	// behind the glyph. Only meaningful on Grok buttons (the PI hides
+	// the row everywhere else); the field is per-provider so a user
+	// can flip Grok's default-on behavior off without touching every
+	// individual button.
 	Starfield *bool `json:"starfield,omitempty"`
 }
 
@@ -174,9 +175,11 @@ type KeySettings struct {
 	ShowResetTimer  *bool    `json:"showResetTimer,omitempty"`
 	ShowRawCounts   *bool    `json:"showRawCounts,omitempty"`
 	HideSubvalue    *bool    `json:"hideSubvalue,omitempty"`
-	// Starfield is a per-button override for the starfield background
-	// decoration. nil = inherit (provider override > built-in default).
-	// Currently only the Grok provider opts into starfields by default.
+	// Starfield is a per-button override for the Grok-only animated
+	// starfield decoration. nil = inherit (provider override, then
+	// the built-in Grok default of on). Reading this on a non-Grok
+	// button is harmless — StarfieldEnabled short-circuits to false
+	// before consulting any tier.
 	Starfield *bool `json:"starfield,omitempty"`
 }
 
@@ -349,18 +352,16 @@ func SmartContrastFor(providerID string) bool {
 	return providerDefaultSmartContrast[providerID]
 }
 
-// providerDefaultStarfield is the built-in starfield default keyed by
-// provider ID. Only providers whose brand actively features a
-// starfield motif (Grok / xAI) get true; every other provider stays
-// off so the decoration doesn't bleed into unrelated brand looks.
-var providerDefaultStarfield = map[string]bool{
-	"grok": true,
-}
-
-// StarfieldEnabled returns the effective starfield toggle for the
-// given provider+button. Per-button override (Starfield) wins, then
-// per-provider override, then the built-in default.
+// StarfieldEnabled returns whether a Grok button should render the
+// xAI-style animated starfield behind the glyph. Grok is the only
+// provider whose brand uses the motif, so any other provider ID
+// short-circuits to false — no map indirection needed. The two
+// override tiers still apply so a Grok user can turn the animation
+// off (per-button or per-provider) if they don't want the motion.
 func StarfieldEnabled(providerID string, ks KeySettings) bool {
+	if providerID != "grok" {
+		return false
+	}
 	if ks.Starfield != nil {
 		return *ks.Starfield
 	}
@@ -371,7 +372,7 @@ func StarfieldEnabled(providerID string, ks KeySettings) bool {
 			return *ps.Starfield
 		}
 	}
-	return providerDefaultStarfield[providerID]
+	return true
 }
 
 // ShowGlyphsEnabled returns the global show-glyphs toggle.

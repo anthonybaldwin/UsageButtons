@@ -1019,10 +1019,36 @@
         ["grok4-heavy-queries-remaining", "Grok 4 Heavy queries remaining (count)","pct"],
       ],
       hermes: [
+        // Balance tiles (from /products page).
         ["hermes-sub-credits-remaining", "Subscription credits ($) — Hermes Agent + Nous Chat", "ref-dollar"],
         ["hermes-api-credits-remaining", "API credits balance ($) — separate from subscription", "ref-dollar"],
-        ["hermes-api-spend-total",       "API spend (all-time, $)",                              "ref-dollar"],
-        ["hermes-api-requests-total",    "API requests (all-time, count)",                       "ref"],
+        // All-source totals (combined across api + sub allowances).
+        ["hermes-spend-total",              "All-time spend ($) — all sources combined",  "ref-dollar"],
+        ["hermes-requests-total",           "All-time requests — all sources combined",   "ref"],
+        ["hermes-tokens-total",             "All-time tokens — all sources combined",     "ref"],
+        ["hermes-input-tokens-total",       "All-time input tokens — all sources",        "ref"],
+        ["hermes-output-tokens-total",      "All-time output tokens — all sources",       "ref"],
+        ["hermes-cache-read-tokens-total",  "All-time cache-read tokens — all sources",   "ref"],
+        ["hermes-cache-write-tokens-total", "All-time cache-write tokens — all sources",  "ref"],
+        // Per-source totals — API allowance only.
+        ["hermes-spend-api",                "API allowance spend ($, all-time)",          "ref-dollar"],
+        ["hermes-requests-api",             "API allowance requests (all-time)",          "ref"],
+        ["hermes-tokens-api",               "API allowance tokens (all-time)",            "ref"],
+        ["hermes-input-tokens-api",         "API allowance input tokens (all-time)",      "ref"],
+        ["hermes-output-tokens-api",        "API allowance output tokens (all-time)",     "ref"],
+        ["hermes-cache-read-tokens-api",    "API allowance cache-read tokens (all-time)", "ref"],
+        ["hermes-cache-write-tokens-api",   "API allowance cache-write tokens (all-time)","ref"],
+        // Per-source totals — Subscription allowance only.
+        ["hermes-spend-sub",                "Subscription allowance spend ($, all-time)",          "ref-dollar"],
+        ["hermes-requests-sub",             "Subscription allowance requests (all-time)",          "ref"],
+        ["hermes-tokens-sub",               "Subscription allowance tokens (all-time)",            "ref"],
+        ["hermes-input-tokens-sub",         "Subscription allowance input tokens (all-time)",      "ref"],
+        ["hermes-output-tokens-sub",        "Subscription allowance output tokens (all-time)",     "ref"],
+        ["hermes-cache-read-tokens-sub",    "Subscription allowance cache-read tokens (all-time)", "ref"],
+        ["hermes-cache-write-tokens-sub",   "Subscription allowance cache-write tokens (all-time)","ref"],
+        // (v1 aliases hermes-api-spend-total / hermes-api-requests-total
+        // still emit but are NOT in the dropdown — selecting hermes-spend-total
+        // or hermes-requests-total gives the same data with cleaner naming.)
       ],
       warp: [
         ["credits-percent", "Credits remaining %",       "pct"],

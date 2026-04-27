@@ -10,35 +10,23 @@ import (
 	"time"
 )
 
-// renderStarfield returns SVG `<circle>` elements approximating xAI's
-// stationary starfield motif. Static — Stream Deck buttons render once
-// per poll, so the per-frame flicker / shooting-star animation from
-// upstream HTML5-canvas implementations isn't reproducible here.
+// renderStarfield emits the Grok-button background: a field of stars
+// orbiting the canvas center on per-star radii and angular velocities,
+// each twinkling on its own sin-wave opacity cycle, plus a periodic
+// shooting-star streak diagonally across the canvas. Star positions,
+// orbital params, and flicker phases are deterministic from a fixed
+// PCG seed — only the time argument changes between calls — so the
+// same star traces the same trajectory frame to frame.
 //
-// Visual borrowed (positioning logic + opacity-flicker varied across
-// stars) from UsmanDevCraft/grok-shooting-stars (MIT) — see
-// THIRD_PARTY_LICENSES.md.
+// Stream Deck rasterizes each SetImage SVG to a static PNG before
+// display, so SMIL `<animate>` doesn't tick; the animation comes from
+// the plugin re-rendering and re-sending the SVG every 100ms. Each
+// call samples time.Now() as the phase source, so the driver loop
+// only needs to fire the redraw on a tick — no phase threading.
 //
-// Pattern is deterministic so positions don't shuffle between polls.
-// Different layers (back / front of glyph) call this with different
-// seeds when a layered effect is desired; for now the starfield only
-// renders behind the glyph (paint order is bg → starfield → glyph →
-// fill → text), so a single seed suffices.
-// renderStarfield emits the animated Grok background: a slowly drifting
-// star field plus a periodic shooting-star streak across the canvas.
-// Stream Deck rasterizes the SVG to a static PNG before display, so SMIL
-// `<animate>` doesn't tick — animation has to come from re-rendering the
-// SVG every frame and re-sending it via SetImage. Each call samples
-// time.Now(), so a driver loop calling RenderButton at e.g. 8 Hz
-// produces smooth motion without needing to thread a phase parameter.
-//
-// Star positions, velocities, periods, and offsets are deterministic
-// from a fixed PCG seed so the same star drifts on the same trajectory
-// frame to frame; only the time argument changes between calls.
-//
-// Visual borrowed from UsmanDevCraft/grok-shooting-stars (MIT) — the
-// upstream HTML5-canvas implementation does the same dim/bright sin
-// flicker, slow drift, and periodic streak. See THIRD_PARTY_LICENSES.md.
+// Visual borrowed from UsmanDevCraft/grok-shooting-stars (MIT) — see
+// THIRD_PARTY_LICENSES.md. Only Grok buttons set ButtonInput.Starfield
+// today (settings.StarfieldEnabled hard-codes the provider).
 func renderStarfield() string {
 	const count = 45
 	r := rand.New(rand.NewPCG(0xfeed, 0xface))
@@ -182,13 +170,14 @@ type ButtonInput struct {
 	// (default on), and main.go threads that runtime decision into
 	// this field at each render site.
 	SmartContrast bool
-	// Starfield, when true, paints a fixed white-dot starfield over the
-	// bg rect, sitting BEHIND the watermark glyph and text layers
-	// (paint order: bg → starfield → glyph → meter fill → text). Used
-	// by Grok to echo the xAI / grok.com on-page starfield motif.
-	// Static — Stream Deck buttons render once per poll, so the
-	// per-frame flicker / shooting-star animation from the upstream
-	// canvas implementation isn't reproducible at this layer.
+	// Starfield, when true, paints the animated xAI-style starfield
+	// (orbital drift + per-star twinkle + a periodic shooting-star
+	// streak) BEHIND the watermark glyph and text layers (paint order:
+	// bg → starfield → glyph → meter fill → text). Currently set only
+	// for Grok buttons (settings.StarfieldEnabled is provider-gated).
+	// Animation requires a frame driver — see starfieldAnimationLoop
+	// in cmd/plugin/main.go — because Stream Deck rasterizes each
+	// SetImage SVG to a static PNG.
 	Starfield bool
 }
 

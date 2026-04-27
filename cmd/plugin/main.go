@@ -1648,10 +1648,31 @@ var knownLabels = map[string]string{
 	// Hermes / Nous Research: subscription pool funds Hermes Agent +
 	// Nous Chat; the API pool is separate. SUB / API / API / API
 	// titles match the four metric tiles.
-	"hermes-sub-credits-remaining": "SUB",
-	"hermes-api-credits-remaining": "API",
-	"hermes-api-spend-total":       "API",
-	"hermes-api-requests-total":    "API",
+	"hermes-sub-credits-remaining":    "SUB",
+	"hermes-api-credits-remaining":    "API",
+	"hermes-api-spend-total":          "ALL", // v1 alias of hermes-spend-total
+	"hermes-api-requests-total":       "ALL", // v1 alias of hermes-requests-total
+	"hermes-spend-total":              "ALL",
+	"hermes-requests-total":           "ALL",
+	"hermes-tokens-total":             "ALL",
+	"hermes-input-tokens-total":       "ALL",
+	"hermes-output-tokens-total":      "ALL",
+	"hermes-cache-read-tokens-total":  "ALL",
+	"hermes-cache-write-tokens-total": "ALL",
+	"hermes-spend-api":                "API",
+	"hermes-requests-api":             "API",
+	"hermes-tokens-api":               "API",
+	"hermes-input-tokens-api":         "API",
+	"hermes-output-tokens-api":        "API",
+	"hermes-cache-read-tokens-api":    "API",
+	"hermes-cache-write-tokens-api":   "API",
+	"hermes-spend-sub":                "SUB",
+	"hermes-requests-sub":             "SUB",
+	"hermes-tokens-sub":               "SUB",
+	"hermes-input-tokens-sub":         "SUB",
+	"hermes-output-tokens-sub":        "SUB",
+	"hermes-cache-read-tokens-sub":    "SUB",
+	"hermes-cache-write-tokens-sub":   "SUB",
 	// Perplexity: per-feature daily quotas + Comet/API dollar metrics.
 	// Titles match the live-tile labels emitted from snapshotFromUsage
 	// so a placeholder Perplexity tile reads identically to the live
@@ -1699,10 +1720,31 @@ var knownCaptions = map[string]string{
 	"grok3-tokens-remaining":        "Tokens",
 	"grok4-heavy-queries-remaining": "Queries",
 	// Hermes / Nous Research placeholder captions mirror live tiles.
-	"hermes-sub-credits-remaining": "Credits",
-	"hermes-api-credits-remaining": "Balance",
-	"hermes-api-spend-total":       "Spend",
-	"hermes-api-requests-total":    "Requests",
+	"hermes-sub-credits-remaining":    "Credits",
+	"hermes-api-credits-remaining":    "Balance",
+	"hermes-api-spend-total":          "Spend", // v1 alias
+	"hermes-api-requests-total":       "Requests", // v1 alias
+	"hermes-spend-total":              "Spend",
+	"hermes-requests-total":           "Requests",
+	"hermes-tokens-total":             "Tokens",
+	"hermes-input-tokens-total":       "In-tokens",
+	"hermes-output-tokens-total":      "Out-tokens",
+	"hermes-cache-read-tokens-total":  "Cache-R",
+	"hermes-cache-write-tokens-total": "Cache-W",
+	"hermes-spend-api":                "Spend",
+	"hermes-requests-api":             "Requests",
+	"hermes-tokens-api":               "Tokens",
+	"hermes-input-tokens-api":         "In-tokens",
+	"hermes-output-tokens-api":        "Out-tokens",
+	"hermes-cache-read-tokens-api":    "Cache-R",
+	"hermes-cache-write-tokens-api":   "Cache-W",
+	"hermes-spend-sub":                "Spend",
+	"hermes-requests-sub":             "Requests",
+	"hermes-tokens-sub":               "Tokens",
+	"hermes-input-tokens-sub":         "In-tokens",
+	"hermes-output-tokens-sub":        "Out-tokens",
+	"hermes-cache-read-tokens-sub":    "Cache-R",
+	"hermes-cache-write-tokens-sub":   "Cache-W",
 	// Perplexity placeholder captions mirror the live-tile subvalue —
 	// constant "Queries" for the per-feature counts, "Balance"/"Spend"
 	// for the dollar metrics so a row of Perplexity tiles reads as

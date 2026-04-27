@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
+	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 )
 
 // productsFixture is a sanitized excerpt of the script-tag-embedded JSON
@@ -16,11 +17,16 @@ const productsFixture = `<html><body><script>
 self.__next_f.push([1, "20:[\"$\",\"section\",null,{\"className\":\"x\",\"children\":[\"$\",\"$L22\",null,{\"availableTiers\":[{\"id\":\"tier_free\",\"name\":\"Free\",\"tier\":5,\"monthlyCredits\":0.1,\"maxRolloverCredits\":0,\"dollarsPerMonth\":0,\"enabled\":true},{\"id\":\"tier_plus\",\"name\":\"Plus\",\"tier\":2,\"monthlyCredits\":22,\"maxRolloverCredits\":10,\"dollarsPerMonth\":20,\"enabled\":true},{\"id\":\"tier_super\",\"name\":\"Super\",\"tier\":4,\"monthlyCredits\":110,\"maxRolloverCredits\":50,\"dollarsPerMonth\":100,\"enabled\":true}],\"activeSubscription\":{\"id\":\"sub_redacted\",\"subscriptionTypeId\":\"tier_plus\",\"tier\":\"Plus\",\"tierLevel\":2,\"dollarsPerMonth\":20,\"monthlyCredits\":22,\"maxRolloverCredits\":10,\"currentPeriodStart\":\"2026-04-26T22:22:18.060Z\",\"currentPeriodEnd\":\"2026-05-26T22:22:18.060Z\",\"expiresAt\":\"2026-05-26T22:22:18.060Z\",\"cancelAtPeriodEnd\":false,\"active\":true,\"pendingCancellation\":false},\"apiCreditsBalance\":0,\"subscriptionCredits\":{\"balance\":21.998392,\"rolloverCredits\":0},\"recentExpiredSubscription\":null,\"cryptoEnabled\":false}]}]"]);
 </script></body></html>`
 
-// apiKeysFixture mirrors the /api-keys page's embedded usageByKey block
-// at the moment of zero-API activity (just one chat-bound usage row).
-// All identifiers scrubbed.
+// apiKeysFixture mirrors the /api-keys page render with two non-empty
+// allowance buckets (api + sub) plus the unattributed empty-string
+// bucket. Allowance IDs are placeholder strings; real Nous IDs are
+// per-account cuids and never embedded here. The API-Credits panel's
+// `allowanceId` field is what lets us label the api bucket; the
+// remaining non-empty key in totalsByAllowanceId is the sub bucket
+// by elimination.
 const apiKeysFixture = `<html><body><script>
-self.__next_f.push([1, "c:[\"$\",\"main\",null,{\"className\":\"x\",\"children\":[\"$\",\"$L25\",null,{\"keys\":[],\"usageByKey\":{\"timeframe\":{\"start\":\"2025-01-01T00:00:00.000Z\",\"end\":\"2026-04-27T02:10:31.465Z\",\"granularity\":\"total\"},\"series\":[{\"id\":\"key_redacted\",\"name\":\"Chat\",\"type\":\"keyId\",\"data\":{\"tokens\":[1072],\"spend\":[0.001608],\"requests\":[1]}}],\"totals\":{\"tokens\":1072,\"inputTokens\":965,\"outputTokens\":107,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0.001608,\"requests\":1},\"totalsByAllowanceId\":{}}}]}]"]);
+self.__next_f.push([1, "21:[\"$\",\"section\",null,{\"className\":\"x\",\"children\":[\"$\",\"$L26\",null,{\"allowanceId\":\"alw_api\",\"balance\":0,\"cryptoEnabled\":false}]}]"]);
+self.__next_f.push([1, "c:[\"$\",\"main\",null,{\"className\":\"x\",\"children\":[\"$\",\"$L25\",null,{\"keys\":[],\"usageByKey\":{\"timeframe\":{\"start\":\"2025-01-01T00:00:00.000Z\",\"end\":\"2026-04-27T02:10:31.465Z\",\"granularity\":\"total\"},\"series\":[{\"id\":\"key_redacted\",\"name\":\"Chat\",\"type\":\"keyId\",\"data\":{\"tokens\":[1072],\"spend\":[0.001608],\"requests\":[1]}}],\"totals\":{\"tokens\":1072,\"inputTokens\":965,\"outputTokens\":107,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0.001608,\"requests\":1},\"totalsByAllowanceId\":{\"alw_api\":{\"tokens\":0,\"inputTokens\":0,\"outputTokens\":0,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0,\"requests\":0},\"alw_sub\":{\"tokens\":1072,\"inputTokens\":965,\"outputTokens\":107,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0.001608,\"requests\":2},\"\":{\"tokens\":0,\"inputTokens\":0,\"outputTokens\":0,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0,\"requests\":0}}}}]}]"]);
 </script></body></html>`
 
 // apiKeysEmpty is the page render before any API activity: totals all zero.
@@ -73,13 +79,22 @@ func TestMergeAPIKeysHTML_TotalsExtracted(t *testing.T) {
 	if !u.HasAPIData {
 		t.Fatal("HasAPIData should be true after a successful parse")
 	}
-	if got := u.APISpendCents; got != 0 {
+	if got := u.AllTotals.SpendCents; got != 0 {
 		// 0.001608 USD → 0.16 cents → rounds to 0. That's the API's
 		// real granularity at sub-cent spend; we accept the loss.
-		t.Errorf("APISpendCents: got %v, want 0 (rounded sub-cent)", got)
+		t.Errorf("AllTotals.SpendCents: got %v, want 0 (rounded sub-cent)", got)
 	}
-	if u.APIRequests != 1 {
-		t.Errorf("APIRequests: got %v, want 1", u.APIRequests)
+	if u.AllTotals.Requests != 1 {
+		t.Errorf("AllTotals.Requests: got %v, want 1", u.AllTotals.Requests)
+	}
+	if u.AllTotals.Tokens != 1072 {
+		t.Errorf("AllTotals.Tokens: got %v, want 1072", u.AllTotals.Tokens)
+	}
+	if u.AllTotals.InputTokens != 965 {
+		t.Errorf("AllTotals.InputTokens: got %v, want 965", u.AllTotals.InputTokens)
+	}
+	if u.AllTotals.OutputTokens != 107 {
+		t.Errorf("AllTotals.OutputTokens: got %v, want 107", u.AllTotals.OutputTokens)
 	}
 }
 
@@ -89,8 +104,8 @@ func TestMergeAPIKeysHTML_ZeroActivity(t *testing.T) {
 	if !u.HasAPIData {
 		t.Fatal("zero-activity totals are still data; HasAPIData must be true")
 	}
-	if u.APISpendCents != 0 || u.APIRequests != 0 {
-		t.Errorf("got non-zero from zero-activity fixture: %+v", u)
+	if u.AllTotals.SpendCents != 0 || u.AllTotals.Requests != 0 {
+		t.Errorf("got non-zero from zero-activity fixture: %+v", u.AllTotals)
 	}
 }
 
@@ -103,19 +118,45 @@ func TestSnapshotToProvider_FullPlusAccount(t *testing.T) {
 	if snap.ProviderName != "Hermes Plus" {
 		t.Errorf("ProviderName: got %q, want \"Hermes Plus\"", snap.ProviderName)
 	}
-	// Sub + api-balance + api-spend + api-requests = 4 metrics.
-	if len(snap.Metrics) != 4 {
-		t.Fatalf("expected 4 metrics, got %d: %+v", len(snap.Metrics), snap.Metrics)
+
+	// Expected emission for an account with sub + both allowance
+	// buckets present:
+	//   2 balance tiles                         (sub-credits, api-credits)
+	//   7 all-source totals                     (spend/requests/tokens/...)
+	//   7 api-source totals                     (alw_api populated)
+	//   7 sub-source totals                     (alw_sub populated)
+	//   2 v1 aliases                            (hermes-api-spend-total, -requests-total)
+	// = 25 total
+	const want = 25
+	if len(snap.Metrics) != want {
+		t.Fatalf("expected %d metrics, got %d", want, len(snap.Metrics))
 	}
-	want := map[string]bool{
-		"hermes-sub-credits-remaining": true,
-		"hermes-api-credits-remaining": true,
-		"hermes-api-spend-total":       true,
-		"hermes-api-requests-total":    true,
-	}
+
+	// Verify a sample of the new IDs are present and have correct values.
+	ids := map[string]providers.MetricValue{}
 	for _, m := range snap.Metrics {
-		if !want[m.ID] {
-			t.Errorf("unexpected metric ID %q", m.ID)
+		ids[m.ID] = m
+	}
+	checks := []struct {
+		id, val string
+	}{
+		{"hermes-tokens-total", "1072"},
+		{"hermes-input-tokens-total", "965"},
+		{"hermes-tokens-sub", "1072"},
+		{"hermes-tokens-api", "0"},
+		{"hermes-requests-sub", "2"},
+		// v1 alias still emits with the same all-source value.
+		{"hermes-api-spend-total", "$0.00"},
+		{"hermes-api-requests-total", "1"},
+	}
+	for _, c := range checks {
+		m, ok := ids[c.id]
+		if !ok {
+			t.Errorf("metric %q missing from snapshot", c.id)
+			continue
+		}
+		if v, ok := m.Value.(string); !ok || v != c.val {
+			t.Errorf("metric %q: got value %v, want %q", c.id, m.Value, c.val)
 		}
 	}
 }
@@ -203,14 +244,39 @@ func TestProviderMetadata(t *testing.T) {
 		t.Errorf("Name: got %q", p.Name())
 	}
 	want := map[string]bool{
+		// Subscription / API credit balance tiles (from /products).
 		"hermes-sub-credits-remaining": true,
 		"hermes-api-credits-remaining": true,
-		"hermes-api-spend-total":       true,
-		"hermes-api-requests-total":    true,
+		// All-source totals (combined across api + sub allowances).
+		"hermes-spend-total":              true,
+		"hermes-requests-total":           true,
+		"hermes-tokens-total":             true,
+		"hermes-input-tokens-total":       true,
+		"hermes-output-tokens-total":      true,
+		"hermes-cache-read-tokens-total":  true,
+		"hermes-cache-write-tokens-total": true,
+		// v1 aliases preserved for back-compat.
+		"hermes-api-spend-total":    true,
+		"hermes-api-requests-total": true,
+	}
+	for _, src := range []string{"api", "sub"} {
+		for _, view := range []string{"spend", "requests", "tokens", "input-tokens", "output-tokens", "cache-read-tokens", "cache-write-tokens"} {
+			want["hermes-"+view+"-"+src] = true
+		}
 	}
 	for _, id := range p.MetricIDs() {
 		if !want[id] {
 			t.Errorf("unexpected metric ID %q", id)
+		}
+	}
+	// Round-trip: every entry in want should appear in the declared list.
+	got := map[string]bool{}
+	for _, id := range p.MetricIDs() {
+		got[id] = true
+	}
+	for id := range want {
+		if !got[id] {
+			t.Errorf("metric ID %q is in want but not declared by the provider", id)
 		}
 	}
 }

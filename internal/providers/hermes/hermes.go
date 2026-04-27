@@ -33,6 +33,7 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers/cookieaux"
+	"github.com/anthonybaldwin/UsageButtons/internal/providers/providerutil"
 )
 
 const (
@@ -220,12 +221,17 @@ func snapshotToProvider(u usageSnapshot) providers.Snapshot {
 
 // subCreditsMetric renders the subscription-credits tile. Denominator
 // is monthlyCredits + maxRolloverCredits so a fully-rolled-over balance
-// can sit at 100% without overshooting.
+// can sit at 100% without overshooting. The renewal countdown is gated
+// by ResetTimeWhenUsed so an idle account doesn't render a perpetual
+// "27d to renewal" timer next to a full balance — once you've spent
+// half your credits the countdown reappears as a "you'll roll over in
+// X days" hint.
 func subCreditsMetric(u usageSnapshot, now string) providers.MetricValue {
 	balance := u.SubBalanceCents / 100
 	cap := (u.SubMonthlyCents + u.SubRolloverCapCents) / 100
 	ratio := math.Max(0, math.Min(1, balance/math.Max(cap, 0.01)))
-	resetSecs := renewSeconds(u.RenewsAt, u.UpdatedAt)
+	usedPct := math.Max(0, math.Min(100, (1-ratio)*100))
+	resetSecs := renewSeconds(providerutil.ResetTimeWhenUsed(usedPct, u.RenewsAt), u.UpdatedAt)
 	m := providers.MetricValue{
 		ID:              "hermes-sub-credits-remaining",
 		Label:           "SUB",

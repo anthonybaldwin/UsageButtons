@@ -24,9 +24,13 @@ self.__next_f.push([1, "20:[\"$\",\"section\",null,{\"className\":\"x\",\"childr
 // `allowanceId` field is what lets us label the api bucket; the
 // remaining non-empty key in totalsByAllowanceId is the sub bucket
 // by elimination.
+//
+// Numbers are internally consistent: each totals.* equals the sum of
+// the matching field across alw_api + alw_sub + "" so a future
+// reader can audit the fixture by hand.
 const apiKeysFixture = `<html><body><script>
 self.__next_f.push([1, "21:[\"$\",\"section\",null,{\"className\":\"x\",\"children\":[\"$\",\"$L26\",null,{\"allowanceId\":\"alw_api\",\"balance\":0,\"cryptoEnabled\":false}]}]"]);
-self.__next_f.push([1, "c:[\"$\",\"main\",null,{\"className\":\"x\",\"children\":[\"$\",\"$L25\",null,{\"keys\":[],\"usageByKey\":{\"timeframe\":{\"start\":\"2025-01-01T00:00:00.000Z\",\"end\":\"2026-04-27T02:10:31.465Z\",\"granularity\":\"total\"},\"series\":[{\"id\":\"key_redacted\",\"name\":\"Chat\",\"type\":\"keyId\",\"data\":{\"tokens\":[1072],\"spend\":[0.001608],\"requests\":[1]}}],\"totals\":{\"tokens\":1072,\"inputTokens\":965,\"outputTokens\":107,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0.001608,\"requests\":1},\"totalsByAllowanceId\":{\"alw_api\":{\"tokens\":0,\"inputTokens\":0,\"outputTokens\":0,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0,\"requests\":0},\"alw_sub\":{\"tokens\":1072,\"inputTokens\":965,\"outputTokens\":107,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0.001608,\"requests\":2},\"\":{\"tokens\":0,\"inputTokens\":0,\"outputTokens\":0,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0,\"requests\":0}}}}]}]"]);
+self.__next_f.push([1, "c:[\"$\",\"main\",null,{\"className\":\"x\",\"children\":[\"$\",\"$L25\",null,{\"keys\":[],\"usageByKey\":{\"timeframe\":{\"start\":\"2025-01-01T00:00:00.000Z\",\"end\":\"2026-04-27T02:10:31.465Z\",\"granularity\":\"total\"},\"series\":[{\"id\":\"key_redacted\",\"name\":\"Chat\",\"type\":\"keyId\",\"data\":{\"tokens\":[1072],\"spend\":[0.001608],\"requests\":[2]}}],\"totals\":{\"tokens\":1072,\"inputTokens\":965,\"outputTokens\":107,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0.001608,\"requests\":2},\"totalsByAllowanceId\":{\"alw_api\":{\"tokens\":0,\"inputTokens\":0,\"outputTokens\":0,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0,\"requests\":0},\"alw_sub\":{\"tokens\":1072,\"inputTokens\":965,\"outputTokens\":107,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0.001608,\"requests\":2},\"\":{\"tokens\":0,\"inputTokens\":0,\"outputTokens\":0,\"cacheReadTokens\":0,\"cacheWriteTokens\":0,\"spend\":0,\"requests\":0}}}}]}]"]);
 </script></body></html>`
 
 // apiKeysEmpty is the page render before any API activity: totals all zero.
@@ -84,8 +88,8 @@ func TestMergeAPIKeysHTML_TotalsExtracted(t *testing.T) {
 		// real granularity at sub-cent spend; we accept the loss.
 		t.Errorf("AllTotals.SpendCents: got %v, want 0 (rounded sub-cent)", got)
 	}
-	if u.AllTotals.Requests != 1 {
-		t.Errorf("AllTotals.Requests: got %v, want 1", u.AllTotals.Requests)
+	if u.AllTotals.Requests != 2 {
+		t.Errorf("AllTotals.Requests: got %v, want 2 (sum of api+sub+\"\" buckets)", u.AllTotals.Requests)
 	}
 	if u.AllTotals.Tokens != 1072 {
 		t.Errorf("AllTotals.Tokens: got %v, want 1072", u.AllTotals.Tokens)
@@ -147,7 +151,7 @@ func TestSnapshotToProvider_FullPlusAccount(t *testing.T) {
 		{"hermes-requests-sub", "2"},
 		// v1 alias still emits with the same all-source value.
 		{"hermes-api-spend-total", "$0.00"},
-		{"hermes-api-requests-total", "1"},
+		{"hermes-api-requests-total", "2"},
 	}
 	for _, c := range checks {
 		m, ok := ids[c.id]
@@ -191,6 +195,64 @@ func TestSnapshotToProvider_APIBalanceEmittedWhenNonZero(t *testing.T) {
 	}
 	if !found {
 		t.Error("api-balance must emit when balance > 0, even without /api-keys data")
+	}
+}
+
+func TestSnapshotToProvider_V1AliasGuardedByAllTotalsFound(t *testing.T) {
+	// If only the per-allowance buckets parse (Nous removes the
+	// page-level totals key), the v1 aliases must NOT emit at $0/0
+	// alongside non-zero per-source values.
+	u := snapshotFromHTML([]byte(productsFixture), time.Now())
+	u.HasAPIData = true
+	u.APITotals.Found = true
+	u.APITotals.Requests = 5
+	// AllTotals.Found stays false intentionally.
+	snap := snapshotToProvider(u)
+	for _, m := range snap.Metrics {
+		if m.ID == "hermes-api-spend-total" || m.ID == "hermes-api-requests-total" {
+			t.Errorf("v1 alias %q must not emit when AllTotals.Found is false", m.ID)
+		}
+	}
+	// Per-source api metric should still emit.
+	hasAPIRequests := false
+	for _, m := range snap.Metrics {
+		if m.ID == "hermes-requests-api" {
+			hasAPIRequests = true
+		}
+	}
+	if !hasAPIRequests {
+		t.Error("per-source hermes-requests-api should still emit when APITotals.Found")
+	}
+}
+
+func TestAllowanceBlockRegex_CachedAcrossCalls(t *testing.T) {
+	// Process-lifetime cache: the same allowance ID must return the
+	// SAME compiled regex pointer on a second lookup. Otherwise we'd
+	// be paying compile cost every poll, which is what Greptile's
+	// review flagged.
+	r1 := allowanceBlockRegex("alw_x")
+	r2 := allowanceBlockRegex("alw_x")
+	if r1 != r2 {
+		t.Error("allowanceBlockRegex must memoise per ID — got two different pointers")
+	}
+	r3 := allowanceBlockRegex("alw_y")
+	if r1 == r3 {
+		t.Error("different IDs must yield different regex objects")
+	}
+}
+
+func TestAPIPanelAllowanceID_AnchoredOnComponentBoundary(t *testing.T) {
+	// Make sure the regex doesn't pick up a stray allowanceId field
+	// from somewhere outside the API-Credits component (e.g., a
+	// future panel that happens to render the same field name).
+	src := `\"someOtherField\":\"x\",\"allowanceId\":\"alw_wrong\",` +
+		`,null,{\"allowanceId\":\"alw_correct\",\"balance\":0`
+	m := reAPIPanelAllowanceID.FindStringSubmatch(src)
+	if len(m) != 2 {
+		t.Fatalf("expected match, got %v", m)
+	}
+	if m[1] != "alw_correct" {
+		t.Errorf("anchor failed: matched %q, want alw_correct", m[1])
 	}
 }
 

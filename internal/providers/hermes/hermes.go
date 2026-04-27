@@ -27,6 +27,7 @@ import (
 	"math"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
@@ -275,52 +276,46 @@ func parseInto(src string, t *allowanceTotals, table map[*regexp.Regexp]func(*al
 }
 
 // parsePerAllowance digs out the seven totals for one specific
-// allowance ID inside the totalsByAllowanceId block. Anchors the
-// per-field match on \"<id>\":\{ so the inner [^{}]* keeps the
-// capture inside that one allowance's flat object.
+// allowance ID inside the totalsByAllowanceId block. Two-step:
+// (1) extract the allowance's flat-object substring with a per-ID
+// block regex (cached in allowanceBlockCache so we recompile at most
+// once per ID per process); (2) run the seven pre-compiled field
+// regexes (allowanceFieldRegexes, package-level) against the
+// substring. That replaces the 7-regex-recompile-per-call pattern
+// the previous implementation had.
 func parsePerAllowance(src, id string, t *allowanceTotals) {
-	// Source JSON in the page is JS-string-escaped, so each `"` shows
-	// as `\"`. Pattern needs `\\"` (regex-escaped backslash + literal
-	// quote) to match — same convention used by every other regex in
-	// this file.
-	prefix := `\\"` + regexp.QuoteMeta(id) + `\\":\{`
-	field := func(name string, intOnly bool) (string, bool) {
-		re := regexp.MustCompile(prefix + `[^{}]*\\"` + name + `\\":(` +
-			ifThen(intOnly, `\d+`, `[\d.]+`) + `)`)
-		m := re.FindStringSubmatch(src)
-		if len(m) != 2 {
-			return "", false
+	blockRe := allowanceBlockRegex(id)
+	m := blockRe.FindStringSubmatch(src)
+	if len(m) != 2 {
+		return
+	}
+	inner := m[1]
+	for re, set := range allowanceFieldRegexes {
+		if fm := re.FindStringSubmatch(inner); len(fm) == 2 {
+			set(t, fm[1])
+			t.Found = true
 		}
-		return m[1], true
 	}
-	if v, ok := field("spend", false); ok {
-		t.SpendCents = math.Round(parseFloat(v) * 100)
-		t.Found = true
+}
+
+// allowanceBlockCache memoises the per-ID `\"<id>\":\{(...)\}` regex
+// so a steady-state poll re-uses the compiled object instead of
+// repaying compile cost. Keys are allowance cuids (small, bounded set
+// per account); the cache only ever grows on a fresh ID.
+var allowanceBlockCache sync.Map
+
+func allowanceBlockRegex(id string) *regexp.Regexp {
+	if cached, ok := allowanceBlockCache.Load(id); ok {
+		return cached.(*regexp.Regexp)
 	}
-	if v, ok := field("requests", true); ok {
-		t.Requests, _ = strconv.Atoi(v)
-		t.Found = true
-	}
-	if v, ok := field("tokens", true); ok {
-		t.Tokens, _ = strconv.Atoi(v)
-		t.Found = true
-	}
-	if v, ok := field("inputTokens", true); ok {
-		t.InputTokens, _ = strconv.Atoi(v)
-		t.Found = true
-	}
-	if v, ok := field("outputTokens", true); ok {
-		t.OutputTokens, _ = strconv.Atoi(v)
-		t.Found = true
-	}
-	if v, ok := field("cacheReadTokens", true); ok {
-		t.CacheReadTokens, _ = strconv.Atoi(v)
-		t.Found = true
-	}
-	if v, ok := field("cacheWriteTokens", true); ok {
-		t.CacheWriteTokens, _ = strconv.Atoi(v)
-		t.Found = true
-	}
+	// Source JSON in the page is JS-string-escaped, so each `"` shows
+	// as `\"` — pattern needs `\\"` (regex-escaped backslash + literal
+	// quote) to match. The capture group grabs everything inside the
+	// allowance's flat object so the field regexes can run against it
+	// without an enclosing-brace anchor of their own.
+	re := regexp.MustCompile(`\\"` + regexp.QuoteMeta(id) + `\\":\{([^{}]*)\}`)
+	allowanceBlockCache.Store(id, re)
+	return re
 }
 
 // otherAllowanceID scans totalsByAllowanceId for a non-empty key that
@@ -345,15 +340,6 @@ func otherAllowanceID(src, apiID string) string {
 		return id
 	}
 	return ""
-}
-
-// ifThen is a tiny ternary helper, used only for the int-vs-float
-// digit class in parsePerAllowance.
-func ifThen(b bool, t, f string) string {
-	if b {
-		return t
-	}
-	return f
 }
 
 // Pre-compiled regexes for the Nous portal's inline-JSON shape. The
@@ -401,11 +387,28 @@ var (
 	}
 
 	// reAPIPanelAllowanceID captures the API-Credits panel's
-	// allowanceId — used to identify which totalsByAllowanceId bucket
-	// belongs to the API allowance. Anchored after a typical RSC
-	// neighbour (\"$L26\",null,{\"allowanceId\":\"...\") so we don't
-	// accidentally pick up an allowanceId reference from elsewhere.
-	reAPIPanelAllowanceID = regexp.MustCompile(`\\"allowanceId\\":\\"([^"\\]+)\\"`)
+	// allowanceId. The pattern requires the allowanceId field to be
+	// the FIRST member of an inline-rendered RSC component object —
+	// `,null,{\"allowanceId\":\"<id>\"` — which is the signature of
+	// the API-Credits and Auto-Top-Up component instantiations on
+	// /api-keys. Both components share the same API allowance ID, so
+	// matching either is correct; anchoring rules out a stray
+	// allowanceId field rendered by some unrelated future panel.
+	reAPIPanelAllowanceID = regexp.MustCompile(`,null,\{\\"allowanceId\\":\\"([^"\\]+)\\"`)
+
+	// allowanceFieldRegexes are compiled once and run against the
+	// inner substring of one allowance's flat object (extracted by
+	// allowanceBlockRegex). Each value is the setter that copies the
+	// captured string onto the right allowanceTotals field.
+	allowanceFieldRegexes = map[*regexp.Regexp]func(*allowanceTotals, string){
+		regexp.MustCompile(`\\"spend\\":([\d.]+)`):            func(t *allowanceTotals, s string) { t.SpendCents = math.Round(parseFloat(s) * 100) },
+		regexp.MustCompile(`\\"requests\\":(\d+)`):            func(t *allowanceTotals, s string) { t.Requests, _ = strconv.Atoi(s) },
+		regexp.MustCompile(`\\"tokens\\":(\d+)`):              func(t *allowanceTotals, s string) { t.Tokens, _ = strconv.Atoi(s) },
+		regexp.MustCompile(`\\"inputTokens\\":(\d+)`):         func(t *allowanceTotals, s string) { t.InputTokens, _ = strconv.Atoi(s) },
+		regexp.MustCompile(`\\"outputTokens\\":(\d+)`):        func(t *allowanceTotals, s string) { t.OutputTokens, _ = strconv.Atoi(s) },
+		regexp.MustCompile(`\\"cacheReadTokens\\":(\d+)`):     func(t *allowanceTotals, s string) { t.CacheReadTokens, _ = strconv.Atoi(s) },
+		regexp.MustCompile(`\\"cacheWriteTokens\\":(\d+)`):    func(t *allowanceTotals, s string) { t.CacheWriteTokens, _ = strconv.Atoi(s) },
+	}
 
 	// reTotalsByAllowanceBlock isolates the totalsByAllowanceId object
 	// body so the per-key scan doesn't leak into surrounding RSC. The
@@ -466,15 +469,21 @@ func snapshotToProvider(u usageSnapshot) providers.Snapshot {
 		// v1 aliases: hermes-api-spend-total / hermes-api-requests-total
 		// were originally the all-source spend/requests. Re-emit them
 		// pointing at AllTotals so users with v1 bindings don't lose
-		// their tiles when v2 ships.
-		num, str, _ := totalsValue("spend", &u.AllTotals)
-		metrics = append(metrics, totalsMetric(
-			"hermes-api-spend-total", "ALL", "Nous all-source spend (all-time, v1 alias for hermes-spend-total)",
-			"Spend", num, str, true, false, now))
-		num, str, _ = totalsValue("requests", &u.AllTotals)
-		metrics = append(metrics, totalsMetric(
-			"hermes-api-requests-total", "ALL", "Nous all-source requests (all-time, v1 alias for hermes-requests-total)",
-			"Requests", num, str, false, true, now))
+		// their tiles when v2 ships — but ONLY when AllTotals actually
+		// parsed. If only the per-allowance buckets came back (Nous
+		// removed the page-level totals), aliases would otherwise emit
+		// $0/0 alongside non-zero per-source values, which is worse
+		// than no tile.
+		if u.AllTotals.Found {
+			num, str, _ := totalsValue("spend", &u.AllTotals)
+			metrics = append(metrics, totalsMetric(
+				"hermes-api-spend-total", "ALL", "Nous all-source spend (all-time, v1 alias for hermes-spend-total)",
+				"Spend", num, str, true, false, now))
+			num, str, _ = totalsValue("requests", &u.AllTotals)
+			metrics = append(metrics, totalsMetric(
+				"hermes-api-requests-total", "ALL", "Nous all-source requests (all-time, v1 alias for hermes-requests-total)",
+				"Requests", num, str, false, true, now))
+		}
 	}
 
 	return providers.Snapshot{
@@ -543,22 +552,24 @@ func apiBalanceMetric(u usageSnapshot, now string) providers.MetricValue {
 }
 
 // totalsViewSet enumerates the seven /api-keys totals fields plus the
-// label / caption / unit / good-direction needed to emit each as a
-// metric. The order is the order they appear in the dropdown.
+// label / caption / good-direction needed to emit each as a metric.
+// The order is the order they appear in the dropdown. Dollars-vs-count
+// is intentionally NOT a field here — totalsValue derives it from the
+// view name so there's a single source of truth, and a future view
+// added here can't drift between the two.
 var totalsViewSet = []struct {
 	View    string // "spend" | "requests" | "tokens" | ...
 	Caption string // tile subtitle
 	NameTag string // human-readable phrase for the metric Name field
-	Dollars bool   // dollars vs count rendering
 	GoodHi  bool   // NumericGoodWhen = "high" vs "low"
 }{
-	{"spend", "Spend", "spend", true, false},
-	{"requests", "Requests", "requests", false, true},
-	{"tokens", "Tokens", "tokens", false, true},
-	{"input-tokens", "In-tokens", "input tokens", false, true},
-	{"output-tokens", "Out-tokens", "output tokens", false, true},
-	{"cache-read-tokens", "Cache-R", "cache-read tokens", false, true},
-	{"cache-write-tokens", "Cache-W", "cache-write tokens", false, true},
+	{"spend", "Spend", "spend", false},
+	{"requests", "Requests", "requests", true},
+	{"tokens", "Tokens", "tokens", true},
+	{"input-tokens", "In-tokens", "input tokens", true},
+	{"output-tokens", "Out-tokens", "output tokens", true},
+	{"cache-read-tokens", "Cache-R", "cache-read tokens", true},
+	{"cache-write-tokens", "Cache-W", "cache-write tokens", true},
 }
 
 // totalsSourceSet maps the metric-ID source slug to the in-snapshot

@@ -166,8 +166,9 @@ trade a different one.)
 ## Browser fetch bridge (Usage Buttons Helper extension)
 
 Cookie-gated providers (Claude web extras, Codex web extras, Cursor,
-Ollama, Abacus AI, Alibaba, Augment, Amp, Droid, Grok, Kimi, MiniMax,
-Mistral, OpenCode, OpenCode Go, and Perplexity) route
+Ollama, Abacus AI, Alibaba, Augment, Amp, Droid, Grok, Hermes
+(Nous Research), Kimi, MiniMax, Mistral, OpenCode, OpenCode Go, and
+Perplexity) route
 requests through the companion Chrome extension in
 `chrome-extension/` (Usage Buttons Helper), which proxies `fetch()`
 for a narrow allowlist of origins. Cookies never leave the browser —

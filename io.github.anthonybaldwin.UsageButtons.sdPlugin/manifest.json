@@ -299,6 +299,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.grok",
+      "Name": "Grok",
+      "Tooltip": "Grok (xAI) usage stats — Grok 3 queries / tokens, Grok 4 Heavy queries.",
+      "Icon": "assets/action-grok",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-grok-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.warp",
       "Name": "Warp",
       "Tooltip": "Warp usage stats — credits %, bonus credits.",

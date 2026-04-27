@@ -3,10 +3,126 @@ package render
 import (
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// renderStarfield returns SVG `<circle>` elements approximating xAI's
+// stationary starfield motif. Static — Stream Deck buttons render once
+// per poll, so the per-frame flicker / shooting-star animation from
+// upstream HTML5-canvas implementations isn't reproducible here.
+//
+// Visual borrowed (positioning logic + opacity-flicker varied across
+// stars) from UsmanDevCraft/grok-shooting-stars (MIT) — see
+// THIRD_PARTY_LICENSES.md.
+//
+// Pattern is deterministic so positions don't shuffle between polls.
+// Different layers (back / front of glyph) call this with different
+// seeds when a layered effect is desired; for now the starfield only
+// renders behind the glyph (paint order is bg → starfield → glyph →
+// fill → text), so a single seed suffices.
+// renderStarfield emits the animated Grok background: a slowly drifting
+// star field plus a periodic shooting-star streak across the canvas.
+// Stream Deck rasterizes the SVG to a static PNG before display, so SMIL
+// `<animate>` doesn't tick — animation has to come from re-rendering the
+// SVG every frame and re-sending it via SetImage. Each call samples
+// time.Now(), so a driver loop calling RenderButton at e.g. 8 Hz
+// produces smooth motion without needing to thread a phase parameter.
+//
+// Star positions, velocities, periods, and offsets are deterministic
+// from a fixed PCG seed so the same star drifts on the same trajectory
+// frame to frame; only the time argument changes between calls.
+//
+// Visual borrowed from UsmanDevCraft/grok-shooting-stars (MIT) — the
+// upstream HTML5-canvas implementation does the same dim/bright sin
+// flicker, slow drift, and periodic streak. See THIRD_PARTY_LICENSES.md.
+func renderStarfield() string {
+	const count = 45
+	r := rand.New(rand.NewPCG(0xfeed, 0xface))
+	now := float64(time.Now().UnixMilli()) / 1000.0
+	canvas := float64(Canvas)
+	parts := make([]string, 0, count+3)
+
+	// Rotating starfield: each star orbits the canvas center on its
+	// own radius, at its own angular velocity, with its own initial
+	// phase and opacity flicker. The whole field reads as a slow
+	// galactic swirl rather than independent linear drift.
+	cx, cy := canvas/2, canvas/2
+	for i := 0; i < count; i++ {
+		// Polar seed: pick a radius from the center and an initial
+		// angle. Radii bias toward the canvas extents so stars cover
+		// the corners (sqrt skews uniform sampling outward).
+		orbitR := math.Sqrt(r.Float64()) * (canvas * 0.7)
+		theta0 := r.Float64() * 2 * math.Pi
+		// Angular velocity (rad/sec). Sign per star so neighbors can
+		// drift opposite directions; magnitude small (0.05..0.18 rad/s,
+		// i.e. ~3..10 deg/s) so the swirl reads as gentle motion.
+		omega := (0.05 + r.Float64()*0.13) * (1.0 - 2.0*float64(i%2))
+		angle := theta0 + omega*now
+		x := cx + orbitR*math.Cos(angle)
+		y := cy + orbitR*math.Sin(angle)
+
+		// Star draw parameters — radius / opacity flicker.
+		dotR := 0.9 + r.Float64()*1.5
+		dim := 0.30 + r.Float64()*0.20
+		bright := 0.70 + r.Float64()*0.25
+		period := 1.6 + r.Float64()*2.4
+		offset := r.Float64() * period
+		wave := (math.Sin(2*math.Pi*(now+offset)/period) + 1) / 2
+		opacity := dim + wave*(bright-dim)
+		parts = append(parts, fmt.Sprintf(
+			`<circle cx="%.1f" cy="%.1f" r="%.2f" fill="#ffffff" opacity="%.2f"/>`,
+			x, y, dotR, opacity))
+	}
+
+	// Shooting star: every shootCycle seconds a streak fires along a
+	// random direction for shootDur seconds, then disappears. Direction
+	// + start position are seeded from the cycle index so each cycle
+	// gets a different streak but every render of the same cycle picks
+	// the same one (deterministic).
+	const (
+		shootCycle = 9.0 // one streak every 9s
+		shootDur   = 1.2 // streak visible for 1.2s
+		shootSpeed = 220.0
+		tailLen    = 28.0
+	)
+	cycleProgress := math.Mod(now, shootCycle)
+	if cycleProgress < shootDur {
+		cycleIdx := uint64(now / shootCycle)
+		sr := rand.New(rand.NewPCG(cycleIdx, 0xbabe))
+		// Start somewhere in the upper-left half so most streaks travel
+		// across the visible canvas before exiting.
+		startX := sr.Float64() * canvas * 0.6
+		startY := sr.Float64() * canvas * 0.6
+		// Angle biased toward down-right (the canonical "shooting star"
+		// streak direction in xAI's branding).
+		angle := math.Pi/4 + (sr.Float64()-0.5)*math.Pi/3
+		dx := math.Cos(angle) * shootSpeed * cycleProgress
+		dy := math.Sin(angle) * shootSpeed * cycleProgress
+		hx := startX + dx
+		hy := startY + dy
+		tx := hx - math.Cos(angle)*tailLen
+		ty := hy - math.Sin(angle)*tailLen
+		// Fade in/out at the streak's start and end so it doesn't pop.
+		alpha := 1.0
+		if cycleProgress < 0.15 {
+			alpha = cycleProgress / 0.15
+		} else if cycleProgress > shootDur-0.25 {
+			alpha = (shootDur - cycleProgress) / 0.25
+		}
+		parts = append(parts, fmt.Sprintf(
+			`<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round" opacity="%.2f"/>`,
+			tx, ty, hx, hy, alpha*0.7))
+		parts = append(parts, fmt.Sprintf(
+			`<circle cx="%.1f" cy="%.1f" r="1.8" fill="#ffffff" opacity="%.2f"/>`,
+			hx, hy, alpha))
+	}
+
+	return strings.Join(parts, "")
+}
 
 // Canvas is the edge length (in SVG user units) of a Stream Deck button face.
 const Canvas = 144
@@ -66,6 +182,14 @@ type ButtonInput struct {
 	// (default on), and main.go threads that runtime decision into
 	// this field at each render site.
 	SmartContrast bool
+	// Starfield, when true, paints a fixed white-dot starfield over the
+	// bg rect, sitting BEHIND the watermark glyph and text layers
+	// (paint order: bg → starfield → glyph → meter fill → text). Used
+	// by Grok to echo the xAI / grok.com on-page starfield motif.
+	// Static — Stream Deck buttons render once per poll, so the
+	// per-frame flicker / shooting-star animation from the upstream
+	// canvas implementation isn't reproducible at this layer.
+	Starfield bool
 }
 
 // valueFontSizes maps a ButtonInput.ValueSize to a starting pixel size.
@@ -262,6 +386,16 @@ func RenderButton(in ButtonInput) string {
 				frontColor = glyphBg
 				frontOpacity = 0.40
 			}
+			// SmartContrast: pick the front layer color that actually
+			// contrasts with the fill (not just with bg). Fixes the
+			// inverse-Ollama case (white bg + dark fill, e.g. Grok)
+			// where glyphBg had been auto-flipped dark to contrast bg
+			// — and ended up identical to the dark fill, making the
+			// front layer invisible. contrastOver picks black or white
+			// against the fill, so it's always readable.
+			if in.SmartContrast {
+				frontColor = contrastOver(glyphBg, fill)
+			}
 
 			glyphBack = glyphPathMarkup(xf, glyphBg, 0.70, in.Glyph)
 			glyphFront = glyphPathMarkup(xf, frontColor, frontOpacity, in.Glyph)
@@ -313,6 +447,11 @@ func RenderButton(in ButtonInput) string {
 		textFill = renderLabels(fgFill) + renderValue(fgFill) + renderSubvalue(fgFill)
 	}
 
+	starfield := ""
+	if in.Starfield {
+		starfield = renderStarfield()
+	}
+
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" opacity="%s">
   <defs>
     <clipPath id="card">
@@ -327,6 +466,7 @@ func RenderButton(in ButtonInput) string {
   </defs>
   <g clip-path="url(#card)">
     <rect width="%d" height="%d" fill="%s"/>
+    %s
     %s
     <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s"/>
   </g>
@@ -347,6 +487,7 @@ func RenderButton(in ButtonInput) string {
 		Canvas, Canvas,
 		rect.X, rect.Y, rect.W, rect.H,
 		Canvas, Canvas, bg,
+		starfield,
 		glyphBack,
 		rect.X, rect.Y, rect.W, rect.H, fill,
 		borderElement,
@@ -357,13 +498,17 @@ func RenderButton(in ButtonInput) string {
 }
 
 // RenderLoading produces a loading face with just the provider glyph.
-func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, showBorder *bool) string {
+func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, showBorder *bool, starfield bool) string {
 	fg := def(fgColor, "#f9fafb")
 	bg := def(bgColor, "#111827")
 	border := showBorder == nil || *showBorder
 	glyphColor := fillColor
 	if glyphColor == "" {
 		glyphColor = fg
+	}
+	stars := ""
+	if starfield {
+		stars = renderStarfield()
 	}
 
 	// Use the same glyph zone as RenderButton's watermark so the
@@ -408,12 +553,14 @@ func RenderLoading(glyph *ProviderGlyph, fillColor, bgColor, fgColor string, sho
   <g clip-path="url(#card-loading)">
     <rect width="%d" height="%d" fill="%s"/>
     %s
+    %s
   </g>
   %s
 </svg>`,
 		Canvas, Canvas,
 		Canvas, Canvas,
 		Canvas, Canvas, bg,
+		stars,
 		glyphElement,
 		borderEl,
 	)

@@ -37,6 +37,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/cursor"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/factory"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/gemini"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/grok"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/jetbrains"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kilo"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimi"
@@ -60,6 +61,13 @@ const (
 	displayRefresh     = 60 * time.Second
 	refreshJitterRatio = 0.20
 	defaultMetric      = "session-percent"
+	// starfieldFrameTick is the per-frame interval for the animated
+	// starfield decoration. Stream Deck rasterizes each SetImage SVG
+	// to a static PNG, so animation has to come from re-sending the
+	// SVG every frame. 10 Hz keeps drift + shooting-star streaks
+	// readable as continuous motion (4 Hz is too choppy for cross-
+	// canvas movement, even though it's fine for opacity flicker).
+	starfieldFrameTick = 100 * time.Millisecond
 )
 
 // visibleKey tracks a key currently on-screen.
@@ -111,6 +119,7 @@ func main() {
 	// Start scheduler and display refresh tickers.
 	go schedulerLoop(conn)
 	go displayRefreshLoop(conn)
+	go starfieldAnimationLoop(conn)
 
 	// Invalidate provider caches when their credential files change,
 	// so a post-login tile update arrives within tens of seconds
@@ -140,6 +149,37 @@ func displayRefreshLoop(conn *streamdeck.Connection) {
 	defer ticker.Stop()
 	for range ticker.C {
 		redrawAllVisible(conn)
+	}
+}
+
+// starfieldAnimationLoop re-renders visible keys whose provider has the
+// starfield decoration enabled (Grok by default) at starfieldFrameTick
+// rate. Each redraw resamples time.Now() inside renderStarfield, so the
+// star opacities advance one frame and the field shimmers. Skips when
+// no global settings yet, and walks only visible keys (so a key that's
+// off-screen burns no cycles even if its provider has stars on).
+func starfieldAnimationLoop(conn *streamdeck.Connection) {
+	ticker := time.NewTicker(starfieldFrameTick)
+	defer ticker.Stop()
+	for range ticker.C {
+		if !globalSettingsLoaded() {
+			continue
+		}
+		mu.Lock()
+		var animateCtxs []string
+		for ctx, key := range visibleKeys {
+			providerID := streamdeck.ProviderIDFromAction(key.action)
+			if providerID == "" {
+				continue
+			}
+			if settings.StarfieldEnabled(providerID, key.settings) {
+				animateCtxs = append(animateCtxs, ctx)
+			}
+		}
+		mu.Unlock()
+		for _, ctx := range animateCtxs {
+			redrawKeyFromCache(conn, ctx)
+		}
 	}
 }
 
@@ -293,10 +333,7 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	var ks settings.KeySettings
 	json.Unmarshal(payload.Settings, &ks)
 
-	metricID := ks.MetricID
-	if metricID == "" {
-		metricID = defaultMetric
-	}
+	metricID := effectiveMetricID(ks, providerID)
 
 	// Check if the user has "Show Title" enabled for this key.
 	var tp streamdeck.WillAppearTitleParameters
@@ -476,10 +513,11 @@ func handleTitleParametersDidChange(conn *streamdeck.Connection, ev streamdeck.E
 	key, ok := visibleKeys[ev.Context]
 	if ok {
 		key.showTitle = payload.TitleParameters.ShowTitle
+		providerID := streamdeck.ProviderIDFromAction(key.action)
 		key.customTitle = isCustomTitle(
 			payload.Title,
 			key.lastAutoTitle,
-			deriveLabelFromMetricID(resolveMetricID(key.settings)),
+			deriveLabelFromMetricID(effectiveMetricID(key.settings, providerID)),
 		)
 	}
 	mu.Unlock()
@@ -897,10 +935,6 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 	customTitle := key.customTitle
 	mu.Unlock()
 
-	metricID := ks.MetricID
-	if metricID == "" {
-		metricID = defaultMetric
-	}
 	if providerID == "" {
 		return
 	}
@@ -967,7 +1001,7 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 	ks := settings.EffectiveSettings(key.settings, prov.ID())
 	hideLabel := key.showTitle
 	customTitle := key.customTitle
-	metricID := resolveMetricID(ks)
+	metricID := effectiveMetricID(ks, prov.ID())
 	title := deriveLabelFromMetricID(metricID)
 
 	if snapshot.Error != "" && len(snapshot.Metrics) == 0 {
@@ -1127,6 +1161,7 @@ func renderMetric(prov providers.Provider, providerName string, metric providers
 	in := render.ButtonInput{
 		Value:         valueStr,
 		SmartContrast: settings.SmartContrastFor(prov.ID()),
+		Starfield:     settings.StarfieldEnabled(prov.ID(), ks),
 	}
 
 	// Label: render in SVG unless the user has set a custom native
@@ -1307,6 +1342,7 @@ func placeholderFace(prov providers.Provider, label, value, subvalue string, ks 
 		Fill:          fill,
 		Bg:            bg,
 		SmartContrast: settings.SmartContrastFor(prov.ID()),
+		Starfield:     settings.StarfieldEnabled(prov.ID(), ks),
 	}
 	if subvalue != "" {
 		in.Subvalue = subvalue
@@ -1380,7 +1416,13 @@ func loadingFaceFor(providerID string, ks *settings.KeySettings) string {
 			border = ks.ShowBorder
 		}
 	}
-	return render.RenderLoading(glyph, fillColor, bg, fg, border)
+	starfield := false
+	if ks != nil {
+		starfield = settings.StarfieldEnabled(providerID, *ks)
+	} else {
+		starfield = settings.StarfieldEnabled(providerID, settings.KeySettings{})
+	}
+	return render.RenderLoading(glyph, fillColor, bg, fg, border, starfield)
 }
 
 // --- Threshold logic ---
@@ -1470,9 +1512,22 @@ func resolveShowRawCounts(metric providers.MetricValue, ks settings.KeySettings)
 	return false
 }
 
-func resolveMetricID(ks settings.KeySettings) string {
+// effectiveMetricID resolves the metric ID a key should display. When
+// the key has no saved MetricID, picks the first entry from the
+// provider's MetricIDs() so a freshly-dropped action lands on a metric
+// that actually exists for that provider — not the Claude-flavored
+// "session-percent" default. Falls back to defaultMetric when the
+// provider isn't registered or has no metrics declared.
+func effectiveMetricID(ks settings.KeySettings, providerID string) string {
 	if ks.MetricID != "" {
 		return ks.MetricID
+	}
+	if providerID != "" {
+		if prov := providers.Get(providerID); prov != nil {
+			if ids := prov.MetricIDs(); len(ids) > 0 {
+				return ids[0]
+			}
+		}
 	}
 	return defaultMetric
 }
@@ -1554,6 +1609,12 @@ var knownLabels = map[string]string{
 	"cost-30d":                "30 DAYS",
 	"tokens-session-percent":  "5-HOUR",
 	"team-ondemand-spent":     "TEAM",
+	// Grok / xAI: title identifies the model; the subvalue caption
+	// disambiguates Queries / Tokens at a glance. (Grok 4 Heavy is
+	// the only Grok 4 tier we track, so the title is plain "GROK 4".)
+	"grok3-queries-remaining":       "GROK 3",
+	"grok3-tokens-remaining":        "GROK 3",
+	"grok4-heavy-queries-remaining": "GROK 4",
 }
 
 // metricCaptionForPlaceholder returns a short caption for dashed-out
@@ -1583,6 +1644,11 @@ var knownCaptions = map[string]string{
 	"cost-30d":                "Cost (local)",
 	"tokens-session-percent":  "Remaining",
 	"team-ondemand-spent":     "Team spend",
+	// Grok placeholder captions match the live-tile subvalue so a
+	// dashed-out Grok button still tells you which category it is.
+	"grok3-queries-remaining":       "Queries",
+	"grok3-tokens-remaining":        "Tokens",
+	"grok4-heavy-queries-remaining": "Queries",
 }
 
 func metricCaptionForPlaceholder(metricID string) string {

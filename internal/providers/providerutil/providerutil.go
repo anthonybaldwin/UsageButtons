@@ -77,6 +77,22 @@ func ResetSeconds(resetAt time.Time) *float64 {
 	return &delta
 }
 
+// ResetTimeWhenUsed returns resetAt only when usedPct indicates real
+// usage. Reset countdowns are misleading on otherwise-idle quotas —
+// "100% remaining for 23h 47m" tells the user nothing actionable, since
+// the reset only matters once usage starts. Providers whose reset
+// window has this property should pass their resetAt through this
+// helper before handing it to PercentRemainingMetric.
+//
+// Threshold is 0.5% to absorb float-rounding artifacts when the API
+// reports e.g. 99.9999% remaining for an effectively-idle window.
+func ResetTimeWhenUsed(usedPct float64, resetAt *time.Time) *time.Time {
+	if usedPct < 0.5 {
+		return nil
+	}
+	return resetAt
+}
+
 // RootMap decodes arbitrary JSON into a root object. Top-level arrays are
 // wrapped as {"quotas": array} to keep provider parsers uniform.
 func RootMap(body []byte) (map[string]any, error) {

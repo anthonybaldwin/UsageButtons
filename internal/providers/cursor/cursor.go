@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/cookies"
@@ -18,6 +19,53 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers/cookieaux"
 )
+
+// legacyPlanCache memoizes "this account is modern" by Cursor user
+// sub so the 2nd Cursor call (/api/usage) can be skipped on every
+// subsequent poll for accounts we've already classified. Keying by
+// sub (not process-globally) avoids the cross-account bleed where a
+// legacy-plan login on a machine that previously cached "modern"
+// would silently lose the `total-percent` metric.
+//
+// /api/auth/me still runs every tick (cheap, returns the sub) so we
+// pick up account switches immediately — we save 1 of the 2 calls,
+// not both, but stay correct across logins.
+var (
+	legacyMu              sync.Mutex
+	legacyKnownModernSubs map[string]bool
+)
+
+// rememberAccountModern records that the named sub has been
+// classified as a modern (non-legacy) account.
+func rememberAccountModern(sub string) {
+	if sub == "" {
+		return
+	}
+	legacyMu.Lock()
+	defer legacyMu.Unlock()
+	if legacyKnownModernSubs == nil {
+		legacyKnownModernSubs = map[string]bool{}
+	}
+	legacyKnownModernSubs[sub] = true
+}
+
+// isAccountKnownModern reports whether we've already classified this
+// sub as modern in a prior poll.
+func isAccountKnownModern(sub string) bool {
+	if sub == "" {
+		return false
+	}
+	legacyMu.Lock()
+	defer legacyMu.Unlock()
+	return legacyKnownModernSubs[sub]
+}
+
+// resetLegacyPlanCache clears the classification — test-only.
+func resetLegacyPlanCache() {
+	legacyMu.Lock()
+	defer legacyMu.Unlock()
+	legacyKnownModernSubs = nil
+}
 
 const (
 	// usageSummaryURL is the primary Cursor usage-summary endpoint.
@@ -160,13 +208,15 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		return providers.Snapshot{}, err
 	}
 
-	// Legacy request-based plan detection: fetch /api/auth/me for the user
-	// sub, then /api/usage?user=SUB. Both calls tolerate failure — legacy
-	// plans are grandfathered and the endpoint 404s for current users.
-	// Run on a short child context so a slow auth/me or usage call can't
-	// stall every Cursor refresh for modern accounts.
+	// Legacy request-based plan detection: fetchLegacyUsage now pins
+	// the active sub via /api/auth/me on every poll (cheap, single
+	// call) and decides internally whether to follow up with the
+	// /api/usage call — modern accounts pay only the auth/me cost
+	// once classified, and an account switch invalidates the cache
+	// the moment the new sub lands. Errors fall through so a
+	// transient failure doesn't poison the classification map.
 	legacyCtx, legacyCancel := context.WithTimeout(ctx, 3*time.Second)
-	legacy := fetchLegacyUsage(legacyCtx)
+	legacy, _ := fetchLegacyUsage(legacyCtx)
 	legacyCancel()
 
 	var metrics []providers.MetricValue
@@ -372,28 +422,56 @@ func formatMembershipType(mt string) string {
 	}
 }
 
-// fetchLegacyUsage returns the legacy gpt-4 request counts when the account
-// is on a grandfathered request-based plan, or nil otherwise. Any failure
-// (no sub, 404, decode error) returns nil so normal parsing proceeds.
-func fetchLegacyUsage(ctx context.Context) *legacyModelUsage {
+// fetchLegacyUsage returns the legacy gpt-4 request counts when the
+// account is on a grandfathered request-based plan, or (nil, nil) when
+// the account is modern. Always calls /api/auth/me (cheap, pins the
+// sub so account switches are detected immediately) and skips the
+// second /api/usage call when the cache already classifies this sub
+// as modern. Errors short-circuit without touching the cache so a
+// transient failure doesn't poison the classification.
+func fetchLegacyUsage(ctx context.Context) (*legacyModelUsage, error) {
 	var me authMeResponse
 	if err := cookies.FetchJSON(ctx, authMeURL, nil, &me); err != nil {
-		return nil
+		// 401/403 = stale cookie, 404 = endpoint gone for this account
+		// — both are "definitive no" answers, safely return (nil, nil).
+		// Other errors (network, timeout) bubble up so we re-probe.
+		var httpErr *httputil.Error
+		if errors.As(err, &httpErr) && (httpErr.Status == 401 || httpErr.Status == 403 || httpErr.Status == 404) {
+			return nil, nil
+		}
+		return nil, err
 	}
 	if me.Sub == nil || *me.Sub == "" {
-		return nil
+		return nil, nil
+	}
+	sub := *me.Sub
+	if isAccountKnownModern(sub) {
+		// Saved one /api/usage call. Cache survives until process exit
+		// and is keyed by sub, so an account switch invalidates by
+		// landing on a different cache key.
+		return nil, nil
 	}
 	var usage legacyUsageResponse
-	qs := url.Values{"user": []string{*me.Sub}}
+	qs := url.Values{"user": []string{sub}}
 	endpoint := legacyUsageURL + "?" + qs.Encode()
 	if err := cookies.FetchJSON(ctx, endpoint, nil, &usage); err != nil {
-		return nil
+		var httpErr *httputil.Error
+		if errors.As(err, &httpErr) && httpErr.Status == 404 {
+			rememberAccountModern(sub) // 404 → endpoint doesn't exist for them
+			return nil, nil
+		}
+		return nil, err
 	}
 	if usage.GPT4 == nil || usage.GPT4.MaxRequestUsage == nil ||
 		(usage.GPT4.NumRequests == nil && usage.GPT4.NumRequestsTotal == nil) {
-		return nil
+		// Endpoint reachable but no legacy data → modern account.
+		rememberAccountModern(sub)
+		return nil, nil
 	}
-	return usage.GPT4
+	// Legacy account — never cache as modern; the data we just
+	// fetched is what their tile renders, so we want to keep
+	// hitting /api/usage every tick.
+	return usage.GPT4, nil
 }
 
 // upperFirst returns s with the first ASCII letter upper-cased.

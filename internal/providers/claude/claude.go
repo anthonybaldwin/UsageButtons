@@ -628,9 +628,49 @@ func (Provider) MetricIDs() []string {
 	}
 }
 
+// claudeLocalOnlyMetrics is the set of metric IDs that are derived
+// from local Claude CLI logs and don't require any claude.ai network
+// call. Used by Fetch to short-circuit when no live-quota metric is
+// bound — see plans/fetchcontext-active-metrics.md.
+var claudeLocalOnlyMetrics = map[string]bool{
+	"cost-today": true,
+	"cost-30d":   true,
+}
+
+// claudeActiveIsLocalOnly returns true when the active set is non-nil,
+// non-empty, AND every entry is a local-only metric. nil/empty fall
+// through to the full fetch path.
+func claudeActiveIsLocalOnly(active []string) bool {
+	if len(active) == 0 {
+		return false
+	}
+	for _, id := range active {
+		if !claudeLocalOnlyMetrics[id] {
+			return false
+		}
+	}
+	return true
+}
+
 // Fetch returns the latest Claude usage snapshot, preferring the
 // extension-proxied web API and falling back to OAuth.
 func (Provider) Fetch(ctx providers.FetchContext) (providers.Snapshot, error) {
+	// Demand-fetching: if the only bound metrics are local cost tiles
+	// (cost-today / cost-30d), skip every Claude.ai network call and
+	// return just the local-log scan. Saves the extension-proxy /usage
+	// hit and the org-discovery probe for users who track Claude spend
+	// without using the live quota tiles. Empty + nil active set fall
+	// through to the full path (cold start, force-refresh, no signal).
+	if claudeActiveIsLocalOnly(ctx.ActiveMetricIDs) {
+		return providers.Snapshot{
+			ProviderID:   "claude",
+			ProviderName: "Claude",
+			Source:       "local",
+			Metrics:      costMetrics(),
+			Status:       "operational",
+		}, nil
+	}
+
 	// Browser-first: hit claude.ai/api/organizations/{id}/usage via the
 	// extension when connected. Same JSON shape as the OAuth endpoint,
 	// so downstream metric emission is identical. Falls back to OAuth

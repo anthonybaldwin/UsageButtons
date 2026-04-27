@@ -20,12 +20,54 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/httputil"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers/providerutil"
 )
+
+// codeAssistCache memoizes the result of loadCodeAssist + project
+// discovery — both are stable per-account values that the previous
+// implementation re-fetched every poll. Keyed by account email so a
+// gemini account switch invalidates the cache automatically.
+var (
+	codeAssistMu     sync.Mutex
+	codeAssistCached map[string]codeAssistStatus
+)
+
+// rememberCodeAssist records the discovered status for an account.
+func rememberCodeAssist(email string, status codeAssistStatus) {
+	if email == "" || status.ProjectID == "" {
+		return // partial / failed lookups don't earn a cache slot
+	}
+	codeAssistMu.Lock()
+	defer codeAssistMu.Unlock()
+	if codeAssistCached == nil {
+		codeAssistCached = map[string]codeAssistStatus{}
+	}
+	codeAssistCached[email] = status
+}
+
+// cachedCodeAssist returns the previously-stored status for an account
+// or (zero, false) when nothing's cached yet.
+func cachedCodeAssist(email string) (codeAssistStatus, bool) {
+	if email == "" {
+		return codeAssistStatus{}, false
+	}
+	codeAssistMu.Lock()
+	defer codeAssistMu.Unlock()
+	s, ok := codeAssistCached[email]
+	return s, ok
+}
+
+// resetCodeAssistCache wipes the cache — test-only.
+func resetCodeAssistCache() {
+	codeAssistMu.Lock()
+	defer codeAssistMu.Unlock()
+	codeAssistCached = nil
+}
 
 const (
 	providerID       = "gemini"
@@ -191,11 +233,20 @@ func fetchSnapshot(ctx context.Context) (providers.Snapshot, error) {
 	}
 
 	claims := extractClaimsFromToken(idToken)
-	codeAssist := loadCodeAssistStatus(ctx, accessToken)
-	projectID := codeAssist.ProjectID
-	if projectID == "" {
-		projectID = discoverGeminiProjectID(ctx, accessToken)
+	// codeAssist (tier + project) is stable per Google account, but the
+	// previous implementation re-fetched both every poll. Cache by
+	// account email so the second poll onward serves both from memory
+	// and only fetchQuotas hits the network. Account switches
+	// invalidate naturally because the email key changes.
+	codeAssist, ok := cachedCodeAssist(claims.Email)
+	if !ok {
+		codeAssist = loadCodeAssistStatus(ctx, accessToken)
+		if codeAssist.ProjectID == "" {
+			codeAssist.ProjectID = discoverGeminiProjectID(ctx, accessToken)
+		}
+		rememberCodeAssist(claims.Email, codeAssist)
 	}
+	projectID := codeAssist.ProjectID
 
 	quotas, err := fetchQuotas(ctx, accessToken, projectID)
 	if err != nil {

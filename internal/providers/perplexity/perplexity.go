@@ -103,7 +103,7 @@ func (Provider) MetricIDs() []string {
 }
 
 // Fetch returns the latest Perplexity quota snapshot.
-func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
+func (Provider) Fetch(fctx providers.FetchContext) (providers.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if !cookies.HostAvailable(ctx) {
@@ -114,26 +114,89 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		"Origin":  "https://www.perplexity.ai",
 		"Referer": "https://www.perplexity.ai/account/usage",
 	}
-	groupID, err := resolveGroupID(ctx, headers)
-	if err != nil {
-		return mapHTTPError(err), nil
-	}
-	groupURL := groupURLBase + url.PathEscape(groupID)
-	groupMap := map[string]any{}
-	if err := cookies.FetchJSON(ctx, groupURL, headers, &groupMap); err != nil {
-		return mapHTTPError(err), nil
-	}
-	rateMap := map[string]any{}
-	if err := cookies.FetchJSON(ctx, rateLimitURL, headers, &rateMap); err != nil {
-		return mapHTTPError(err), nil
-	}
-	// usage-analytics is best-effort — Pro accounts often have no
-	// recorded meters yet (empty meter_event_summaries) and we still
-	// want to render the rest of the dashboard. Errors only suppress
-	// the api-spend metric.
+
+	// Demand-fetching: skip endpoints whose data doesn't contribute to
+	// any bound metric. nil ActiveMetricIDs preserves the legacy
+	// "fetch everything" behavior used during cold start / force.
+	needs := perplexityFetchNeedsFor(fctx.ActiveMetricIDs)
+
+	var groupMap, rateMap map[string]any
 	var analyticsAny any
-	_, _ = fetchAny(ctx, groupURL+usageAnalyticsSuffix, headers, &analyticsAny)
+
+	if needs.group {
+		groupID, err := resolveGroupID(ctx, headers)
+		if err != nil {
+			return mapHTTPError(err), nil
+		}
+		groupURL := groupURLBase + url.PathEscape(groupID)
+		groupMap = map[string]any{}
+		if err := cookies.FetchJSON(ctx, groupURL, headers, &groupMap); err != nil {
+			return mapHTTPError(err), nil
+		}
+		// usage-analytics is best-effort — Pro accounts often have no
+		// recorded meters yet (empty meter_event_summaries) and we still
+		// want to render the rest of the dashboard. Errors only suppress
+		// the api-spend metric.
+		if needs.analytics {
+			_, _ = fetchAny(ctx, groupURL+usageAnalyticsSuffix, headers, &analyticsAny)
+		}
+	}
+	if needs.rate {
+		rateMap = map[string]any{}
+		if err := cookies.FetchJSON(ctx, rateLimitURL, headers, &rateMap); err != nil {
+			return mapHTTPError(err), nil
+		}
+	}
 	return snapshotFromUsage(usageFromResponses(groupMap, rateMap, analyticsAny, time.Now().UTC())), nil
+}
+
+// perplexityFetchNeeds maps the active-metric set to which of the four
+// Perplexity endpoints actually need to be hit this poll. nil active
+// set = "fetch everything" — every flag returns true.
+type perplexityFetchNeeds struct {
+	group     bool // /groups + /groups/{id} — needed by balance / spend tiles
+	analytics bool // /groups/{id}/usage-analytics — needed by spend tiles
+	rate      bool // /rate-limit/all — needed by per-feature query counts
+}
+
+// metricsNeedingGroup is the set of metric IDs whose values come from
+// the per-group endpoint payload (balance, subscription tier, spend).
+var (
+	metricsNeedingGroup = map[string]bool{
+		"comet-spend": true,
+		"api-balance": true,
+		"api-spend":   true,
+	}
+	metricsNeedingAnalytics = map[string]bool{
+		"comet-spend": true,
+		"api-spend":   true,
+	}
+	metricsNeedingRate = map[string]bool{
+		"pro-queries-remaining":      true,
+		"deep-research-remaining":    true,
+		"labs-remaining":             true,
+		"agentic-research-remaining": true,
+	}
+)
+
+// perplexityFetchNeeds resolves which endpoints are required.
+func perplexityFetchNeedsFor(active []string) perplexityFetchNeeds {
+	if active == nil {
+		return perplexityFetchNeeds{group: true, analytics: true, rate: true}
+	}
+	var n perplexityFetchNeeds
+	for _, id := range active {
+		if metricsNeedingGroup[id] {
+			n.group = true
+		}
+		if metricsNeedingAnalytics[id] {
+			n.analytics = true
+		}
+		if metricsNeedingRate[id] {
+			n.rate = true
+		}
+	}
+	return n
 }
 
 // fetchAny performs a best-effort GET and unmarshals into dst (any-typed

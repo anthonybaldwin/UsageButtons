@@ -123,11 +123,33 @@ func TestSnapshotToProvider_FullPlusAccount(t *testing.T) {
 func TestSnapshotToProvider_NoAPIData_OmitsAPIMetrics(t *testing.T) {
 	u := snapshotFromHTML([]byte(productsFixture), time.Now())
 	// No mergeAPIKeysHTML call → HasAPIData stays false.
+	// productsFixture has apiCreditsBalance=0 too, so api-balance is also
+	// skipped — otherwise a $0 balance + default dollar threshold would
+	// render a permanently-critical-red tile for users with no API account.
 	snap := snapshotToProvider(u)
 	for _, m := range snap.Metrics {
-		if m.ID == "hermes-api-spend-total" || m.ID == "hermes-api-requests-total" {
-			t.Errorf("api-* metric %q must not emit when /api-keys wasn't fetched", m.ID)
+		if m.ID == "hermes-api-spend-total" || m.ID == "hermes-api-requests-total" || m.ID == "hermes-api-credits-remaining" {
+			t.Errorf("api-* metric %q must not emit when /api-keys wasn't fetched and balance is $0", m.ID)
 		}
+	}
+}
+
+func TestSnapshotToProvider_APIBalanceEmittedWhenNonZero(t *testing.T) {
+	// Pretend the user has $5 sitting in their API platform account but
+	// hasn't actually used any of it (HasAPIData stays false because
+	// /api-keys wasn't fetched). We still want to render the balance —
+	// it tells them they have funds available even if no usage logged.
+	u := snapshotFromHTML([]byte(productsFixture), time.Now())
+	u.APIBalanceCents = 500
+	snap := snapshotToProvider(u)
+	found := false
+	for _, m := range snap.Metrics {
+		if m.ID == "hermes-api-credits-remaining" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("api-balance must emit when balance > 0, even without /api-keys data")
 	}
 }
 

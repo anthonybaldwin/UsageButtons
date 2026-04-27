@@ -142,9 +142,11 @@ func snapshotFromHTML(html []byte, now time.Time) usageSnapshot {
 		u.SubBalanceCents = math.Round(parseFloat(m[1]) * 100)
 		u.SubRolloverCents = math.Round(parseFloat(m[2]) * 100)
 	}
-	if m := reActiveSubMonthly.FindStringSubmatch(src); len(m) == 3 {
+	if m := reActiveSubMonthly.FindStringSubmatch(src); len(m) == 2 {
 		u.SubMonthlyCents = math.Round(parseFloat(m[1]) * 100)
-		u.SubRolloverCapCents = math.Round(parseFloat(m[2]) * 100)
+	}
+	if m := reActiveSubRolloverCap.FindStringSubmatch(src); len(m) == 2 {
+		u.SubRolloverCapCents = math.Round(parseFloat(m[1]) * 100)
 	}
 	if m := reActiveSubTier.FindStringSubmatch(src); len(m) == 2 {
 		u.Tier = m[1]
@@ -161,12 +163,26 @@ func snapshotFromHTML(html []byte, now time.Time) usageSnapshot {
 }
 
 // mergeAPIKeysHTML pulls totals.{spend,requests} from the /api-keys
-// page's embedded usageByKey block. Mutates u in place.
+// page's embedded usageByKey block. Mutates u in place. Per-field
+// regexes anchored on \"totals\":\{ so a Nous schema change that
+// reorders or inserts a new totals key only knocks out the affected
+// metric, not every API total at once.
 func mergeAPIKeysHTML(html []byte, u *usageSnapshot) {
 	src := string(html)
-	if m := reAPITotals.FindStringSubmatch(src); len(m) == 8 {
-		u.APIRequests, _ = strconv.Atoi(m[7])
-		u.APISpendCents = math.Round(parseFloat(m[6]) * 100)
+	gotSpend := false
+	if m := reAPITotalsSpend.FindStringSubmatch(src); len(m) == 2 {
+		u.APISpendCents = math.Round(parseFloat(m[1]) * 100)
+		gotSpend = true
+	}
+	gotRequests := false
+	if m := reAPITotalsRequests.FindStringSubmatch(src); len(m) == 2 {
+		u.APIRequests, _ = strconv.Atoi(m[1])
+		gotRequests = true
+	}
+	// HasAPIData is true when ANY of the totals fields parsed — that
+	// means we're looking at a real /api-keys render (not a 404 or an
+	// unauth redirect), so emitting the api-* tiles at $0/0 is honest.
+	if gotSpend || gotRequests {
 		u.HasAPIData = true
 	}
 }
@@ -178,17 +194,22 @@ func mergeAPIKeysHTML(html []byte, u *usageSnapshot) {
 // permissive (`[\d.]+`) because the API uses bare floats AND ints
 // interchangeably (e.g. monthlyCredits=22 vs balance=21.998392).
 //
-// activeSubscription anchors prevent collisions with the per-tier
-// monthlyCredits in the availableTiers array: the activeSubscription
-// object is flat (no nested braces) so `[^{}]*` reliably keeps the
-// match inside that one object.
+// activeSubscription / totals anchors prevent collisions with the
+// per-tier monthlyCredits in availableTiers and with per-key totals
+// elsewhere on the page. Both objects are flat (no nested braces) so
+// `[^{}]*` reliably keeps the match inside the right object. Each
+// field gets its own regex so a future Nous schema change that
+// reorders the keys or inserts a new one between two we read only
+// knocks out the affected metric, not the whole tile or block.
 var (
-	reSubCreditsBalance = regexp.MustCompile(`\\"subscriptionCredits\\":\{\\"balance\\":([\d.]+),\\"rolloverCredits\\":([\d.]+)\}`)
-	reActiveSubMonthly  = regexp.MustCompile(`\\"activeSubscription\\":\{[^{}]*\\"monthlyCredits\\":([\d.]+),\\"maxRolloverCredits\\":([\d.]+)`)
-	reActiveSubTier     = regexp.MustCompile(`\\"activeSubscription\\":\{[^{}]*\\"tier\\":\\"([^"\\]+)\\"`)
-	reActiveSubRenewsAt = regexp.MustCompile(`\\"activeSubscription\\":\{[^{}]*\\"currentPeriodEnd\\":\\"([^"\\]+)\\"`)
-	reAPICreditsBalance = regexp.MustCompile(`\\"apiCreditsBalance\\":([\d.]+)`)
-	reAPITotals         = regexp.MustCompile(`\\"totals\\":\{\\"tokens\\":(\d+),\\"inputTokens\\":(\d+),\\"outputTokens\\":(\d+),\\"cacheReadTokens\\":(\d+),\\"cacheWriteTokens\\":(\d+),\\"spend\\":([\d.]+),\\"requests\\":(\d+)\}`)
+	reSubCreditsBalance    = regexp.MustCompile(`\\"subscriptionCredits\\":\{\\"balance\\":([\d.]+),\\"rolloverCredits\\":([\d.]+)\}`)
+	reActiveSubMonthly     = regexp.MustCompile(`\\"activeSubscription\\":\{[^{}]*\\"monthlyCredits\\":([\d.]+)`)
+	reActiveSubRolloverCap = regexp.MustCompile(`\\"activeSubscription\\":\{[^{}]*\\"maxRolloverCredits\\":([\d.]+)`)
+	reActiveSubTier        = regexp.MustCompile(`\\"activeSubscription\\":\{[^{}]*\\"tier\\":\\"([^"\\]+)\\"`)
+	reActiveSubRenewsAt    = regexp.MustCompile(`\\"activeSubscription\\":\{[^{}]*\\"currentPeriodEnd\\":\\"([^"\\]+)\\"`)
+	reAPICreditsBalance    = regexp.MustCompile(`\\"apiCreditsBalance\\":([\d.]+)`)
+	reAPITotalsSpend       = regexp.MustCompile(`\\"totals\\":\{[^{}]*\\"spend\\":([\d.]+)`)
+	reAPITotalsRequests    = regexp.MustCompile(`\\"totals\\":\{[^{}]*\\"requests\\":(\d+)`)
 )
 
 func parseFloat(s string) float64 {
@@ -208,7 +229,15 @@ func snapshotToProvider(u usageSnapshot) providers.Snapshot {
 	if u.SubMonthlyCents > 0 {
 		metrics = append(metrics, subCreditsMetric(u, now))
 	}
-	metrics = append(metrics, apiBalanceMetric(u, now))
+	// API-balance only emits when there's actual API activity on the
+	// account: a non-zero balance OR /api-keys returned recognisable
+	// totals. Otherwise an account with no API platform usage would
+	// render a permanently-critical-red "$0.00 Balance" tile (default
+	// dollar threshold trips at <= 0 with NumericGoodWhen=high), which
+	// is misleading — they don't have an API account, not an empty one.
+	if u.APIBalanceCents > 0 || u.HasAPIData {
+		metrics = append(metrics, apiBalanceMetric(u, now))
+	}
 	if u.HasAPIData {
 		metrics = append(metrics, apiSpendMetric(u, now))
 		metrics = append(metrics, apiRequestsMetric(u, now))

@@ -38,6 +38,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/factory"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/gemini"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/grok"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/hermes"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/jetbrains"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kilo"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimi"
@@ -1644,6 +1645,13 @@ var knownLabels = map[string]string{
 	"grok3-queries-remaining":       "GROK 3",
 	"grok3-tokens-remaining":        "GROK 3",
 	"grok4-heavy-queries-remaining": "GROK 4",
+	// Hermes / Nous Research: subscription pool funds Hermes Agent +
+	// Nous Chat; the API pool is separate. SUB / API / API / API
+	// titles match the four metric tiles.
+	"hermes-sub-credits-remaining": "SUB",
+	"hermes-api-credits-remaining": "API",
+	"hermes-api-spend-total":       "API",
+	"hermes-api-requests-total":    "API",
 	// Perplexity: per-feature daily quotas + Comet/API dollar metrics.
 	// Titles match the live-tile labels emitted from snapshotFromUsage
 	// so a placeholder Perplexity tile reads identically to the live
@@ -1690,6 +1698,11 @@ var knownCaptions = map[string]string{
 	"grok3-queries-remaining":       "Queries",
 	"grok3-tokens-remaining":        "Tokens",
 	"grok4-heavy-queries-remaining": "Queries",
+	// Hermes / Nous Research placeholder captions mirror live tiles.
+	"hermes-sub-credits-remaining": "Credits",
+	"hermes-api-credits-remaining": "Balance",
+	"hermes-api-spend-total":       "Spend",
+	"hermes-api-requests-total":    "Requests",
 	// Perplexity placeholder captions mirror the live-tile subvalue —
 	// constant "Queries" for the per-feature counts, "Balance"/"Spend"
 	// for the dollar metrics so a row of Perplexity tiles reads as

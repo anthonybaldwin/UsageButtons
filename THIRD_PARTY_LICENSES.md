@@ -78,6 +78,12 @@ and `action-grok-key.svg` for the Stream Deck action thumbnail / key
 preview. The path data is unmodified from upstream; only the
 surrounding Go map structure / SVG wrapper is ours.
 
+The Hermes Agent action thumbnails (`action-hermes.png` and
+`action-hermes-key.png` in the same `assets/` directory) are the
+Hermes Agent avatar from lobe-icons's `static-avatar/avatars/
+hermesagent.webp`, downscaled to 144x144 / 288x288 PNG. Image content
+is unmodified.
+
 Authoritative license text:
 <https://github.com/lobehub/lobe-icons/blob/master/LICENSE>
 

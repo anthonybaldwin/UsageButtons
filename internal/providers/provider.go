@@ -53,6 +53,25 @@ type Snapshot struct {
 type FetchContext struct {
 	PollIntervalMs int64
 	Force          bool
+	// ActiveMetricIDs is the sorted, deduped set of metric IDs that at
+	// least one currently-bound Stream Deck button is displaying for
+	// this provider. Providers MAY use it to skip endpoints whose data
+	// doesn't contribute to any listed metric — saves quota on multi-
+	// endpoint providers (Perplexity, Gemini, Vertex, Cursor, Claude)
+	// for users who only bind a subset of their available metrics.
+	//
+	// Semantics:
+	//   nil           — fetch everything (cold start, force-refresh,
+	//                   or any context where the active set isn't known)
+	//   non-nil empty — no buttons bound; cache normally won't call
+	//                   Fetch in this state, but if it does, the
+	//                   provider may return an empty snapshot
+	//   non-nil set   — provider may skip work for metrics not listed
+	//
+	// Providers that ignore this field continue to work — the refactor
+	// is opt-in per provider, so adding it here is a no-op for the
+	// existing fleet.
+	ActiveMetricIDs []string
 }
 
 // Provider is the interface every usage-data source implements.

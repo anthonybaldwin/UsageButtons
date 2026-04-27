@@ -52,8 +52,12 @@ func (Provider) ID() string { return provID }
 // Name returns the human-readable provider name.
 func (Provider) Name() string { return provName }
 
-// BrandColor returns the accent color (Nous portal teal-700).
-func (Provider) BrandColor() string { return "#0f766e" }
+// BrandColor returns the meter-fill accent (teal-500). Nous's own
+// portal accents on teal-700, but at Stream Deck button size that
+// darker shade smudges into the teal-950 bg — bumping to the brighter
+// teal-500 keeps fill and bg visually distinct so the meter reads
+// crisply at every fill level.
+func (Provider) BrandColor() string { return "#14b8a6" }
 
 // BrandBg returns the background color (deep complement of the teal).
 func (Provider) BrandBg() string { return "#042f2e" }

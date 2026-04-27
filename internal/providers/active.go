@@ -36,6 +36,7 @@ type activeRegistry struct {
 	expiringAt map[string]map[string]time.Time
 }
 
+// activeReg is the process-wide singleton active-metric registry.
 var activeReg = &activeRegistry{
 	counts:     map[string]map[string]int{},
 	expiringAt: map[string]map[string]time.Time{},
@@ -96,6 +97,10 @@ func MarkInactive(providerID, metricID string) {
 // in their grace window. Returns nil when the provider has never had
 // any bound metrics (not an empty slice — `nil` carries the explicit
 // "fetch everything" semantics defined on FetchContext).
+//
+// Lazily evicts count-zero entries past their grace window so the
+// inner maps don't accumulate stale records for long-running
+// sessions where users repeatedly bind/unbind buttons.
 func ActiveFor(providerID string) []string {
 	if providerID == "" {
 		return nil
@@ -117,7 +122,15 @@ func ActiveFor(providerID string) []string {
 		if exp != nil {
 			if until, ok := exp[metricID]; ok && now.Before(until) {
 				out = append(out, metricID)
+				continue
 			}
+		}
+		// Count zero AND past the grace window (or never had a
+		// pending expiration) — drop both index entries so the maps
+		// don't grow without bound across long sessions.
+		delete(m, metricID)
+		if exp != nil {
+			delete(exp, metricID)
 		}
 	}
 	if len(out) == 0 {

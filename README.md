@@ -70,6 +70,7 @@ UsageButtons/
 │   │   ├── factory/                      # Droid / Factory (browser/token)
 │   │   ├── gemini/                       # Gemini CLI OAuth
 │   │   ├── grok/                         # Grok / xAI (browser)
+│   │   ├── hermes/                       # Hermes Agent / Nous Research (browser)
 │   │   ├── jetbrains/                    # JetBrains AI
 │   │   ├── kilo/                         # Kilo
 │   │   ├── kimi/                         # Kimi (browser/token)

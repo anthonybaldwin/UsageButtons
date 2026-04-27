@@ -67,6 +67,19 @@ func (Provider) MetricIDs() []string {
 }
 
 // Fetch returns the latest Vertex AI quota snapshot.
+//
+// Demand-fetching note (FetchContext.ActiveMetricIDs intentionally
+// ignored): both metrics this provider emits — session-percent
+// (request quota) and weekly-percent (token quota) — are derived
+// from the same usage-vs-limit Cloud Monitoring time-series pair.
+// There's no per-metric endpoint to skip, so consulting the active
+// set wouldn't reduce traffic. Listed in
+// plans/fetchcontext-active-metrics.md as a Phase 1 candidate but
+// closed out here as "no work to do" so a future reader doesn't
+// re-litigate the decision. The ActiveMetricIDs plumbing in
+// FetchContext is still present and would be honoured if Vertex
+// ever grew per-metric endpoints (e.g. a TPU-quota series separate
+// from request quota).
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()

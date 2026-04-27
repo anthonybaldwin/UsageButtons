@@ -315,6 +315,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.hermes",
+      "Name": "Hermes",
+      "Tooltip": "Nous Research usage stats — Hermes Agent / Nous Chat subscription credits, API credits, API spend.",
+      "Icon": "assets/action-hermes",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-hermes-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.warp",
       "Name": "Warp",
       "Tooltip": "Warp usage stats — credits %, bonus credits.",

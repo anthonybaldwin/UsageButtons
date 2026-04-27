@@ -268,10 +268,15 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 	cacheLog("cache[%s] miss — %sfetching upstream", p.ID(), forceStr)
 	e.mu.Unlock()
 
-	// Do the actual fetch outside the lock.
+	// Do the actual fetch outside the lock. ActiveMetricIDs lets opt-in
+	// providers skip endpoints that don't contribute to any displayed
+	// metric. nil = "fetch everything" (cache hasn't seen any
+	// MarkActive call for this provider yet, e.g. cold start), so the
+	// existing fleet keeps its current behavior unchanged.
 	snapshot, fetchErr := p.Fetch(FetchContext{
-		PollIntervalMs: int64(MinTTL / time.Millisecond),
-		Force:          opts.Force,
+		PollIntervalMs:  int64(MinTTL / time.Millisecond),
+		Force:           opts.Force,
+		ActiveMetricIDs: ActiveFor(p.ID()),
 	})
 
 	e.mu.Lock()

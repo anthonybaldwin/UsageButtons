@@ -334,6 +334,12 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	json.Unmarshal(payload.Settings, &ks)
 
 	metricID := effectiveMetricID(ks, providerID)
+	// Track this (provider, metric) pair so multi-endpoint providers
+	// can opt into skipping work for unbound metrics. Paired with the
+	// MarkInactive in handleWillDisappear; safe across PI dropdown
+	// changes via handleDidReceiveSettings (which marks the old
+	// metric inactive and the new one active).
+	providers.MarkActive(providerID, metricID)
 
 	// Check if the user has "Show Title" enabled for this key.
 	var tp streamdeck.WillAppearTitleParameters
@@ -499,9 +505,22 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 
 func handleWillDisappear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	mu.Lock()
+	key, ok := visibleKeys[ev.Context]
+	var providerID, metricID string
+	if ok {
+		providerID = streamdeck.ProviderIDFromAction(key.action)
+		metricID = effectiveMetricID(key.settings, providerID)
+	}
 	delete(visibleKeys, ev.Context)
 	n := len(visibleKeys)
 	mu.Unlock()
+	if ok {
+		// Pairs with the MarkActive in handleWillAppear. The grace
+		// window inside ActiveFor absorbs profile-switch flap (this
+		// disappear immediately followed by an appear from the new
+		// profile), so the next poll's FetchContext stays stable.
+		providers.MarkInactive(providerID, metricID)
+	}
 	conn.Logf("key disappeared (now tracking %d visible key(s))", n)
 }
 
@@ -536,7 +555,11 @@ func handleDidReceiveSettings(conn *streamdeck.Connection, ev streamdeck.Event) 
 
 	mu.Lock()
 	key, ok := visibleKeys[ev.Context]
+	var providerID, oldMetric, newMetric string
 	if ok {
+		providerID = streamdeck.ProviderIDFromAction(key.action)
+		oldMetric = effectiveMetricID(key.settings, providerID)
+		newMetric = effectiveMetricID(ks, providerID)
 		key.settings = ks
 		key.lastPollAt = time.Time{} // reset so scheduler picks it up
 		key.nextPollAt = time.Time{}
@@ -544,6 +567,12 @@ func handleDidReceiveSettings(conn *streamdeck.Connection, ev streamdeck.Event) 
 	mu.Unlock()
 
 	if ok {
+		// Keep the active-metric registry in sync when the user picks
+		// a different metric in the PI. No-op when nothing changed.
+		if oldMetric != newMetric {
+			providers.MarkInactive(providerID, oldMetric)
+			providers.MarkActive(providerID, newMetric)
+		}
 		go refreshKey(conn, ev.Context, false)
 	}
 }

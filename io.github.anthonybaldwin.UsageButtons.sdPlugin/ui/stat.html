@@ -426,6 +426,11 @@
       <p class="hint">Via extension from <code>perplexity.ai</code>.</p>
     </div>
 
+    <!-- Grok auth -->
+    <div id="authConfig-grok" class="auth-config" style="display:none">
+      <p class="hint">Via extension from <code>grok.com</code>.</p>
+    </div>
+
     <!-- Warp auth -->
     <div id="authConfig-warp" class="auth-config" style="display:none">
       <label for="warpKey">Warp API key</label>
@@ -671,6 +676,22 @@
       </label>
       <div class="override-control">
         <select id="po-smartContrast">
+          <option value="true">On</option>
+          <option value="false">Off</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Starfield decoration. Built-in default is on for Grok and off
+         for every other provider — see settings.providerDefaultStarfield. -->
+    <div class="override-row" data-provider-override="starfield">
+      <label class="override-label">
+        <input type="checkbox" id="po-starfield-enabled">
+        Starfield decoration (xAI-style white-dot field behind glyph)
+        <span class="override-inherit" id="po-starfield-inherit"></span>
+      </label>
+      <div class="override-control">
+        <select id="po-starfield">
           <option value="true">On</option>
           <option value="false">Off</option>
         </select>
@@ -987,6 +1008,11 @@
         ["api-balance",                 "API balance ($)",                           "ref-dollar"],
         ["api-spend",                   "API spend (all-time, $)",                   "ref-dollar"],
       ],
+      grok: [
+        ["grok3-queries-remaining",       "Grok 3 queries remaining (count)",      "pct"],
+        ["grok3-tokens-remaining",        "Grok 3 tokens remaining (API tier)",    "pct"],
+        ["grok4-heavy-queries-remaining", "Grok 4 Heavy queries remaining (count)","pct"],
+      ],
       warp: [
         ["credits-percent", "Credits remaining %",       "pct"],
         ["bonus-credits",   "Bonus credits remaining %", "pct"],
@@ -1036,7 +1062,7 @@
       ollama:     "#f7f7f7",
       cursor:     "#00bfa5",
       factory:    "#ff6b35",
-      gemini:     "#ab87ea",
+      gemini:     "#4285f4",
       vertexai:   "#4285f4",
       abacus:     "#38bdf8",
       alibaba:    "#ff6a00",
@@ -1047,6 +1073,7 @@
       opencodego: "#3b82f6",
       openrouter: "#6467f2",
       perplexity: "#20b2aa",
+      grok:       "#ffffff",
       warp:       "#938bb4",
       zai:        "#e85a6a",
       kimi:       "#fe603c",
@@ -1069,7 +1096,7 @@
       ollama:     "#141414",
       cursor:     "#06221f",
       factory:    "#281006",
-      gemini:     "#1b102a",
+      gemini:     "#0a1326",
       vertexai:   "#071426",
       abacus:     "#082033",
       alibaba:    "#281203",
@@ -1080,6 +1107,7 @@
       opencodego: "#081a33",
       openrouter: "#101028",
       perplexity: "#082423",
+      grok:       "#000000",
       warp:       "#171521",
       zai:        "#211012",
       kimi:       "#260d08",
@@ -1093,7 +1121,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -1114,6 +1142,7 @@
       opencodego: "OpenCode Go",
       openrouter: "OpenRouter",
       perplexity: "Perplexity",
+      grok:       "Grok",
       warp:       "Warp",
       zai:        "z.ai",
       kimi:       "Kimi",
@@ -1589,6 +1618,15 @@
       bindOverrideValue("smartContrast",
         ps.smartContrast != null ? String(!!ps.smartContrast) : String(scDefault),
         ps.smartContrast != null);
+
+      // Starfield: tri-state (inherit built-in default, on, off). Built-in
+      // default differs per provider — only Grok defaults on.
+      const sfDefault = STARFIELD_DEFAULTS[currentProviderId] === true;
+      setText("po-starfield-inherit",
+        "inherits built-in default: " + (sfDefault ? "on" : "off"));
+      bindOverrideValue("starfield",
+        ps.starfield != null ? String(!!ps.starfield) : String(sfDefault),
+        ps.starfield != null);
       bindOverrideValue("warnBelow",
         ps.warnBelow != null ? String(ps.warnBelow) : "",
         ps.warnBelow != null);
@@ -1649,6 +1687,12 @@
       ollama: true,
     };
 
+    // STARFIELD_DEFAULTS mirrors providerDefaultStarfield in
+    // internal/settings/settings.go. Currently only Grok opts in.
+    const STARFIELD_DEFAULTS = {
+      grok: true,
+    };
+
     function applyInverseCheckbox(prefix, name, savedValue) {
       const el = document.getElementById(prefix + "-inv-" + name);
       if (!el) return false;
@@ -1694,6 +1738,7 @@
         if (v !== undefined) ps[name] = v;
       });
       if (enabled("smartContrast")) ps.smartContrast = val("smartContrast") === "true";
+      if (enabled("starfield")) ps.starfield = val("starfield") === "true";
       if (enabled("warnBelow")) {
         const n = parseNum(val("warnBelow"));
         if (n !== undefined) ps.warnBelow = n;
@@ -2195,7 +2240,7 @@
       "po-refreshMinutes", "po-fillDirection",
       "po-valueSize", "po-subvalueSize",
       "po-fillColor", "po-bgColor", "po-textColor",
-      "po-smartContrast",
+      "po-smartContrast", "po-starfield",
       "po-warnBelow", "po-warnColor",
       "po-criticalBelow", "po-criticalColor",
     ].forEach((id) => {

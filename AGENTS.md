@@ -143,7 +143,10 @@ Current topics (GitHub caps this list at 20): `stream-deck`,
 `stream-deck-plugin`, `claude`, `openai-codex`, `cursor`, `gemini`,
 `vertex-ai`, `openrouter`, `abacus`, `alibaba`, `kilo`, `kiro`,
 `antigravity`, `augment`, `amp`, `mistral`, `minimax`, `kimi`,
-`perplexity`, `opencode`.
+`perplexity`, `grok`. (`opencode` was dropped to make room for
+`grok` at the 20-topic cap; restore it via `gh repo edit
+--add-topic opencode --remove-topic <other>` if you'd rather
+trade a different one.)
 
 ## Stream Deck plugin notes
 
@@ -163,7 +166,7 @@ Current topics (GitHub caps this list at 20): `stream-deck`,
 ## Browser fetch bridge (Usage Buttons Helper extension)
 
 Cookie-gated providers (Claude web extras, Codex web extras, Cursor,
-Ollama, Abacus AI, Alibaba, Augment, Amp, Droid, Kimi, MiniMax,
+Ollama, Abacus AI, Alibaba, Augment, Amp, Droid, Grok, Kimi, MiniMax,
 Mistral, OpenCode, OpenCode Go, and Perplexity) route
 requests through the companion Chrome extension in
 `chrome-extension/` (Usage Buttons Helper), which proxies `fetch()`

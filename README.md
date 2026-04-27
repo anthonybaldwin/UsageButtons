@@ -69,6 +69,7 @@ UsageButtons/
 │   │   ├── cursor/                       # Cursor (browser)
 │   │   ├── factory/                      # Droid / Factory (browser/token)
 │   │   ├── gemini/                       # Gemini CLI OAuth
+│   │   ├── grok/                         # Grok / xAI (browser)
 │   │   ├── jetbrains/                    # JetBrains AI
 │   │   ├── kilo/                         # Kilo
 │   │   ├── kimi/                         # Kimi (browser/token)

@@ -199,7 +199,6 @@ func perplexityFetchNeedsFor(active []string) perplexityFetchNeeds {
 	return n
 }
 
-
 // fetchAny performs a best-effort GET and unmarshals into dst (any-typed
 // so it accepts arrays or objects). Returns the raw bytes for diagnostic
 // dumping plus any error so callers may distinguish "no data" from a

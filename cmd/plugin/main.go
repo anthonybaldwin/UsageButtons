@@ -1615,6 +1615,18 @@ var knownLabels = map[string]string{
 	"grok3-queries-remaining":       "GROK 3",
 	"grok3-tokens-remaining":        "GROK 3",
 	"grok4-heavy-queries-remaining": "GROK 4",
+	// Perplexity: per-feature daily quotas + Comet/API dollar metrics.
+	// Titles match the live-tile labels emitted from snapshotFromUsage
+	// so a placeholder Perplexity tile reads identically to the live
+	// one. api-balance / api-spend share the "API" title — caption
+	// disambiguates (Balance vs Spend), same trick Grok uses.
+	"pro-queries-remaining":      "PRO",
+	"deep-research-remaining":    "DEEP RSRCH.",
+	"labs-remaining":             "LABS",
+	"agentic-research-remaining": "AGENTIC",
+	"comet-spend":                "COMET",
+	"api-balance":                "API",
+	"api-spend":                  "API",
 }
 
 // metricCaptionForPlaceholder returns a short caption for dashed-out
@@ -1649,6 +1661,17 @@ var knownCaptions = map[string]string{
 	"grok3-queries-remaining":       "Queries",
 	"grok3-tokens-remaining":        "Tokens",
 	"grok4-heavy-queries-remaining": "Queries",
+	// Perplexity placeholder captions mirror the live-tile subvalue —
+	// constant "Queries" for the per-feature counts, "Balance"/"Spend"
+	// for the dollar metrics so a row of Perplexity tiles reads as
+	// parallel and api-balance vs api-spend stay disambiguated.
+	"pro-queries-remaining":      "Queries",
+	"deep-research-remaining":    "Queries",
+	"labs-remaining":             "Queries",
+	"agentic-research-remaining": "Queries",
+	"comet-spend":                "Spend",
+	"api-balance":                "Balance",
+	"api-spend":                  "Spend",
 }
 
 func metricCaptionForPlaceholder(metricID string) string {

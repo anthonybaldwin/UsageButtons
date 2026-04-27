@@ -1000,9 +1000,13 @@
         ["rate-limit",      "Rate limit (requests / interval)", "ref"],
       ],
       perplexity: [
-        ["session-percent", "Recurring credits remaining %", "pct"],
-        ["weekly-percent",  "Bonus credits remaining %",     "pct"],
-        ["opus-percent",    "Purchased credits remaining %", "pct"],
+        ["pro-queries-remaining",       "Pro queries remaining today (count)",       "ref"],
+        ["deep-research-remaining",     "Deep Research remaining today (count)",     "ref"],
+        ["labs-remaining",              "Labs remaining today (count)",              "ref"],
+        ["agentic-research-remaining",  "Agentic Research remaining today (count)",  "ref"],
+        ["comet-spend",                 "Comet (computer-use) spend ($)",            "ref-dollar"],
+        ["api-balance",                 "API balance ($)",                           "ref-dollar"],
+        ["api-spend",                   "API spend (all-time, $)",                   "ref-dollar"],
       ],
       grok: [
         ["grok3-queries-remaining",       "Grok 3 queries remaining (count)",      "pct"],

@@ -109,8 +109,8 @@ func TestCountMetric_BuildsForValidShape(t *testing.T) {
 	if m.ID != "grok3-queries-remaining" {
 		t.Errorf("ID: got %q", m.ID)
 	}
-	if v, ok := m.Value.(string); !ok || v != "30/50" {
-		t.Errorf("Value: got %v (%T), want \"30/50\" string", m.Value, m.Value)
+	if v, ok := m.Value.(string); !ok || v != "30" {
+		t.Errorf("Value: got %v (%T), want \"30\" string", m.Value, m.Value)
 	}
 	if m.NumericUnit != "count" {
 		t.Errorf("NumericUnit: got %q, want count", m.NumericUnit)

@@ -284,14 +284,14 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 }
 
 // countMetric renders one rate-limit category as a count tile:
-// "139/140" is the prominent value, the meter fill scales to
-// remaining/total, and the caption is a one-word category
-// ("Queries" / "Tokens").
+// the remaining count itself is the prominent value, with a one-word
+// category caption ("Queries" / "Tokens") below it.
 //
 // Why count, not percent: grok.com's totals are small (140-cap on
 // grok-3, 20-cap on grok-4 Heavy). "10% remaining" of 20 = 2 — the
-// user has to do that math in their head. Showing X/Y directly
-// mirrors what grok.com's own /usage page shows.
+// user has to do that math in their head. Showing the raw remaining
+// number is more legible at-a-glance than either a percent or an X/Y
+// fraction.
 //
 // Reset countdown: fires only when the account has hit the limit
 // (remaining = 0) and the API surfaces waitTimeSeconds in one of
@@ -307,8 +307,7 @@ func countMetric(id, label, category, name string, remaining, total, waitSecs *i
 		return providers.MetricValue{}, false
 	}
 	rem := *remaining
-	tot := *total
-	val := fmt.Sprintf("%d/%d", rem, tot)
+	val := fmt.Sprintf("%d", rem)
 	num := float64(rem)
 	// Note: deliberately NOT setting Ratio (which would draw a meter
 	// fill bar) or RawCount/RawMax (which would override the caption
@@ -316,12 +315,14 @@ func countMetric(id, label, category, name string, remaining, total, waitSecs *i
 	// reference card — flat brand canvas with the count + glyph +
 	// category caption — because the totals are small and a partially-
 	// filled bar at "139/140" would just look like a flicker against
-	// the always-monochrome Grok presentation.
+	// the always-monochrome Grok presentation. total is still required
+	// as a plausibility check (skip when API returns no quota), but no
+	// longer surfaced — the bare remaining count is what the user reads.
 	m := providers.MetricValue{
 		ID:              id,
 		Label:           label,
 		Name:            name,
-		Value:           val, // "139/140" — Stream Deck title (label) sits above
+		Value:           val, // bare remaining count, e.g. "140"
 		NumericValue:    &num,
 		NumericUnit:     "count",
 		NumericGoodWhen: "high",

@@ -630,8 +630,8 @@ func (Provider) MetricIDs() []string {
 
 // claudeLocalOnlyMetrics is the set of metric IDs that are derived
 // from local Claude CLI logs and don't require any claude.ai network
-// call. Used by Fetch to short-circuit when no live-quota metric is
-// bound — see plans/fetchcontext-active-metrics.md.
+// call. Used by Fetch to short-circuit the network call when the
+// FetchContext.ActiveMetricIDs set contains only local-only metrics.
 var claudeLocalOnlyMetrics = map[string]bool{
 	"cost-today": true,
 	"cost-30d":   true,

@@ -10,18 +10,19 @@ required.
 
 Copyright (c) 2026 Peter Steinberger
 
-The following files are adapted from CodexBar's
+The following are adapted from CodexBar's
 `Sources/CodexBar/Resources/ProviderIcon-*.svg` assets, which are
 distributed under the MIT license:
 
-- `src/providers/provider-icons.generated.ts` — the `d` attribute
-  of each provider's single-path SVG is embedded into a
-  TypeScript map for compile-time inlining by
-  `bun build --compile`. The actual SVG paths are unmodified from
-  upstream; only the surrounding module structure is ours.
+- `internal/icons/icons.go` — the `d` attribute of each provider's
+  SVG is embedded into a Go map for compile-time inlining. The path
+  data is unmodified from upstream; only the surrounding Go map
+  structure is ours. A few entries (codex, grok, hermes) come from
+  lobehub/lobe-icons instead and are flagged inline; see the
+  lobehub/lobe-icons section below.
 
-- The provider-branding color table in
-  `src/providers/brand-colors.ts` mirrors the RGB values from
+- The `BrandColor()` / `BrandBg()` constants on each Go provider
+  under `internal/providers/<name>/` mirror the RGB values from
   CodexBar's `<Name>ProviderDescriptor.swift` `branding` blocks.
 
 Full MIT license text is reproduced in `tmp/CodexBar/LICENSE` when

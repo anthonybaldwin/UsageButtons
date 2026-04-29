@@ -230,7 +230,7 @@ func TestUsageFromResponses_RealUserShape(t *testing.T) {
 	}`
 	analytics := mustParseAny(t, `[{"meter_event_summaries":[]}]`)
 	now := time.Date(2026, 4, 26, 17, 0, 0, 0, time.UTC)
-	usage := usageFromResponses(mustParse(t, groupBody), mustParse(t, rateBody), analytics, now)
+	usage := usageFromResponses(mustParse(t, groupBody), mustParse(t, rateBody), analytics, nil, now)
 	if usage.BalanceCents != 0 {
 		t.Errorf("balance: got %v", usage.BalanceCents)
 	}
@@ -265,7 +265,7 @@ func TestUsageFromResponses_WithSpend(t *testing.T) {
 		{"meter_event_summaries":[{"cost":0.50}]}
 	]`)
 	now := time.Date(2026, 4, 26, 17, 0, 0, 0, time.UTC)
-	usage := usageFromResponses(mustParse(t, groupBody), mustParse(t, rateBody), analytics, now)
+	usage := usageFromResponses(mustParse(t, groupBody), mustParse(t, rateBody), analytics, nil, now)
 	// usage-analytics overrides customerInfo.spend (more granular source).
 	if usage.SpendCents != 225 {
 		t.Errorf("spend: got %v, want 225 cents", usage.SpendCents)
@@ -417,6 +417,218 @@ func TestSnapshotFromUsage_DollarMetricsAlwaysEmitted(t *testing.T) {
 		}
 		if snap.Metrics[i].NumericUnit != "dollars" {
 			t.Errorf("metric[%d] unit: got %s", i, snap.Metrics[i].NumericUnit)
+		}
+	}
+}
+
+func TestApplyCreditsResponse_CapturedFixture(t *testing.T) {
+	// Captured from /rest/billing/credits?version=2.18&source=default
+	// for an account with one promotional grant and meter usage. Mirrors
+	// the screenshot the user shared (539/2000 with $14.60 text usage).
+	body := mustParse(t, `{
+		"balance_cents": 539.0,
+		"auto_topup_enabled": false,
+		"auto_topup_amount_cents": 0,
+		"auto_topup_threshold_cents": 0,
+		"renewal_date_ts": 1779816297,
+		"spending_limit_cents": null,
+		"global_cap_cents": 10000,
+		"current_period_purchased_cents": 0,
+		"credit_grants": [
+			{"type":"promotional","amount_cents":2000,"expires_at_ts":1782494697}
+		],
+		"meter_usage": [
+			{"meter_type":"asi_token_usage","cost_cents":1460.154809346705}
+		],
+		"total_usage_cents": 1460.154809346705
+	}`)
+	usage := usageSnapshot{}
+	applyCreditsResponse(&usage, body)
+	if !usage.HasCredits {
+		t.Fatal("HasCredits must be true after applyCreditsResponse")
+	}
+	if usage.BalanceCreditsCents != 539 {
+		t.Errorf("balance: got %v, want 539", usage.BalanceCreditsCents)
+	}
+	if usage.GlobalCapCents != 10000 {
+		t.Errorf("cap: got %v, want 10000", usage.GlobalCapCents)
+	}
+	if usage.BonusCreditsCents != 2000 {
+		t.Errorf("bonus: got %v, want 2000", usage.BonusCreditsCents)
+	}
+	if usage.PlanCreditsCents != 0 {
+		t.Errorf("plan: got %v, want 0", usage.PlanCreditsCents)
+	}
+	if usage.PurchasedCreditsCents != 0 {
+		t.Errorf("purchased: got %v, want 0", usage.PurchasedCreditsCents)
+	}
+	if usage.TotalGrantsCents != 2000 {
+		t.Errorf("total grants: got %v, want 2000", usage.TotalGrantsCents)
+	}
+	if usage.AutoRefillEnabled {
+		t.Error("auto-refill should be false")
+	}
+	if usage.RenewalAt == nil {
+		t.Fatal("expected RenewalAt to be set")
+	}
+	if usage.BonusExpiresAt == nil {
+		t.Fatal("expected BonusExpiresAt to be set")
+	}
+	if got := usage.BonusExpiresAt.Unix(); got != 1782494697 {
+		t.Errorf("bonus expiry: got %v, want 1782494697", got)
+	}
+	if got := usage.MeterCostCents["asi_token_usage"]; got <= 1460 || got >= 1461 {
+		t.Errorf("text meter cost: got %v, want ~1460.15", got)
+	}
+	if usage.SpendingLimitCents != nil {
+		t.Errorf("spending limit: expected nil for null-in-JSON, got %v", *usage.SpendingLimitCents)
+	}
+}
+
+func TestApplyCreditGrants_GroupingByType(t *testing.T) {
+	body := mustParse(t, `{
+		"credit_grants":[
+			{"type":"plan","amount_cents":500},
+			{"type":"subscription","amount_cents":250},
+			{"type":"purchased","amount_cents":1000},
+			{"type":"promotional","amount_cents":300,"expires_at_ts":2000000000},
+			{"type":"bonus","amount_cents":200,"expires_at_ts":1900000000}
+		]
+	}`)
+	usage := usageSnapshot{}
+	applyCreditsResponse(&usage, body)
+	if usage.PlanCreditsCents != 750 {
+		t.Errorf("plan: got %v, want 750 (plan + subscription)", usage.PlanCreditsCents)
+	}
+	if usage.PurchasedCreditsCents != 1000 {
+		t.Errorf("purchased: got %v, want 1000", usage.PurchasedCreditsCents)
+	}
+	if usage.BonusCreditsCents != 500 {
+		t.Errorf("bonus: got %v, want 500 (promotional + bonus)", usage.BonusCreditsCents)
+	}
+	// Earliest expiry across bonus grants wins.
+	if usage.BonusExpiresAt == nil || usage.BonusExpiresAt.Unix() != 1900000000 {
+		t.Errorf("bonus expiry: expected earliest (1900000000), got %v", usage.BonusExpiresAt)
+	}
+	if usage.TotalGrantsCents != 2250 {
+		t.Errorf("total grants: got %v, want 2250", usage.TotalGrantsCents)
+	}
+}
+
+func TestApplyCreditsResponse_AutoRefillEnabled(t *testing.T) {
+	body := mustParse(t, `{
+		"auto_topup_enabled": true,
+		"auto_topup_threshold_cents": 500,
+		"auto_topup_amount_cents": 2000
+	}`)
+	usage := usageSnapshot{}
+	applyCreditsResponse(&usage, body)
+	if !usage.AutoRefillEnabled {
+		t.Error("expected auto-refill enabled")
+	}
+	if usage.AutoRefillThresholdCents != 500 || usage.AutoRefillAmountCents != 2000 {
+		t.Errorf("threshold/amount: got %v/%v, want 500/2000",
+			usage.AutoRefillThresholdCents, usage.AutoRefillAmountCents)
+	}
+}
+
+func TestApplyCreditsResponse_PurchasedCreditsFallback(t *testing.T) {
+	// No "purchased" grants but current_period_purchased_cents > 0 —
+	// fall back so the purchased-credits tile still has a value.
+	body := mustParse(t, `{
+		"current_period_purchased_cents": 500,
+		"credit_grants": []
+	}`)
+	usage := usageSnapshot{}
+	applyCreditsResponse(&usage, body)
+	if usage.PurchasedCreditsCents != 500 {
+		t.Errorf("purchased fallback: got %v, want 500", usage.PurchasedCreditsCents)
+	}
+}
+
+func TestSnapshotFromUsage_CreditsTilesEmittedWhenHasCredits(t *testing.T) {
+	bonusExp := time.Unix(1782494697, 0)
+	renewal := time.Unix(1779816297, 0)
+	usage := usageSnapshot{
+		HasCredits:               true,
+		PlanCreditsCents:         0,
+		PurchasedCreditsCents:    0,
+		BonusCreditsCents:        2000,
+		BonusExpiresAt:           &bonusExp,
+		BalanceCreditsCents:      539,
+		TotalGrantsCents:         2000,
+		AutoRefillEnabled:        false,
+		AutoRefillThresholdCents: 0,
+		RenewalAt:                &renewal,
+		MeterCostCents: map[string]float64{
+			"asi_token_usage": 1460.15,
+		},
+		UpdatedAt: time.Now(),
+	}
+	snap := snapshotFromUsage(usage)
+	want := []string{
+		"comet-spend", "api-balance", "api-spend",
+		"plan-credits", "purchased-credits", "bonus-credits", "total-credits",
+		"auto-refill",
+		"text-usage", "image-usage", "video-usage", "audio-usage",
+	}
+	if len(snap.Metrics) != len(want) {
+		t.Fatalf("metric count: got %d, want %d", len(snap.Metrics), len(want))
+	}
+	for i, w := range want {
+		if snap.Metrics[i].ID != w {
+			t.Errorf("metric[%d]: got %q, want %q", i, snap.Metrics[i].ID, w)
+		}
+	}
+}
+
+func TestSnapshotFromUsage_NoCreditsTilesWhenHasCreditsFalse(t *testing.T) {
+	usage := usageSnapshot{HasCredits: false, UpdatedAt: time.Now()}
+	snap := snapshotFromUsage(usage)
+	for _, m := range snap.Metrics {
+		if metricsNeedingCredits[m.ID] {
+			t.Errorf("did not expect credit-tile %q when HasCredits=false", m.ID)
+		}
+	}
+}
+
+func TestTotalCreditsMetric_RatioAndCountdown(t *testing.T) {
+	renewal := time.Now().Add(48 * time.Hour)
+	usage := usageSnapshot{
+		HasCredits:          true,
+		BalanceCreditsCents: 539,
+		TotalGrantsCents:    2000,
+		RenewalAt:           &renewal,
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	m := totalCreditsMetric(usage, now)
+	if m.Ratio == nil || *m.Ratio < 0.26 || *m.Ratio > 0.27 {
+		t.Errorf("ratio: got %v, want ~0.27 (539/2000)", m.Ratio)
+	}
+	if m.RawCount == nil || *m.RawCount != 539 {
+		t.Errorf("raw count: got %v, want 539", m.RawCount)
+	}
+	if m.RawMax == nil || *m.RawMax != 2000 {
+		t.Errorf("raw max: got %v, want 2000", m.RawMax)
+	}
+	if m.ResetInSeconds == nil || *m.ResetInSeconds <= 0 {
+		t.Errorf("ResetInSeconds: got %v, want positive", m.ResetInSeconds)
+	}
+}
+
+func TestFormatCredits(t *testing.T) {
+	cases := map[float64]string{
+		0:                "0",
+		539:              "539",
+		1460.154809:      "1,460.15",
+		2000:             "2,000",
+		1234567:          "1,234,567",
+		1234567.89:       "1,234,567.89",
+	}
+	for in, want := range cases {
+		got := formatCredits(in)
+		if got != want {
+			t.Errorf("formatCredits(%v): got %q, want %q", in, got, want)
 		}
 	}
 }

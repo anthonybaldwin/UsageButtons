@@ -413,7 +413,7 @@
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.perplexity",
       "Name": "Perplexity",
-      "Tooltip": "Perplexity usage stats — recurring, bonus, and purchased credits.",
+      "Tooltip": "Perplexity usage stats — Pro/Research/Labs query counts, plan/purchased/bonus credits, per-meter usage breakdown, API balance + spend, Comet spend.",
       "Icon": "assets/action-perplexity",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,

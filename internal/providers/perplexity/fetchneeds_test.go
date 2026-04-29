@@ -4,15 +4,15 @@ import "testing"
 
 func TestFetchNeeds_NilActiveFetchesEverything(t *testing.T) {
 	n := perplexityFetchNeedsFor(nil)
-	if !n.group || !n.analytics || !n.rate {
+	if !n.group || !n.analytics || !n.rate || !n.credits {
 		t.Errorf("nil active set must fetch everything, got %+v", n)
 	}
 }
 
 func TestFetchNeeds_OnlyRateMetricsSkipGroupAndAnalytics(t *testing.T) {
 	n := perplexityFetchNeedsFor([]string{"pro-queries-remaining", "labs-remaining"})
-	if n.group || n.analytics {
-		t.Errorf("rate-only active set should skip group + analytics, got %+v", n)
+	if n.group || n.analytics || n.credits {
+		t.Errorf("rate-only active set should skip group + analytics + credits, got %+v", n)
 	}
 	if !n.rate {
 		t.Error("rate must be true when rate metrics are bound")
@@ -31,6 +31,9 @@ func TestFetchNeeds_OnlyBalanceSkipsRateAndAnalytics(t *testing.T) {
 	}
 	if n.rate {
 		t.Error("api-balance must NOT trigger /rate-limit/all")
+	}
+	if n.credits {
+		t.Error("api-balance must NOT trigger /rest/billing/credits")
 	}
 }
 
@@ -61,7 +64,37 @@ func TestFetchNeeds_EmptySetSkipsEverything(t *testing.T) {
 	// Cache layer normally won't call Fetch in that state, but if it
 	// does we should skip every endpoint rather than wastefully fetch.
 	n := perplexityFetchNeedsFor([]string{})
-	if n.group || n.analytics || n.rate {
+	if n.group || n.analytics || n.rate || n.credits {
 		t.Errorf("empty active set should skip every endpoint, got %+v", n)
+	}
+}
+
+func TestFetchNeeds_CreditsMetricsTriggerCreditsEndpoint(t *testing.T) {
+	cases := []string{
+		"plan-credits", "purchased-credits", "bonus-credits",
+		"total-credits", "auto-refill",
+		"text-usage", "image-usage", "video-usage", "audio-usage",
+	}
+	for _, id := range cases {
+		n := perplexityFetchNeedsFor([]string{id})
+		if !n.credits {
+			t.Errorf("%s: credits must be true", id)
+		}
+		if n.group || n.analytics || n.rate {
+			t.Errorf("%s: credits-only metric must skip other endpoints, got %+v", id, n)
+		}
+	}
+}
+
+func TestFetchNeeds_MixedCreditsAndRate(t *testing.T) {
+	n := perplexityFetchNeedsFor([]string{"text-usage", "pro-queries-remaining"})
+	if !n.credits {
+		t.Error("expected credits=true")
+	}
+	if !n.rate {
+		t.Error("expected rate=true")
+	}
+	if n.group || n.analytics {
+		t.Error("group/analytics should remain false when no group-bound metric is active")
 	}
 }

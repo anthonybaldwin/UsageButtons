@@ -1,18 +1,17 @@
 // Package kimi implements the Kimi usage provider.
 //
-// Auth: Kimi auth token from Property Inspector or env, falling back to the
-// Usage Buttons Helper extension with the user's kimi.com browser session.
+// Auth: Usage Buttons Helper extension with the user's kimi.com browser
+// session. There is no manual cookie/JWT paste — the extension is the
+// only path so credentials never leave Chrome.
 // Endpoint: POST https://www.kimi.com/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages.
 package kimi
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -22,12 +21,9 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers/cookieaux"
 	"github.com/anthonybaldwin/UsageButtons/internal/providers/providerutil"
-	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
 const usageURL = "https://www.kimi.com/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages"
-
-var kimiAuthRE = regexp.MustCompile(`(?i)kimi-auth[:=]\s*([A-Za-z0-9._\-+=/]+)`)
 
 // usageResponse is Kimi's coding usage response.
 type usageResponse struct {
@@ -61,13 +57,6 @@ type rateWindow struct {
 	TimeUnit string `json:"timeUnit"`
 }
 
-// sessionInfo is optional metadata decoded from the kimi-auth JWT.
-type sessionInfo struct {
-	DeviceID  string
-	SessionID string
-	TrafficID string
-}
-
 // usageSnapshot is the parsed Kimi quota state.
 type usageSnapshot struct {
 	Weekly    usageDetail
@@ -97,18 +86,6 @@ func (Provider) MetricIDs() []string {
 
 // Fetch returns the latest Kimi usage snapshot.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
-	if token := configuredToken(); token != "" {
-		usage, err := fetchWithToken(token)
-		if err == nil {
-			return snapshotFromUsage(usage, "token"), nil
-		}
-		var httpErr *httputil.Error
-		if errors.As(err, &httpErr) && (httpErr.Status == 401 || httpErr.Status == 403) {
-			return errorSnapshot("Kimi auth token is invalid or expired. Refresh the kimi-auth cookie/token."), nil
-		}
-		return providers.Snapshot{}, err
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if !cookies.HostAvailable(ctx) {
@@ -122,48 +99,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		}
 		return errorSnapshot(err.Error()), nil
 	}
-	return snapshotFromUsage(usage, "cookie"), nil
-}
-
-// configuredToken resolves a Kimi auth token from settings or env.
-func configuredToken() string {
-	pk := settings.ProviderKeysGet()
-	for _, raw := range []string{
-		pk.KimiAuthToken,
-		settings.ResolveAPIKey("", "KIMI_AUTH_TOKEN", "kimi_auth_token", "KIMI_MANUAL_COOKIE"),
-	} {
-		if token := cleanToken(raw); token != "" {
-			return token
-		}
-	}
-	return ""
-}
-
-// cleanToken extracts a kimi-auth JWT from a token, cookie, or curl header.
-func cleanToken(raw string) string {
-	v := strings.TrimSpace(raw)
-	if len(v) >= 2 && ((v[0] == '"' && v[len(v)-1] == '"') || (v[0] == '\'' && v[len(v)-1] == '\'')) {
-		v = strings.TrimSpace(v[1 : len(v)-1])
-	}
-	if match := kimiAuthRE.FindStringSubmatch(v); len(match) > 1 {
-		return strings.TrimSpace(match[1])
-	}
-	if strings.HasPrefix(v, "eyJ") && strings.Count(v, ".") == 2 {
-		return v
-	}
-	return ""
-}
-
-// fetchWithToken fetches Kimi usage with a known kimi-auth token.
-func fetchWithToken(token string) (usageSnapshot, error) {
-	var out usageResponse
-	err := httputil.PostJSON(usageURL, usageHeaders(token), map[string]any{
-		"scope": []string{"FEATURE_CODING"},
-	}, 20*time.Second, &out)
-	if err != nil {
-		return usageSnapshot{}, err
-	}
-	return parseUsage(out, time.Now().UTC())
+	return snapshotFromUsage(usage), nil
 }
 
 // fetchWithBrowser fetches Kimi usage through the Helper extension.
@@ -208,56 +144,6 @@ func fetchWithBrowser(ctx context.Context) (usageSnapshot, error) {
 	return parseUsage(out, time.Now().UTC())
 }
 
-// usageHeaders builds direct API headers for a known kimi-auth token.
-func usageHeaders(token string) map[string]string {
-	headers := map[string]string{
-		"Authorization":            "Bearer " + token,
-		"Cookie":                   "kimi-auth=" + token,
-		"Accept":                   "*/*",
-		"Origin":                   "https://www.kimi.com",
-		"Referer":                  "https://www.kimi.com/code/console",
-		"connect-protocol-version": "1",
-		"x-language":               "en-US",
-		"x-msh-platform":           "web",
-		"r-timezone":               "UTC",
-	}
-	if info := decodeSessionInfo(token); info != nil {
-		if info.DeviceID != "" {
-			headers["x-msh-device-id"] = info.DeviceID
-		}
-		if info.SessionID != "" {
-			headers["x-msh-session-id"] = info.SessionID
-		}
-		if info.TrafficID != "" {
-			headers["x-traffic-id"] = info.TrafficID
-		}
-	}
-	return headers
-}
-
-// decodeSessionInfo extracts optional Kimi request headers from the JWT payload.
-func decodeSessionInfo(jwt string) *sessionInfo {
-	parts := strings.Split(jwt, ".")
-	if len(parts) != 3 {
-		return nil
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		if payload, err = base64.URLEncoding.DecodeString(parts[1]); err != nil {
-			return nil
-		}
-	}
-	var root map[string]any
-	if err := json.Unmarshal(payload, &root); err != nil {
-		return nil
-	}
-	return &sessionInfo{
-		DeviceID:  providerutil.StringValue(root["device_id"]),
-		SessionID: providerutil.StringValue(root["ssid"]),
-		TrafficID: providerutil.StringValue(root["sub"]),
-	}
-}
-
 // parseUsage selects FEATURE_CODING quota and rate-limit lanes.
 func parseUsage(resp usageResponse, now time.Time) (usageSnapshot, error) {
 	for _, usage := range resp.Usages {
@@ -279,7 +165,7 @@ func parseUsage(resp usageResponse, now time.Time) (usageSnapshot, error) {
 }
 
 // snapshotFromUsage maps parsed Kimi usage into Stream Deck metrics.
-func snapshotFromUsage(usage usageSnapshot, source string) providers.Snapshot {
+func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	now := usage.UpdatedAt.UTC().Format(time.RFC3339)
 	metrics := []providers.MetricValue{
 		quotaMetric("session-percent", "WEEKLY", "Kimi weekly requests remaining", usage.Weekly, "requests", now),
@@ -290,7 +176,7 @@ func snapshotFromUsage(usage usageSnapshot, source string) providers.Snapshot {
 	return providers.Snapshot{
 		ProviderID:   "kimi",
 		ProviderName: "Kimi",
-		Source:       source,
+		Source:       "cookie",
 		Metrics:      metrics,
 		Status:       "operational",
 	}

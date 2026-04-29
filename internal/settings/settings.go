@@ -132,7 +132,6 @@ type ProviderKeys struct {
 	CopilotToken  string `json:"copilotToken,omitempty"`
 	SyntheticKey  string `json:"syntheticKey,omitempty"`
 	KiloKey       string `json:"kiloKey,omitempty"`
-	KimiAuthToken string `json:"kimiAuthToken,omitempty"`
 	MiniMaxKey    string `json:"miniMaxKey,omitempty"`
 	AlibabaKey    string `json:"alibabaKey,omitempty"`
 	FactoryToken  string `json:"factoryToken,omitempty"`
@@ -600,9 +599,6 @@ func ChangedProviderIDs(prev, next ProviderKeys) []string {
 	}
 	if prev.KiloKey != next.KiloKey {
 		out = append(out, "kilo")
-	}
-	if prev.KimiAuthToken != next.KimiAuthToken {
-		out = append(out, "kimi")
 	}
 	if prev.MiniMaxKey != next.MiniMaxKey ||
 		prev.MiniMaxRegion != next.MiniMaxRegion {

@@ -28,7 +28,7 @@ account or API response includes that quota lane.
 | Hermes / Nous Research | Usage Buttons Helper from `portal.nousresearch.com`. | Subscription credits ($, Hermes Agent + Nous Chat pool), API credits balance ($), all-time totals (spend $, requests, tokens, input/output/cache-read/cache-write tokens) — combined or split by allowance (api / sub). |
 | JetBrains AI | Local JetBrains IDE quota files. Optional overrides: `CODEXBAR_JETBRAINS_IDE_BASE_PATH` or `JETBRAINS_QUOTA_FILE`. | Current credits remaining %. |
 | Kilo | Kilo API key from the Provider tab, `KILO_API_KEY`, or `~/.local/share/kilo/auth.json`. | Credits remaining %, Kilo Pass remaining %. |
-| Kimi | `kimi-auth` token from the Provider tab, Usage Buttons Helper from `kimi.com`, `KIMI_AUTH_TOKEN`, or `KIMI_MANUAL_COOKIE`. | Weekly coding quota remaining %, 5-hour rate limit remaining %. |
+| Kimi | Usage Buttons Helper from `kimi.com`. | Weekly coding quota remaining %, 5-hour rate limit remaining %. |
 | Kimi K2 | Kimi K2 API key from the Provider tab or `KIMI_K2_API_KEY`. | Credits remaining. |
 | Kiro | `kiro-cli`; run `kiro-cli login` first. | Monthly credits remaining %, bonus credits remaining %. |
 | MiniMax | MiniMax API key from the Provider tab / `MINIMAX_API_KEY`, or Usage Buttons Helper from `minimax.io`. Optional region override: `MINIMAX_REGION`. | Coding prompts remaining %. |

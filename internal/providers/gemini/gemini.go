@@ -116,7 +116,7 @@ func (Provider) BrandBg() string { return "#0a1326" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
-	return []string{"session-percent", "weekly-percent", "opus-percent"}
+	return []string{"pro-percent", "flash-percent", "flash-lite-percent"}
 }
 
 // Fetch returns the latest Gemini quota snapshot.
@@ -729,17 +729,17 @@ func snapshotFromStatus(status geminiStatus) providers.Snapshot {
 	now := providerutil.NowString()
 	var metrics []providers.MetricValue
 	if q, ok := lowestMatchingQuota(status.Quotas, isProModel); ok {
-		metrics = append(metrics, quotaMetric("session-percent", "PRO", "Gemini Pro quota remaining", q, now))
+		metrics = append(metrics, quotaMetric("pro-percent", "PRO", "Gemini Pro quota remaining", q, now))
 	}
 	if q, ok := lowestMatchingQuota(status.Quotas, isFlashModel); ok {
-		metrics = append(metrics, quotaMetric("weekly-percent", "FLASH", "Gemini Flash quota remaining", q, now))
+		metrics = append(metrics, quotaMetric("flash-percent", "FLASH", "Gemini Flash quota remaining", q, now))
 	}
 	if q, ok := lowestMatchingQuota(status.Quotas, isFlashLiteModel); ok {
-		metrics = append(metrics, quotaMetric("opus-percent", "FLASH LITE", "Gemini Flash Lite quota remaining", q, now))
+		metrics = append(metrics, quotaMetric("flash-lite-percent", "FLASH LITE", "Gemini Flash Lite quota remaining", q, now))
 	}
 	if len(metrics) == 0 && len(status.Quotas) > 0 {
 		q := status.Quotas[0]
-		metrics = append(metrics, quotaMetric("session-percent", "QUOTA", "Gemini quota remaining", q, now))
+		metrics = append(metrics, quotaMetric("pro-percent", "QUOTA", "Gemini quota remaining", q, now))
 	}
 
 	name := providerName

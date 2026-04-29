@@ -48,9 +48,9 @@ func TestSnapshotFromStatusMapsGeminiMetricLanes(t *testing.T) {
 		t.Fatalf("ProviderName = %q, want Gemini Paid", snapshot.ProviderName)
 	}
 	want := map[string]float64{
-		"session-percent": 25,
-		"weekly-percent":  60,
-		"opus-percent":    90,
+		"pro-percent":        25,
+		"flash-percent":      60,
+		"flash-lite-percent": 90,
 	}
 	if len(snapshot.Metrics) != len(want) {
 		t.Fatalf("len(Metrics) = %d, want %d", len(snapshot.Metrics), len(want))

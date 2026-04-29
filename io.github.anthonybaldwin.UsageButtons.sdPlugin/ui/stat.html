@@ -971,9 +971,9 @@
         ["weekly-percent",  "Premium tokens remaining %",  "pct"],
       ],
       gemini: [
-        ["session-percent", "Pro quota remaining %",        "pct"],
-        ["weekly-percent",  "Flash quota remaining %",      "pct"],
-        ["opus-percent",    "Flash Lite quota remaining %", "pct"],
+        ["pro-percent",        "Pro quota remaining %",        "pct"],
+        ["flash-percent",      "Flash quota remaining %",      "pct"],
+        ["flash-lite-percent", "Flash Lite quota remaining %", "pct"],
       ],
       vertexai: [
         ["session-percent", "Request quota remaining %", "pct"],
@@ -985,12 +985,12 @@
       alibaba: [
         ["session-percent", "5-hour quota remaining %", "pct"],
         ["weekly-percent",  "Weekly quota remaining %", "pct"],
-        ["opus-percent",    "Monthly quota remaining %", "pct"],
+        ["monthly-percent", "Monthly quota remaining %", "pct"],
       ],
       antigravity: [
-        ["session-percent", "Claude quota remaining %",       "pct"],
-        ["weekly-percent",  "Gemini Pro quota remaining %",   "pct"],
-        ["opus-percent",    "Gemini Flash quota remaining %", "pct"],
+        ["claude-percent",       "Claude quota remaining %",       "pct"],
+        ["gemini-pro-percent",   "Gemini Pro quota remaining %",   "pct"],
+        ["gemini-flash-percent", "Gemini Flash quota remaining %", "pct"],
       ],
       augment: [
         ["session-percent", "Credits remaining %", "pct"],
@@ -1237,6 +1237,31 @@
       } catch { /* ignore */ }
     }
 
+    // ---------- Metric ID migration ----------
+    // Pre-rename providers (Gemini, Antigravity, Alibaba) reused
+    // Claude-flavored metric IDs (session/weekly/opus). Mirror the
+    // plugin-side alias so the dropdown selects the right option for
+    // saved buttons that still carry the old IDs.
+    const METRIC_ID_ALIASES = {
+      gemini: {
+        "session-percent": "pro-percent",
+        "weekly-percent":  "flash-percent",
+        "opus-percent":    "flash-lite-percent",
+      },
+      antigravity: {
+        "session-percent": "claude-percent",
+        "weekly-percent":  "gemini-pro-percent",
+        "opus-percent":    "gemini-flash-percent",
+      },
+      alibaba: {
+        "opus-percent": "monthly-percent",
+      },
+    };
+    function migrateMetricId(providerId, metricId) {
+      const aliases = METRIC_ID_ALIASES[providerId];
+      return (aliases && aliases[metricId]) || metricId;
+    }
+
     // ---------- Browser-gated metric helpers ----------
     // Data-driven: a metric row's 4th element is its `auth` tag. Only
     // "browser" is meaningful today — rows without it work via OAuth /
@@ -1426,7 +1451,13 @@
     }
 
     function applyKeySettings(settings) {
-      const metricId = settings.metricId || (METRICS[currentProviderId] ? METRICS[currentProviderId][0][0] : "session-percent");
+      const rawMetricId = settings.metricId || (METRICS[currentProviderId] ? METRICS[currentProviderId][0][0] : "session-percent");
+      // Pre-rename buttons may have Claude-flavored metric IDs that no
+      // longer appear in the dropdown for their provider; map them to
+      // the new names so the right option is selected. The plugin
+      // mirrors this alias on read, so old buttons keep working even if
+      // the user never reopens the PI.
+      const metricId = migrateMetricId(currentProviderId, rawMetricId);
       populateMetrics(currentProviderId, metricId);
       updateFeatureVisibility(currentProviderId, metricId);
 

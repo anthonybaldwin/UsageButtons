@@ -108,7 +108,7 @@ func (Provider) BrandBg() string { return "#0d2418" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
-	return []string{"session-percent", "weekly-percent", "opus-percent"}
+	return []string{"claude-percent", "gemini-pro-percent", "gemini-flash-percent"}
 }
 
 // Fetch returns the latest Antigravity quota snapshot.
@@ -666,13 +666,13 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 
 	var metrics []providers.MetricValue
 	if primary != nil {
-		metrics = append(metrics, quotaMetric("session-percent", "CLAUDE", "Antigravity Claude quota remaining", *primary, now))
+		metrics = append(metrics, quotaMetric("claude-percent", "CLAUDE", "Antigravity Claude quota remaining", *primary, now))
 	}
 	if secondary != nil {
-		metrics = append(metrics, quotaMetric("weekly-percent", "GEMINI PRO", "Antigravity Gemini Pro quota remaining", *secondary, now))
+		metrics = append(metrics, quotaMetric("gemini-pro-percent", "GEMINI PRO", "Antigravity Gemini Pro quota remaining", *secondary, now))
 	}
 	if tertiary != nil {
-		metrics = append(metrics, quotaMetric("opus-percent", "GEMINI FLASH", "Antigravity Gemini Flash quota remaining", *tertiary, now))
+		metrics = append(metrics, quotaMetric("gemini-flash-percent", "GEMINI FLASH", "Antigravity Gemini Flash quota remaining", *tertiary, now))
 	}
 
 	return providers.Snapshot{

@@ -118,7 +118,7 @@ func metricsFromRoot(root map[string]any) ([]providers.MetricValue, error) {
 			label string
 			name  string
 		}{
-			{"session-percent", "5-HOUR", "Five-hour quota remaining"},
+			{"session-percent", "SESSION", "Five-hour quota remaining"},
 			{"weekly-percent", "WEEKLY", "Weekly tokens remaining"},
 			{"search-percent", "SEARCH", "Search hourly remaining"},
 		}
@@ -286,9 +286,13 @@ func parseQuota(m map[string]any) (quotaEntry, bool) {
 }
 
 // quotaMetric turns a parsed Synthetic lane into a Stream Deck metric.
+// Caption is left empty so the SD subtext falls through to the
+// reset-time countdown when usage has started, or the "Remaining"
+// fallback when the window is still idle — same convention as Claude
+// and Codex. The window length is implicit from the SESSION / WEEKLY /
+// SEARCH label.
 func quotaMetric(id, label, name string, q quotaEntry, now string) providers.MetricValue {
-	caption := windowDescription(q.WindowMinutes)
-	m := providerutil.PercentRemainingMetric(id, label, name, q.UsedPercent, q.ResetAt, caption, now)
+	m := providerutil.PercentRemainingMetric(id, label, name, q.UsedPercent, q.ResetAt, "", now)
 	if q.Remaining != nil && q.Total != nil {
 		m = providerutil.RawCounts(m, *q.Remaining, *q.Total)
 	}
@@ -304,7 +308,7 @@ func fallbackIdentity(q quotaEntry, index int) (id, label, name string) {
 	case strings.Contains(base, "search"):
 		return "search-percent", "SEARCH", "Search quota remaining"
 	case strings.Contains(base, "five") || strings.Contains(base, "5"):
-		return "session-percent", "5-HOUR", "Five-hour quota remaining"
+		return "session-percent", "SESSION", "Five-hour quota remaining"
 	}
 	if base == "" {
 		base = fmt.Sprintf("quota-%d", index+1)
@@ -375,31 +379,6 @@ func windowMinutesText(text string) int {
 		}
 	}
 	return 0
-}
-
-// windowDescription formats a known quota window.
-func windowDescription(minutes int) string {
-	if minutes <= 0 {
-		return ""
-	}
-	if minutes%(24*60) == 0 {
-		days := minutes / (24 * 60)
-		if days == 1 {
-			return "1 day window"
-		}
-		return fmt.Sprintf("%d days window", days)
-	}
-	if minutes%60 == 0 {
-		hours := minutes / 60
-		if hours == 1 {
-			return "1 hour window"
-		}
-		return fmt.Sprintf("%d hours window", hours)
-	}
-	if minutes == 1 {
-		return "1 minute window"
-	}
-	return fmt.Sprintf("%d minutes window", minutes)
 }
 
 var (

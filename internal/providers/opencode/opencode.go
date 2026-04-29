@@ -446,8 +446,8 @@ func pickAnyWindow(candidates []windowCandidate, pickShorter bool, excluding *wi
 func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	now := usage.UpdatedAt.UTC().Format(time.RFC3339)
 	metrics := []providers.MetricValue{
-		percentMetric("session-percent", "5-HOUR", "OpenCode five-hour usage remaining", usage.RollingUsagePercent, usage.RollingResetInSec, "5h", now),
-		percentMetric("weekly-percent", "WEEKLY", "OpenCode weekly usage remaining", usage.WeeklyUsagePercent, usage.WeeklyResetInSec, "7d", now),
+		percentMetric("session-percent", "SESSION", "OpenCode session window remaining (5h)", usage.RollingUsagePercent, usage.RollingResetInSec, "", now),
+		percentMetric("weekly-percent", "WEEKLY", "OpenCode weekly window remaining", usage.WeeklyUsagePercent, usage.WeeklyResetInSec, "", now),
 	}
 	return providers.Snapshot{
 		ProviderID:   "opencode",

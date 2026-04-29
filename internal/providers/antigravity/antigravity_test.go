@@ -46,9 +46,9 @@ func TestParseUserStatusResponse_SelectsCodexBarLanes(t *testing.T) {
 	if len(snapshot.Metrics) != 3 {
 		t.Fatalf("metric count = %d, want 3", len(snapshot.Metrics))
 	}
-	assertMetric(t, snapshot.Metrics[0], "session-percent", "CLAUDE", 42)
-	assertMetric(t, snapshot.Metrics[1], "weekly-percent", "GEMINI PRO", 21)
-	assertMetric(t, snapshot.Metrics[2], "opus-percent", "GEMINI FLASH", 84)
+	assertMetric(t, snapshot.Metrics[0], "claude-percent", "CLAUDE", 42)
+	assertMetric(t, snapshot.Metrics[1], "gemini-pro-percent", "GEMINI PRO", 21)
+	assertMetric(t, snapshot.Metrics[2], "gemini-flash-percent", "GEMINI FLASH", 84)
 }
 
 func TestExtractFlagHandlesQuotedAndEqualsForms(t *testing.T) {

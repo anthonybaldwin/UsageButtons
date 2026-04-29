@@ -83,7 +83,7 @@ func (Provider) BrandBg() string { return "#111214" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
-	return []string{"session-percent", "weekly-percent", "opus-percent"}
+	return []string{"session-percent", "weekly-percent", "monthly-percent"}
 }
 
 // Fetch returns the latest Alibaba Coding Plan quota snapshot.
@@ -449,7 +449,7 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 		metrics = append(metrics, quotaMetric("weekly-percent", "WEEKLY", "Alibaba weekly quota remaining", usage.Weekly, now))
 	}
 	if usage.Monthly != nil {
-		metrics = append(metrics, quotaMetric("opus-percent", "MONTHLY", "Alibaba monthly quota remaining", usage.Monthly, now))
+		metrics = append(metrics, quotaMetric("monthly-percent", "MONTHLY", "Alibaba monthly quota remaining", usage.Monthly, now))
 	}
 	return providers.Snapshot{
 		ProviderID:   "alibaba",

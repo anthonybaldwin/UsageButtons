@@ -1550,7 +1550,7 @@ func resolveShowRawCounts(metric providers.MetricValue, ks settings.KeySettings)
 // provider isn't registered or has no metrics declared.
 func effectiveMetricID(ks settings.KeySettings, providerID string) string {
 	if ks.MetricID != "" {
-		return ks.MetricID
+		return migrateMetricID(providerID, ks.MetricID)
 	}
 	if providerID != "" {
 		if prov := providers.Get(providerID); prov != nil {
@@ -1560,6 +1560,38 @@ func effectiveMetricID(ks settings.KeySettings, providerID string) string {
 		}
 	}
 	return defaultMetric
+}
+
+// metricIDAliases maps old per-provider metric IDs to their renamed
+// equivalents so buttons saved before the rename keep resolving to the
+// right metric. The pre-rename IDs were Claude-flavored
+// (session/weekly/opus) and produced jarring placeholder titles like
+// "OPUS" on a Gemini Flash Lite key before the first snapshot landed.
+var metricIDAliases = map[string]map[string]string{
+	"gemini": {
+		"session-percent": "pro-percent",
+		"weekly-percent":  "flash-percent",
+		"opus-percent":    "flash-lite-percent",
+	},
+	"antigravity": {
+		"session-percent": "claude-percent",
+		"weekly-percent":  "gemini-pro-percent",
+		"opus-percent":    "gemini-flash-percent",
+	},
+	"alibaba": {
+		"opus-percent": "monthly-percent",
+	},
+}
+
+// migrateMetricID returns the current metric ID for a (provider,
+// metricID) pair, applying any rename aliases.
+func migrateMetricID(providerID, metricID string) string {
+	if aliases, ok := metricIDAliases[providerID]; ok {
+		if renamed, ok := aliases[metricID]; ok {
+			return renamed
+		}
+	}
+	return metricID
 }
 
 func metricWithSnapshotAge(metric providers.MetricValue, snapshotAge time.Duration) providers.MetricValue {

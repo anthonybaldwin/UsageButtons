@@ -73,7 +73,7 @@ UsageButtons/
 │   │   ├── hermes/                       # Hermes Agent / Nous Research (browser)
 │   │   ├── jetbrains/                    # JetBrains AI
 │   │   ├── kilo/                         # Kilo
-│   │   ├── kimi/                         # Kimi (browser/token)
+│   │   ├── kimi/                         # Kimi (browser)
 │   │   ├── kimik2/                       # Kimi K2 (API key)
 │   │   ├── kiro/                         # Kiro
 │   │   ├── minimax/                      # MiniMax (browser/API key)

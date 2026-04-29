@@ -624,10 +624,6 @@ func providerConfigFingerprint(providerID string) string {
 			"api-key", settings.ResolveAPIKey(pk.KiloKey, "KILO_API_KEY"),
 			"cli-auth", fileContentFingerprint(homePath(".local", "share", "kilo", "auth.json")),
 		)
-	case "kimi":
-		parts = append(parts,
-			"auth-token", settings.ResolveAPIKey(pk.KimiAuthToken, "KIMI_AUTH_TOKEN", "kimi_auth_token", "KIMI_MANUAL_COOKIE"),
-		)
 	case "minimax":
 		parts = append(parts,
 			"api-key", settings.ResolveAPIKey(pk.MiniMaxKey, "MINIMAX_API_KEY"),

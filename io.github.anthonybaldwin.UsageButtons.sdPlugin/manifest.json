@@ -27,6 +27,86 @@
   ],
   "Actions": [
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.abacus",
+      "Name": "Abacus AI",
+      "Tooltip": "Abacus AI usage stats — monthly compute credits.",
+      "Icon": "assets/action-abacus",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-abacus-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.alibaba",
+      "Name": "Alibaba",
+      "Tooltip": "Alibaba Coding Plan usage stats — 5-hour, weekly, and monthly quotas.",
+      "Icon": "assets/action-alibaba",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-alibaba-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.amp",
+      "Name": "Amp",
+      "Tooltip": "Amp usage stats — Amp Free remaining and reset timer.",
+      "Icon": "assets/action-amp",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-amp-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.antigravity",
+      "Name": "Antigravity",
+      "Tooltip": "Antigravity usage stats — Claude, Gemini Pro, and Gemini Flash quota remaining.",
+      "Icon": "assets/action-antigravity",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-antigravity-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.augment",
+      "Name": "Augment",
+      "Tooltip": "Augment usage stats — credits remaining.",
+      "Icon": "assets/action-augment",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-augment-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.claude",
       "Name": "Claude",
       "Tooltip": "Claude usage stats — session %, weekly %, Sonnet %, Opus %, Design, Routines, extras, costs.",
@@ -123,96 +203,144 @@
       ]
     },
     {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.vertexai",
-      "Name": "Vertex AI",
-      "Tooltip": "Vertex AI usage stats — request and token quota remaining.",
-      "Icon": "assets/action-vertexai",
+      "UUID": "io.github.anthonybaldwin.UsageButtons.grok",
+      "Name": "Grok",
+      "Tooltip": "Grok (xAI) usage stats — Grok 3 queries / tokens, Grok 4 Heavy queries.",
+      "Icon": "assets/action-grok",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
       "UserTitleEnabled": true,
       "States": [
         {
-          "Image": "assets/action-vertexai-key",
+          "Image": "assets/action-grok-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }
       ]
     },
     {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.abacus",
-      "Name": "Abacus AI",
-      "Tooltip": "Abacus AI usage stats — monthly compute credits.",
-      "Icon": "assets/action-abacus",
+      "UUID": "io.github.anthonybaldwin.UsageButtons.hermes",
+      "Name": "Hermes",
+      "Tooltip": "Nous Research usage stats — Hermes Agent / Nous Chat subscription credits, API credits, API spend.",
+      "Icon": "assets/action-hermes",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
       "UserTitleEnabled": true,
       "States": [
         {
-          "Image": "assets/action-abacus-key",
+          "Image": "assets/action-hermes-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }
       ]
     },
     {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.alibaba",
-      "Name": "Alibaba",
-      "Tooltip": "Alibaba Coding Plan usage stats — 5-hour, weekly, and monthly quotas.",
-      "Icon": "assets/action-alibaba",
+      "UUID": "io.github.anthonybaldwin.UsageButtons.jetbrains",
+      "Name": "JetBrains AI",
+      "Tooltip": "JetBrains AI usage stats — local IDE quota remaining.",
+      "Icon": "assets/action-jetbrains",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
       "UserTitleEnabled": true,
       "States": [
         {
-          "Image": "assets/action-alibaba-key",
+          "Image": "assets/action-jetbrains-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }
       ]
     },
     {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.antigravity",
-      "Name": "Antigravity",
-      "Tooltip": "Antigravity usage stats — Claude, Gemini Pro, and Gemini Flash quota remaining.",
-      "Icon": "assets/action-antigravity",
+      "UUID": "io.github.anthonybaldwin.UsageButtons.kilo",
+      "Name": "Kilo",
+      "Tooltip": "Kilo usage stats — credits and Kilo Pass quota.",
+      "Icon": "assets/action-kilo",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
       "UserTitleEnabled": true,
       "States": [
         {
-          "Image": "assets/action-antigravity-key",
+          "Image": "assets/action-kilo-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }
       ]
     },
     {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.augment",
-      "Name": "Augment",
-      "Tooltip": "Augment usage stats — credits remaining.",
-      "Icon": "assets/action-augment",
+      "UUID": "io.github.anthonybaldwin.UsageButtons.kimi",
+      "Name": "Kimi",
+      "Tooltip": "Kimi usage stats — weekly coding quota and five-hour rate limit.",
+      "Icon": "assets/action-kimi",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
       "UserTitleEnabled": true,
       "States": [
         {
-          "Image": "assets/action-augment-key",
+          "Image": "assets/action-kimi-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }
       ]
     },
     {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.amp",
-      "Name": "Amp",
-      "Tooltip": "Amp usage stats — Amp Free remaining and reset timer.",
-      "Icon": "assets/action-amp",
+      "UUID": "io.github.anthonybaldwin.UsageButtons.kimi-k2",
+      "Name": "Kimi K2",
+      "Tooltip": "Kimi K2 usage stats — credits remaining.",
+      "Icon": "assets/action-kimi-k2",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
       "UserTitleEnabled": true,
       "States": [
         {
-          "Image": "assets/action-amp-key",
+          "Image": "assets/action-kimi-k2-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.kiro",
+      "Name": "Kiro",
+      "Tooltip": "Kiro usage stats — monthly credits and bonus credits.",
+      "Icon": "assets/action-kiro",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-kiro-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.minimax",
+      "Name": "MiniMax",
+      "Tooltip": "MiniMax usage stats — coding-plan prompt quota.",
+      "Icon": "assets/action-minimax",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-minimax-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.mistral",
+      "Name": "Mistral",
+      "Tooltip": "Mistral usage stats — monthly billing usage.",
+      "Icon": "assets/action-mistral",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-mistral-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }
@@ -299,32 +427,32 @@
       ]
     },
     {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.grok",
-      "Name": "Grok",
-      "Tooltip": "Grok (xAI) usage stats — Grok 3 queries / tokens, Grok 4 Heavy queries.",
-      "Icon": "assets/action-grok",
+      "UUID": "io.github.anthonybaldwin.UsageButtons.synthetic",
+      "Name": "Synthetic",
+      "Tooltip": "Synthetic usage stats — five-hour quota, weekly tokens, search quota.",
+      "Icon": "assets/action-synthetic",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
       "UserTitleEnabled": true,
       "States": [
         {
-          "Image": "assets/action-grok-key",
+          "Image": "assets/action-synthetic-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }
       ]
     },
     {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.hermes",
-      "Name": "Hermes",
-      "Tooltip": "Nous Research usage stats — Hermes Agent / Nous Chat subscription credits, API credits, API spend.",
-      "Icon": "assets/action-hermes",
+      "UUID": "io.github.anthonybaldwin.UsageButtons.vertexai",
+      "Name": "Vertex AI",
+      "Tooltip": "Vertex AI usage stats — request and token quota remaining.",
+      "Icon": "assets/action-vertexai",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
       "UserTitleEnabled": true,
       "States": [
         {
-          "Image": "assets/action-hermes-key",
+          "Image": "assets/action-vertexai-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }
@@ -357,134 +485,6 @@
       "States": [
         {
           "Image": "assets/action-zai-key",
-          "ShowTitle": false,
-          "TitleAlignment": "top"
-        }
-      ]
-    },
-    {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.kimi",
-      "Name": "Kimi",
-      "Tooltip": "Kimi usage stats — weekly coding quota and five-hour rate limit.",
-      "Icon": "assets/action-kimi",
-      "PropertyInspectorPath": "ui/stat.html",
-      "SupportedInMultiActions": false,
-      "UserTitleEnabled": true,
-      "States": [
-        {
-          "Image": "assets/action-kimi-key",
-          "ShowTitle": false,
-          "TitleAlignment": "top"
-        }
-      ]
-    },
-    {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.minimax",
-      "Name": "MiniMax",
-      "Tooltip": "MiniMax usage stats — coding-plan prompt quota.",
-      "Icon": "assets/action-minimax",
-      "PropertyInspectorPath": "ui/stat.html",
-      "SupportedInMultiActions": false,
-      "UserTitleEnabled": true,
-      "States": [
-        {
-          "Image": "assets/action-minimax-key",
-          "ShowTitle": false,
-          "TitleAlignment": "top"
-        }
-      ]
-    },
-    {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.kimi-k2",
-      "Name": "Kimi K2",
-      "Tooltip": "Kimi K2 usage stats — credits remaining.",
-      "Icon": "assets/action-kimi-k2",
-      "PropertyInspectorPath": "ui/stat.html",
-      "SupportedInMultiActions": false,
-      "UserTitleEnabled": true,
-      "States": [
-        {
-          "Image": "assets/action-kimi-k2-key",
-          "ShowTitle": false,
-          "TitleAlignment": "top"
-        }
-      ]
-    },
-    {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.jetbrains",
-      "Name": "JetBrains AI",
-      "Tooltip": "JetBrains AI usage stats — local IDE quota remaining.",
-      "Icon": "assets/action-jetbrains",
-      "PropertyInspectorPath": "ui/stat.html",
-      "SupportedInMultiActions": false,
-      "UserTitleEnabled": true,
-      "States": [
-        {
-          "Image": "assets/action-jetbrains-key",
-          "ShowTitle": false,
-          "TitleAlignment": "top"
-        }
-      ]
-    },
-    {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.kilo",
-      "Name": "Kilo",
-      "Tooltip": "Kilo usage stats — credits and Kilo Pass quota.",
-      "Icon": "assets/action-kilo",
-      "PropertyInspectorPath": "ui/stat.html",
-      "SupportedInMultiActions": false,
-      "UserTitleEnabled": true,
-      "States": [
-        {
-          "Image": "assets/action-kilo-key",
-          "ShowTitle": false,
-          "TitleAlignment": "top"
-        }
-      ]
-    },
-    {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.kiro",
-      "Name": "Kiro",
-      "Tooltip": "Kiro usage stats — monthly credits and bonus credits.",
-      "Icon": "assets/action-kiro",
-      "PropertyInspectorPath": "ui/stat.html",
-      "SupportedInMultiActions": false,
-      "UserTitleEnabled": true,
-      "States": [
-        {
-          "Image": "assets/action-kiro-key",
-          "ShowTitle": false,
-          "TitleAlignment": "top"
-        }
-      ]
-    },
-    {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.mistral",
-      "Name": "Mistral",
-      "Tooltip": "Mistral usage stats — monthly billing usage.",
-      "Icon": "assets/action-mistral",
-      "PropertyInspectorPath": "ui/stat.html",
-      "SupportedInMultiActions": false,
-      "UserTitleEnabled": true,
-      "States": [
-        {
-          "Image": "assets/action-mistral-key",
-          "ShowTitle": false,
-          "TitleAlignment": "top"
-        }
-      ]
-    },
-    {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.synthetic",
-      "Name": "Synthetic",
-      "Tooltip": "Synthetic usage stats — five-hour quota, weekly tokens, search quota.",
-      "Icon": "assets/action-synthetic",
-      "PropertyInspectorPath": "ui/stat.html",
-      "SupportedInMultiActions": false,
-      "UserTitleEnabled": true,
-      "States": [
-        {
-          "Image": "assets/action-synthetic-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }

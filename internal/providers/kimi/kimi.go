@@ -165,13 +165,19 @@ func parseUsage(resp usageResponse, now time.Time) (usageSnapshot, error) {
 }
 
 // snapshotFromUsage maps parsed Kimi usage into Stream Deck metrics.
+//
+// Note: the metric IDs are historically swapped — `session-percent`
+// emits the weekly window and `weekly-percent` emits the 5-hour rate
+// limit. Rebinding the IDs would break existing user button settings,
+// so the IDs stay; only the user-visible labels reflect the actual
+// data (WEEKLY for the weekly window, SESSION for the 5h rate).
 func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	now := usage.UpdatedAt.UTC().Format(time.RFC3339)
 	metrics := []providers.MetricValue{
-		quotaMetric("session-percent", "WEEKLY", "Kimi weekly requests remaining", usage.Weekly, "requests", now),
+		quotaMetric("session-percent", "WEEKLY", "Kimi weekly requests remaining", usage.Weekly, now),
 	}
 	if usage.Rate != nil {
-		metrics = append(metrics, quotaMetric("weekly-percent", "5-HOUR", "Kimi five-hour rate limit remaining", *usage.Rate, "per 5 hours", now))
+		metrics = append(metrics, quotaMetric("weekly-percent", "SESSION", "Kimi session window remaining (5h rate limit)", *usage.Rate, now))
 	}
 	return providers.Snapshot{
 		ProviderID:   "kimi",
@@ -183,7 +189,12 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 }
 
 // quotaMetric builds a remaining-percent metric from a Kimi quota detail.
-func quotaMetric(id, label, name string, detail usageDetail, unitLabel string, now string) providers.MetricValue {
+// Caption is left empty so the SD subtext falls through to the
+// reset-time countdown when usage has started, or "Remaining" when
+// the window is still idle. Users who want the raw "X / Y" count
+// can flip the per-button "Show raw counts" toggle in the property
+// inspector — RawCount/RawMax are still wired.
+func quotaMetric(id, label, name string, detail usageDetail, now string) providers.MetricValue {
 	limit := numericString(detail.Limit)
 	remaining := numericString(detail.Remaining)
 	used := numericString(detail.Used)
@@ -203,11 +214,7 @@ func quotaMetric(id, label, name string, detail usageDetail, unitLabel string, n
 	if t, ok := providerutil.TimeValue(detail.ResetTime); ok {
 		resetAt = &t
 	}
-	caption := unitLabel
-	if used != nil && limit != nil {
-		caption = fmt.Sprintf("%s/%s %s", compactNumber(*used), compactNumber(*limit), unitLabel)
-	}
-	metric := providerutil.PercentRemainingMetric(id, label, name, usedPct, resetAt, caption, now)
+	metric := providerutil.PercentRemainingMetric(id, label, name, usedPct, resetAt, "", now)
 	if remaining != nil && limit != nil {
 		rawCount := int(math.Round(*remaining))
 		rawMax := int(math.Round(*limit))
@@ -228,14 +235,6 @@ func numericString(raw string) *float64 {
 		return nil
 	}
 	return &n
-}
-
-// compactNumber renders request counts without noisy decimals.
-func compactNumber(value float64) string {
-	if value == math.Trunc(value) {
-		return fmt.Sprintf("%.0f", value)
-	}
-	return fmt.Sprintf("%.1f", value)
 }
 
 // errorSnapshot returns a Kimi setup or auth failure snapshot.

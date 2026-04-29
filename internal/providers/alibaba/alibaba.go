@@ -443,7 +443,7 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	now := usage.UpdatedAt.Format(time.RFC3339)
 	metrics := []providers.MetricValue{}
 	if usage.FiveHour != nil {
-		metrics = append(metrics, quotaMetric("session-percent", "5-HOUR", "Alibaba 5-hour quota remaining", usage.FiveHour, now))
+		metrics = append(metrics, quotaMetric("session-percent", "SESSION", "Alibaba session window remaining (5h)", usage.FiveHour, now))
 	}
 	if usage.Weekly != nil {
 		metrics = append(metrics, quotaMetric("weekly-percent", "WEEKLY", "Alibaba weekly quota remaining", usage.Weekly, now))
@@ -461,10 +461,14 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 }
 
 // quotaMetric converts one quota window to a remaining-percent metric.
+// Caption is left empty so the SD subtext falls through to the
+// reset-time countdown when usage has started, or the "Remaining"
+// fallback when the window is still idle. Users who want raw
+// "X / Y used" counts can flip the per-button "Show raw counts"
+// toggle in the property inspector — RawCount/RawMax are still wired.
 func quotaMetric(id, label, name string, w *quotaWindow, now string) providers.MetricValue {
 	usedPct := float64(w.Used) / float64(w.Total) * 100
-	caption := fmt.Sprintf("%d / %d used", w.Used, w.Total)
-	m := providerutil.PercentRemainingMetric(id, label, name, usedPct, w.ResetAt, caption, now)
+	m := providerutil.PercentRemainingMetric(id, label, name, usedPct, w.ResetAt, "", now)
 	remaining := w.Total - w.Used
 	m.RawCount = &remaining
 	m.RawMax = &w.Total

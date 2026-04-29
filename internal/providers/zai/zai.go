@@ -10,7 +10,6 @@ package zai
 import (
 	"math"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -213,7 +212,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			if windowMinutes(limit) != 5*60 {
 				continue
 			}
-			if m := quotaMetric("tokens-session-percent", "5-HOUR", "5-hour token usage remaining", limit, now); m != nil {
+			if m := quotaMetric("tokens-session-percent", "SESSION", "Session token window remaining (5h)", limit, now); m != nil {
 				metrics = append(metrics, *m)
 			}
 			break
@@ -359,9 +358,10 @@ func quotaMetric(id, label, name string, limit quotaLimit, now string) *provider
 		m.RawCount = &remaining
 		m.RawMax = &capInt
 	}
-	if caption := windowCaption(limit); caption != "" {
-		m.Caption = caption
-	}
+	// Caption intentionally left empty so the SD subtext falls through
+	// to the reset-time countdown when usage has started, or "Remaining"
+	// when the window is still idle. The window length is implicit
+	// from the SESSION / WEEKLY / etc. label.
 	if resetSecs != nil {
 		m.ResetInSeconds = resetSecs
 	}
@@ -381,31 +381,6 @@ func dynamicQuotaIdentity(limit quotaLimit) (id, label, name string) {
 		slug := strings.NewReplacer("_", "-", " ", "-").Replace(typeName)
 		return slug + "-percent", strings.ToUpper(typeName), typeName + " usage remaining"
 	}
-}
-
-// windowCaption returns a compact human label for a quota window length.
-func windowCaption(limit quotaLimit) string {
-	if limit.Number == nil || *limit.Number <= 0 || limit.Unit == nil {
-		return ""
-	}
-	unit := ""
-	switch *limit.Unit {
-	case 5:
-		unit = "minute"
-	case 3:
-		unit = "hour"
-	case 1:
-		unit = "day"
-	case 6:
-		unit = "week"
-	}
-	if unit == "" {
-		return ""
-	}
-	if *limit.Number != 1 {
-		unit += "s"
-	}
-	return strings.Join([]string{strconv.Itoa(*limit.Number), unit, "window"}, " ")
 }
 
 // init registers the z.ai provider with the package registry.

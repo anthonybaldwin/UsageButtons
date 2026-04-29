@@ -51,9 +51,10 @@ calls the same `/rest/pplx-api/v2/groups`, `/rest/pplx-api/v2/groups/{id}`,
 and `/rest/rate-limit/all` endpoints documented by openusage's
 `plugins/perplexity/plugin.js`, with the same flexible field-name
 lookup pattern (`balance_usd`/`balanceUsd`/etc. under `apiOrganization`,
-`customerInfo`, etc. wrappers). Perplexity removed the older
-`/rest/billing/credits` endpoint in 2026; openusage's mapping was the
-shortest path back to working data. The Go implementation is ours; the
+`customerInfo`, etc. wrappers). The legacy `/rest/billing/credits`
+endpoint (briefly removed in early 2026) is alive again and powers
+the credit-balance + per-meter usage tiles; the field set there is
+not borrowed from openusage. The Go implementation is ours; the
 endpoint set and field-name fallbacks are the borrowed knowledge.
 
 Permission is hereby granted, free of charge, to any person obtaining

@@ -1,13 +1,15 @@
 // Package perplexity implements the Perplexity usage provider.
 //
 // Auth: Usage Buttons Helper extension with the user's perplexity.ai browser
-// session. Endpoints (Perplexity removed /rest/billing/credits in 2026 —
-// the new flow mirrors what perplexity.ai/account/usage itself fetches):
+// session. Endpoints (the /rest/billing/credits endpoint, briefly removed
+// in early 2026, is alive again and is the source for the credit-balance
+// tiles; the rest mirror what perplexity.ai/account/usage fetches):
 //
 //	GET /rest/pplx-api/v2/groups                                — discover org/group ID
 //	GET /rest/pplx-api/v2/groups/{groupId}                      — balance + plan tier
 //	GET /rest/pplx-api/v2/groups/{groupId}/usage-analytics      — meter cost summaries
 //	GET /rest/rate-limit/all                                    — per-tier query quotas
+//	GET /rest/billing/credits?version=2.18&source=default       — plan/purchased/bonus credits + meter usage breakdown
 package perplexity
 
 import (
@@ -33,6 +35,7 @@ const (
 	groupsURL    = "https://www.perplexity.ai/rest/pplx-api/v2/groups"
 	groupURLBase = "https://www.perplexity.ai/rest/pplx-api/v2/groups/"
 	rateLimitURL = "https://www.perplexity.ai/rest/rate-limit/all"
+	creditsURL   = "https://www.perplexity.ai/rest/billing/credits?version=2.18&source=default"
 	// usageAnalyticsSuffix appends to the per-group URL to fetch the
 	// meter event summaries used for the API-spend calculation.
 	usageAnalyticsSuffix = "/usage-analytics"
@@ -71,7 +74,34 @@ type usageSnapshot struct {
 	ResearchRemain *int
 	LabsRemain     *int
 	AgenticRemain  *int
-	UpdatedAt      time.Time
+
+	// Credits-endpoint data (populated when /rest/billing/credits is
+	// fetched). All amounts are in Perplexity's "credits" unit, which
+	// the dashboard treats 1:1 with cents (balance_cents:539 renders
+	// as "539 credits"). HasCredits flags whether the credits endpoint
+	// returned a usable payload — distinguishes a real "0 credits" from
+	// "endpoint not fetched / failed".
+	HasCredits                  bool
+	PlanCreditsCents            float64    // sum of credit_grants[type=plan/subscription]
+	PurchasedCreditsCents       float64    // current_period_purchased_cents (also used for purchased grants)
+	BonusCreditsCents           float64    // sum of credit_grants[type=promotional/bonus]
+	BonusExpiresAt              *time.Time // earliest expires_at_ts among bonus grants
+	BalanceCreditsCents         float64    // balance_cents — currently available
+	TotalGrantsCents            float64    // sum of all credit_grants[].amount_cents (denominator for total-credits ratio)
+	GlobalCapCents              float64    // global_cap_cents — Perplexity's hard ceiling
+	SpendingLimitCents          *float64   // user-set spending_limit_cents (nil → unset)
+	RenewalAt                   *time.Time // renewal_date_ts — when the recurring credit allotment refreshes
+	AutoRefillEnabled           bool       // auto_topup_enabled
+	AutoRefillThresholdCents    float64    // auto_topup_threshold_cents — refill triggers below this
+	AutoRefillAmountCents       float64    // auto_topup_amount_cents — refill amount when triggered
+	CurrentPeriodPurchasedCents float64    // current_period_purchased_cents (raw)
+	TotalUsageCents             float64    // total_usage_cents — period-to-date usage
+	// MeterCostCents is meter_type → cost_cents from the credits endpoint's
+	// meter_usage[]. Drives the per-meter "Text usage / Image usage / …"
+	// tiles. Empty map when the endpoint wasn't fetched.
+	MeterCostCents map[string]float64
+
+	UpdatedAt time.Time
 }
 
 // Provider fetches Perplexity usage data.
@@ -99,6 +129,18 @@ func (Provider) MetricIDs() []string {
 		"comet-spend",
 		"api-balance",
 		"api-spend",
+		// Credits-endpoint tiles. Names mirror the perplexity.ai
+		// /account/usage dashboard's "Available usage-based credits"
+		// breakdown plus the per-meter "Credit usage" grid.
+		"plan-credits",
+		"purchased-credits",
+		"bonus-credits",
+		"total-credits",
+		"auto-refill",
+		"text-usage",
+		"image-usage",
+		"video-usage",
+		"audio-usage",
 	}
 }
 
@@ -120,7 +162,7 @@ func (Provider) Fetch(fctx providers.FetchContext) (providers.Snapshot, error) {
 	// "fetch everything" behavior used during cold start / force.
 	needs := perplexityFetchNeedsFor(fctx.ActiveMetricIDs)
 
-	var groupMap, rateMap map[string]any
+	var groupMap, rateMap, creditsMap map[string]any
 	var analyticsAny any
 
 	if needs.group {
@@ -147,16 +189,27 @@ func (Provider) Fetch(fctx providers.FetchContext) (providers.Snapshot, error) {
 			return mapHTTPError(err), nil
 		}
 	}
-	return snapshotFromUsage(usageFromResponses(groupMap, rateMap, analyticsAny, time.Now().UTC())), nil
+	if needs.credits {
+		// Best-effort: a credits-endpoint failure suppresses the credit /
+		// meter-usage tiles but doesn't abort the snapshot — the API
+		// balance / rate-limit tiles still render. Errors are dropped on
+		// the floor and HasCredits stays false.
+		creditsMap = map[string]any{}
+		if err := cookies.FetchJSON(ctx, creditsURL, headers, &creditsMap); err != nil {
+			creditsMap = nil
+		}
+	}
+	return snapshotFromUsage(usageFromResponses(groupMap, rateMap, analyticsAny, creditsMap, time.Now().UTC())), nil
 }
 
-// perplexityFetchNeeds maps the active-metric set to which of the four
+// perplexityFetchNeeds maps the active-metric set to which of the
 // Perplexity endpoints actually need to be hit this poll. nil active
 // set = "fetch everything" — every flag returns true.
 type perplexityFetchNeeds struct {
-	group     bool // /groups + /groups/{id} — needed by balance / spend tiles
+	group     bool // /groups + /groups/{id} — needed by API balance / spend tiles
 	analytics bool // /groups/{id}/usage-analytics — needed by spend tiles
 	rate      bool // /rate-limit/all — needed by per-feature query counts
+	credits   bool // /rest/billing/credits — needed by plan/purchased/bonus/total credits, auto-refill, per-meter usage
 }
 
 // metricsNeedingGroup is the set of metric IDs whose values come from
@@ -177,12 +230,27 @@ var (
 		"labs-remaining":             true,
 		"agentic-research-remaining": true,
 	}
+	// metricsNeedingCredits maps the credit-balance + meter-usage tiles
+	// to the /rest/billing/credits endpoint. None of the legacy tiles
+	// (api-balance / api-spend / comet-spend / rate-limit counts) need
+	// it — they're served entirely by the existing endpoints.
+	metricsNeedingCredits = map[string]bool{
+		"plan-credits":      true,
+		"purchased-credits": true,
+		"bonus-credits":     true,
+		"total-credits":     true,
+		"auto-refill":       true,
+		"text-usage":        true,
+		"image-usage":       true,
+		"video-usage":       true,
+		"audio-usage":       true,
+	}
 )
 
 // perplexityFetchNeeds resolves which endpoints are required.
 func perplexityFetchNeedsFor(active []string) perplexityFetchNeeds {
 	if active == nil {
-		return perplexityFetchNeeds{group: true, analytics: true, rate: true}
+		return perplexityFetchNeeds{group: true, analytics: true, rate: true, credits: true}
 	}
 	var n perplexityFetchNeeds
 	for _, id := range active {
@@ -194,6 +262,9 @@ func perplexityFetchNeedsFor(active []string) perplexityFetchNeeds {
 		}
 		if metricsNeedingRate[id] {
 			n.rate = true
+		}
+		if metricsNeedingCredits[id] {
+			n.credits = true
 		}
 	}
 	return n
@@ -368,9 +439,11 @@ func dumpUnknownGroups(body []byte) {
 	_, _ = f.WriteString("\n\n")
 }
 
-// usageFromResponses normalizes group + rate-limit + usage-analytics JSON
-// into usageSnapshot.
-func usageFromResponses(groupMap, rateMap map[string]any, analytics any, now time.Time) usageSnapshot {
+// usageFromResponses normalizes group + rate-limit + usage-analytics +
+// credits JSON into usageSnapshot. creditsMap is nil when /rest/billing/
+// credits wasn't fetched or returned an error — the credits-derived
+// fields stay at their zero values and HasCredits stays false.
+func usageFromResponses(groupMap, rateMap map[string]any, analytics any, creditsMap map[string]any, now time.Time) usageSnapshot {
 	usage := usageSnapshot{UpdatedAt: now}
 	usage.BalanceCents = readBalanceCents(groupMap)
 	usage.SpendCents = readSpendCents(groupMap)
@@ -387,7 +460,146 @@ func usageFromResponses(groupMap, rateMap map[string]any, analytics any, now tim
 		usage.SpendCents = cost
 	}
 	usage.CometSpendCents = sumMeterCostCents(analytics, "comet_cloud_duration_hours", "cometCloudDurationHours")
+	if creditsMap != nil {
+		applyCreditsResponse(&usage, creditsMap)
+	}
 	return usage
+}
+
+// applyCreditsResponse populates the credit-balance / meter-usage /
+// auto-refill fields on usage from a /rest/billing/credits payload.
+// Sets HasCredits even when individual fields are zero — a "0 credits"
+// account (no plan, no purchases, no bonuses) is itself meaningful data.
+func applyCreditsResponse(usage *usageSnapshot, body map[string]any) {
+	usage.HasCredits = true
+	if v, ok := providerutil.FirstFloat(body, "balance_cents", "balanceCents"); ok {
+		usage.BalanceCreditsCents = v
+	}
+	if v, ok := providerutil.FirstFloat(body, "global_cap_cents", "globalCapCents"); ok {
+		usage.GlobalCapCents = v
+	}
+	if v, ok := providerutil.FirstFloat(body, "current_period_purchased_cents", "currentPeriodPurchasedCents"); ok {
+		usage.CurrentPeriodPurchasedCents = v
+	}
+	if v, ok := providerutil.FirstFloat(body, "total_usage_cents", "totalUsageCents"); ok {
+		usage.TotalUsageCents = v
+	}
+	if v, ok := providerutil.FirstFloat(body, "auto_topup_threshold_cents", "autoTopupThresholdCents"); ok {
+		usage.AutoRefillThresholdCents = v
+	}
+	if v, ok := providerutil.FirstFloat(body, "auto_topup_amount_cents", "autoTopupAmountCents"); ok {
+		usage.AutoRefillAmountCents = v
+	}
+	if b, ok := body["auto_topup_enabled"].(bool); ok {
+		usage.AutoRefillEnabled = b
+	} else if b, ok := body["autoTopupEnabled"].(bool); ok {
+		usage.AutoRefillEnabled = b
+	}
+	if v, ok := body["spending_limit_cents"]; ok {
+		if v != nil {
+			if f, ok := providerutil.FloatValue(v); ok {
+				usage.SpendingLimitCents = &f
+			}
+		}
+	}
+	if t, ok := readUnixSeconds(body, "renewal_date_ts", "renewalDateTs"); ok {
+		usage.RenewalAt = &t
+	}
+	// Credit grants — split into plan / purchased / bonus by `type`.
+	// promotional / bonus → bonus tile. "plan", "subscription" → plan
+	// tile. "purchased" → adds to purchased. Unknown types fall into
+	// the totals (TotalGrantsCents) but don't show in any specific tile.
+	if grants, ok := body["credit_grants"].([]any); ok {
+		applyCreditGrants(usage, grants)
+	} else if grants, ok := body["creditGrants"].([]any); ok {
+		applyCreditGrants(usage, grants)
+	}
+	// current_period_purchased_cents already covers plan-level purchased
+	// total. If no purchased grants surfaced, fall back to it so the
+	// purchased-credits tile still has a value.
+	if usage.PurchasedCreditsCents == 0 && usage.CurrentPeriodPurchasedCents > 0 {
+		usage.PurchasedCreditsCents = usage.CurrentPeriodPurchasedCents
+	}
+	// Meter usage — meter_type → cost_cents. Used by the per-meter
+	// "Text usage / Image usage / Video usage / Audio usage" tiles.
+	usage.MeterCostCents = readMeterUsage(body)
+}
+
+// applyCreditGrants categorizes credit_grants[] entries by type and
+// accumulates their amount_cents into the matching field. The earliest
+// expiry across bonus grants populates BonusExpiresAt so the tile can
+// render a countdown to the soonest deadline.
+func applyCreditGrants(usage *usageSnapshot, grants []any) {
+	for _, item := range grants {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		amount, _ := providerutil.FirstFloat(obj, "amount_cents", "amountCents")
+		usage.TotalGrantsCents += amount
+		typ := strings.ToLower(strings.TrimSpace(providerutil.FirstString(obj, "type", "grant_type", "grantType")))
+		switch {
+		case typ == "promotional" || typ == "bonus" || typ == "promo":
+			usage.BonusCreditsCents += amount
+			if t, ok := readUnixSeconds(obj, "expires_at_ts", "expiresAtTs"); ok {
+				if usage.BonusExpiresAt == nil || t.Before(*usage.BonusExpiresAt) {
+					expiry := t
+					usage.BonusExpiresAt = &expiry
+				}
+			}
+		case typ == "purchased" || typ == "purchase":
+			usage.PurchasedCreditsCents += amount
+		case typ == "plan" || typ == "subscription" || typ == "recurring":
+			usage.PlanCreditsCents += amount
+		}
+	}
+}
+
+// readMeterUsage collects meter_usage[].cost_cents into a meter_type→cents
+// map. Returns nil when no meter_usage array is present.
+func readMeterUsage(body map[string]any) map[string]float64 {
+	arr, ok := body["meter_usage"].([]any)
+	if !ok {
+		arr, ok = body["meterUsage"].([]any)
+		if !ok {
+			return nil
+		}
+	}
+	out := map[string]float64{}
+	for _, item := range arr {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name := strings.TrimSpace(providerutil.FirstString(obj, "meter_type", "meterType", "type", "name"))
+		if name == "" {
+			continue
+		}
+		if v, ok := providerutil.FirstFloat(obj, "cost_cents", "costCents", "cost", "amount_cents", "amountCents"); ok {
+			out[name] += v
+		}
+	}
+	return out
+}
+
+// readUnixSeconds pulls a Unix-second timestamp from one of keys.
+func readUnixSeconds(m map[string]any, keys ...string) (time.Time, bool) {
+	v, ok := providerutil.FirstFloat(m, keys...)
+	if !ok || v <= 0 {
+		return time.Time{}, false
+	}
+	return time.Unix(int64(v), 0).UTC(), true
+}
+
+// meterCostFor returns the credit cost recorded for any of the given
+// meter_type names, summing across aliases. Used so the per-meter tiles
+// stay resilient if Perplexity renames meter_type values.
+func meterCostFor(usage usageSnapshot, names ...string) float64 {
+	var total float64
+	for _, n := range names {
+		total += usage.MeterCostCents[n]
+	}
+	return total
 }
 
 // sumMeterCostCents totals `cost` (USD) across one specific meter's
@@ -641,7 +853,10 @@ func readSubscriptionTier(root map[string]any) string {
 // the value) since /rest/rate-limit/all returns no daily caps to
 // percent-against. Balance + spend render as dollar metrics, always
 // emitted (even at $0) so users can see they have no API platform
-// activity.
+// activity. Credit-balance + meter-usage tiles emit only when the
+// /rest/billing/credits endpoint returned data — keyed off
+// usage.HasCredits — so a credits-endpoint outage cleanly suppresses
+// those tiles instead of forcing them to $0.
 func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	now := usage.UpdatedAt.UTC().Format(time.RFC3339)
 	var metrics []providers.MetricValue
@@ -660,6 +875,38 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 		dollarMetric("api-balance", "API", "Balance", "Perplexity API balance", usage.BalanceCents, "high", now),
 		dollarMetric("api-spend", "API", "Spend", "Perplexity API spend (all-time)", usage.SpendCents, "low", now),
 	)
+	if usage.HasCredits {
+		// Plan / purchased / bonus mirror the perplexity.ai dashboard's
+		// "Available usage-based credits" breakdown; Total available
+		// renders the live balance with a balance/grants ratio bar
+		// matching the dashboard's progress bar.
+		metrics = append(metrics,
+			creditMetric("plan-credits", "PLAN", "Perplexity plan credits available", usage.PlanCreditsCents, "Credits", nil, nil, now),
+			creditMetric("purchased-credits", "PURCHASED", "Perplexity purchased credits this period", usage.PurchasedCreditsCents, "Credits", nil, nil, now),
+			creditMetric("bonus-credits", "BONUS", "Perplexity bonus credits granted (with expiry)", usage.BonusCreditsCents, bonusCaption(usage), nil, usage.BonusExpiresAt, now),
+		)
+		// Total available: ratio = balance / total grants. Provide a
+		// non-nil ratio when grants > 0 so the bar reflects the
+		// dashboard "539 / 2000" indicator. RenewalAt drives the
+		// reset countdown — useful even at full balance (balance still
+		// resets on renewal, so the timer is meaningful).
+		metrics = append(metrics, totalCreditsMetric(usage, now))
+		metrics = append(metrics, autoRefillMetric(usage, now))
+		metrics = append(metrics,
+			creditMetric("text-usage", "TEXT", "Perplexity text credits used this cycle",
+				meterCostFor(usage, "asi_token_usage", "text_token_usage", "text_usage", "text"),
+				"This cycle", nil, nil, now),
+			creditMetric("image-usage", "IMAGE", "Perplexity image credits used this cycle",
+				meterCostFor(usage, "image_token_usage", "image_usage", "image_generation", "image"),
+				"This cycle", nil, nil, now),
+			creditMetric("video-usage", "VIDEO", "Perplexity video credits used this cycle",
+				meterCostFor(usage, "video_token_usage", "video_usage", "video_generation", "video"),
+				"This cycle", nil, nil, now),
+			creditMetric("audio-usage", "AUDIO", "Perplexity audio credits used this cycle",
+				meterCostFor(usage, "audio_token_usage", "audio_usage", "audio_synthesis", "voice", "audio"),
+				"This cycle", nil, nil, now),
+		)
+	}
 	return providers.Snapshot{
 		ProviderID:   "perplexity",
 		ProviderName: providerName(usage),
@@ -667,6 +914,81 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 		Metrics:      metrics,
 		Status:       "operational",
 	}
+}
+
+// totalCreditsMetric builds the "Total available credits" tile — value
+// is the live balance, ratio is balance/grants, and the reset countdown
+// fires off renewal_date_ts so the tile shows "539 / 2000, renews in 28d".
+func totalCreditsMetric(usage usageSnapshot, now string) providers.MetricValue {
+	credits := usage.BalanceCreditsCents
+	val := credits
+	m := providers.MetricValue{
+		ID:              "total-credits",
+		Label:           "TOTAL",
+		Name:            "Perplexity total available credits",
+		Value:           formatCredits(credits),
+		NumericValue:    &val,
+		NumericUnit:     "count",
+		NumericGoodWhen: "high",
+		Caption:         "Available",
+		UpdatedAt:       now,
+	}
+	if usage.TotalGrantsCents > 0 {
+		ratio := math.Max(0, math.Min(1, credits/usage.TotalGrantsCents))
+		m.Ratio = &ratio
+		max := int(math.Round(usage.TotalGrantsCents))
+		count := int(math.Round(credits))
+		m.RawCount = &count
+		m.RawMax = &max
+	} else {
+		ratio := 1.0
+		m.Ratio = &ratio
+	}
+	if usage.RenewalAt != nil {
+		if secs := providerutil.ResetSeconds(*usage.RenewalAt); secs != nil {
+			m.ResetInSeconds = secs
+		}
+	}
+	return m
+}
+
+// autoRefillMetric builds the auto-refill state tile. Display-only for
+// now — the user's plan to make this an interactive toggle (proxied to
+// the extension) lives in a follow-up.
+func autoRefillMetric(usage usageSnapshot, now string) providers.MetricValue {
+	value := "OFF"
+	if usage.AutoRefillEnabled {
+		value = "ON"
+	}
+	caption := "Auto-refill"
+	if usage.AutoRefillEnabled && usage.AutoRefillThresholdCents > 0 && usage.AutoRefillAmountCents > 0 {
+		caption = fmt.Sprintf("<%s → +%s", formatCredits(usage.AutoRefillThresholdCents), formatCredits(usage.AutoRefillAmountCents))
+	} else if usage.AutoRefillThresholdCents > 0 {
+		caption = "<" + formatCredits(usage.AutoRefillThresholdCents)
+	}
+	ratio := 0.0
+	if usage.AutoRefillEnabled {
+		ratio = 1.0
+	}
+	return providers.MetricValue{
+		ID:        "auto-refill",
+		Label:     "AUTO-REFILL",
+		Name:      "Perplexity auto-refill state",
+		Value:     value,
+		Ratio:     &ratio,
+		Caption:   caption,
+		UpdatedAt: now,
+	}
+}
+
+// bonusCaption is "Expires" with no countdown when the grant has no
+// expiry, or "Expires" when an expiry is set (the reset countdown
+// renders the actual time-to-expiry as the subtext).
+func bonusCaption(usage usageSnapshot) string {
+	if usage.BonusExpiresAt == nil {
+		return "Granted"
+	}
+	return "Expires"
 }
 
 // countMetric builds a "remaining queries" count tile. The count itself
@@ -691,6 +1013,79 @@ func countMetric(id, label, name string, remaining int, now string) providers.Me
 		Caption:         "Queries",
 		UpdatedAt:       now,
 	}
+}
+
+// creditMetric renders a Perplexity "credits" tile. Perplexity's
+// dashboard shows credits 1:1 with cents (balance_cents:539 →
+// "539 credits"), so the value is the cents value formatted with up to
+// two decimals (matching the dashboard's "1,460.15 credits this cycle"
+// rendering for fractional usage). resetAt populates the countdown
+// subtext when present.
+func creditMetric(id, label, name string, credits float64, caption string, ratioRef *float64, resetAt *time.Time, now string) providers.MetricValue {
+	val := credits
+	m := providers.MetricValue{
+		ID:              id,
+		Label:           label,
+		Name:            name,
+		Value:           formatCredits(credits),
+		NumericValue:    &val,
+		NumericUnit:     "count",
+		NumericGoodWhen: "high",
+		Caption:         caption,
+		UpdatedAt:       now,
+	}
+	if ratioRef != nil {
+		m.Ratio = ratioRef
+	} else {
+		ratio := 1.0
+		m.Ratio = &ratio
+	}
+	if resetAt != nil {
+		if secs := providerutil.ResetSeconds(*resetAt); secs != nil {
+			m.ResetInSeconds = secs
+		}
+	}
+	return m
+}
+
+// formatCredits renders a Perplexity credit count: integer when the
+// value is whole, two-decimal otherwise, with thousand separators.
+// Mirrors the dashboard's "539" / "1,460.15" formatting.
+func formatCredits(credits float64) string {
+	rounded := math.Round(credits*100) / 100
+	if rounded == math.Trunc(rounded) {
+		return formatThousands(int64(rounded))
+	}
+	whole := int64(math.Trunc(rounded))
+	frac := math.Abs(rounded-float64(whole)) * 100
+	return fmt.Sprintf("%s.%02d", formatThousands(whole), int(math.Round(frac)))
+}
+
+// formatThousands inserts comma separators every three digits.
+func formatThousands(n int64) string {
+	s := fmt.Sprintf("%d", n)
+	neg := false
+	if len(s) > 0 && s[0] == '-' {
+		neg = true
+		s = s[1:]
+	}
+	if len(s) <= 3 {
+		if neg {
+			return "-" + s
+		}
+		return s
+	}
+	var out []byte
+	for i, c := range []byte(s) {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			out = append(out, ',')
+		}
+		out = append(out, c)
+	}
+	if neg {
+		return "-" + string(out)
+	}
+	return string(out)
 }
 
 // dollarMetric renders a USD-valued tile (balance, spend). Always emitted

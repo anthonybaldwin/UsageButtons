@@ -381,31 +381,6 @@ func windowMinutesText(text string) int {
 	return 0
 }
 
-// windowDescription formats a known quota window.
-func windowDescription(minutes int) string {
-	if minutes <= 0 {
-		return ""
-	}
-	if minutes%(24*60) == 0 {
-		days := minutes / (24 * 60)
-		if days == 1 {
-			return "1 day window"
-		}
-		return fmt.Sprintf("%d days window", days)
-	}
-	if minutes%60 == 0 {
-		hours := minutes / 60
-		if hours == 1 {
-			return "1 hour window"
-		}
-		return fmt.Sprintf("%d hours window", hours)
-	}
-	if minutes == 1 {
-		return "1 minute window"
-	}
-	return fmt.Sprintf("%d minutes window", minutes)
-}
-
 var (
 	planKeys = []string{
 		"plan", "planName", "plan_name", "subscription",

@@ -470,12 +470,14 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		return
 	}
 
-	// No cache — first fetch. Show the provider splash (loadingFaceFor)
-	// until real data arrives, instead of an empty title-only placeholder.
-	// The splash is the brand glyph on the brand background — much less
-	// jarring than a stray label that flashes while the request is in
-	// flight. The provider may not even be registered yet on early
-	// startup; loadingFaceFor handles both cases.
+	// No cache — first fetch. Don't send any image: Stream Deck is
+	// already showing the action's static "Image" from manifest.json
+	// (assets/action-<provider>-key.svg), which is itself a brand
+	// glyph on a brand-ish background. Rendering our own splash on
+	// top would cause a visible second-loading-screen flash with a
+	// different bg color and a smaller glyph. Just leave SD's icon
+	// visible until renderSnapshotForKey replaces it with real data
+	// (or with an error/no-metric face once a snapshot returns).
 	mu.Lock()
 	visibleKeys[ev.Context] = &visibleKey{
 		context:       ev.Context,
@@ -486,10 +488,8 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		lastAutoTitle: lastAutoTitle,
 	}
 	mu.Unlock()
-	_ = hideLabel // splash never shows a label; reserved for cache path.
+	_ = hideLabel // no setImage in this branch; reserved for cache path.
 
-	ksEff := settings.EffectiveSettings(ks, providerID)
-	conn.SetImage(ev.Context, loadingFaceFor(providerID, &ksEff))
 	setTitleForKey(conn, ev.Context, customTitle, title)
 	conn.Logf("key appeared, no cache (now tracking %d visible key(s))", countVisible())
 	if settingsLoaded {

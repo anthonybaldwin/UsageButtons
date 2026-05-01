@@ -492,10 +492,19 @@ func safeCacheFilename(providerID string) string {
 	return string(out)
 }
 
-// shouldPersistSnapshot reports whether a snapshot has useful data to restore
-// after a restart.
+// shouldPersistSnapshot reports whether the snapshot is content-worth
+// writing to disk. Persist anything the provider produced — including
+// blocked / no-metric / error snapshots — so the on-disk cache always
+// reflects last-known truth. Without this, a stale "happy" snapshot
+// outlives a real "blocked" outcome and re-renders briefly on startup
+// before the live fetch overwrites it ("data flashes then disappears").
+//
+// The fingerprint-validation check in shouldPersistProviderSnapshot
+// still gates browser-session providers separately, so this lives at
+// the snapshot level only.
 func shouldPersistSnapshot(s Snapshot) bool {
-	return s.Error == "" && len(s.Metrics) > 0
+	_ = s
+	return true
 }
 
 // shouldPersistProviderSnapshot reports whether a provider snapshot is safe to

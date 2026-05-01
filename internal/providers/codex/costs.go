@@ -80,6 +80,8 @@ var codexPriceTable = map[string]codexPricing{
 	"gpt-5.4-mini":        {input: 0.75, output: 4.5, cached: ptrFloat(0.075)},
 	"gpt-5.4-nano":        {input: 0.2, output: 1.25, cached: ptrFloat(0.02)},
 	"gpt-5.4-pro":         {input: 30.0, output: 180.0},
+	"gpt-5.5":             {input: 5.0, output: 30.0, cached: ptrFloat(0.5)},
+	"gpt-5.5-pro":         {input: 30.0, output: 180.0},
 }
 
 // codexTokenUsage mirrors the total_token_usage object Codex writes into

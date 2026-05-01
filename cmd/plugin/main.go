@@ -81,6 +81,14 @@ type visibleKey struct {
 	showTitle     bool   // true when user has enabled the native SD title
 	customTitle   bool   // true when the user has overridden the native title text
 	lastAutoTitle string // last title value written by the plugin
+	// firstDataRendered is true once this button has rendered a real
+	// metric (or a cached real metric on cold-start). While false, every
+	// non-real-metric render is replaced with the provider splash so the
+	// user never sees an empty/dashed/error placeholder before any data
+	// has actually arrived. After it flips true, downstream state
+	// changes (snapshot turns blocked, metric disappears) render
+	// normally so the user can see what's happening.
+	firstDataRendered bool
 }
 
 var (
@@ -470,7 +478,12 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		return
 	}
 
-	// No cache — first fetch.
+	// No cache — first fetch. Show the provider splash (loadingFaceFor)
+	// until real data arrives, instead of an empty title-only placeholder.
+	// The splash is the brand glyph on the brand background — much less
+	// jarring than a stray label that flashes while the request is in
+	// flight. The provider may not even be registered yet on early
+	// startup; loadingFaceFor handles both cases.
 	mu.Lock()
 	visibleKeys[ev.Context] = &visibleKey{
 		context:       ev.Context,
@@ -481,20 +494,10 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		lastAutoTitle: lastAutoTitle,
 	}
 	mu.Unlock()
+	_ = hideLabel // splash never shows a label; reserved for cache path.
 
-	if prov := providers.Get(providerID); prov != nil {
-		svgLabel := ""
-		if !hideLabel {
-			svgLabel = title
-		}
-		// Merge provider-tier overrides so the initial placeholder
-		// reflects the same colors the live tile will render with.
-		ksEff := settings.EffectiveSettings(ks, prov.ID())
-		conn.SetImage(ev.Context, placeholderFace(prov, svgLabel, "", "", ksEff))
-	} else {
-		ksEff := settings.EffectiveSettings(ks, providerID)
-		conn.SetImage(ev.Context, loadingFaceFor(providerID, &ksEff))
-	}
+	ksEff := settings.EffectiveSettings(ks, providerID)
+	conn.SetImage(ev.Context, loadingFaceFor(providerID, &ksEff))
 	setTitleForKey(conn, ev.Context, customTitle, title)
 	conn.Logf("key appeared, no cache (now tracking %d visible key(s))", countVisible())
 	if settingsLoaded {
@@ -1023,6 +1026,36 @@ func redrawKeyFromCache(conn *streamdeck.Connection, context string) {
 	renderSnapshotForKey(conn, keyCopy, prov, *snapshot, age)
 }
 
+// markFirstDataRendered flips the per-key firstDataRendered flag so
+// future non-real-metric renders stop being suppressed in favor of the
+// splash. Idempotent.
+func markFirstDataRendered(context string) {
+	mu.Lock()
+	defer mu.Unlock()
+	if k, ok := visibleKeys[context]; ok && !k.firstDataRendered {
+		k.firstDataRendered = true
+	}
+}
+
+// keyHasFirstData returns the per-key firstDataRendered flag. False if
+// the key has no entry (e.g. removed mid-render).
+func keyHasFirstData(context string) bool {
+	mu.Lock()
+	defer mu.Unlock()
+	k, ok := visibleKeys[context]
+	return ok && k.firstDataRendered
+}
+
+// renderInitialSplash paints the provider splash and returns true,
+// signalling the caller to skip the placeholder/error/no-metric path
+// it would otherwise have taken. Used while a button is still waiting
+// on its first real metric so the user never sees an intermediate
+// title-only or "—" face during the initial load window.
+func renderInitialSplash(conn *streamdeck.Connection, context, providerID string, ks settings.KeySettings) {
+	ksEff := settings.EffectiveSettings(ks, providerID)
+	conn.SetImage(context, loadingFaceFor(providerID, &ksEff))
+}
+
 func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov providers.Provider, snapshot providers.Snapshot, snapshotAge time.Duration) {
 	context := key.context
 	// Merge provider-tier overrides under the per-button settings so
@@ -1046,6 +1079,19 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 				k.nextPollAt = k.lastPollAt
 			}
 			mu.Unlock()
+		}
+
+		// While we've never rendered a real metric, suppress the error
+		// face in favor of the splash. notConfigured is the exception:
+		// it's the user's persistent "fix this in settings" signal and
+		// hiding it forever would leave a brand-new install looking
+		// permanently busy. Every other error transitions in once data
+		// has rendered at least once.
+		if !key.firstDataRendered && !notConfigured {
+			conn.Logf("render[%s/%s] holding splash (initial-load error: %q)",
+				prov.ID(), metricID, snapshot.Error)
+			renderInitialSplash(conn, context, prov.ID(), ks)
+			return
 		}
 
 		value := "ERR"
@@ -1120,9 +1166,22 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 					fake = metricWithSnapshotAge(fake, snapshotAge)
 					conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, fake, ks, hideLabel))
 					setTitleForKey(conn, context, customTitle, title)
+					markFirstDataRendered(context)
 					return
 				}
 			}
+		}
+
+		// While we've never rendered a real metric, the dashed-out
+		// placeholder reads as "still loading" — exactly the
+		// intermediate state we're trying to avoid. Hold the splash
+		// instead so the button only flips off splash when its actual
+		// metric is ready.
+		if !key.firstDataRendered {
+			conn.Logf("render[%s/%s] holding splash (initial-load no-metric, snapshot had %d metrics)",
+				prov.ID(), metricID, len(snapshot.Metrics))
+			renderInitialSplash(conn, context, prov.ID(), ks)
+			return
 		}
 
 		// Dashed-out placeholder — show metric caption as subtext
@@ -1150,6 +1209,7 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 		prov.ID(), metricID, metricCopy.Value, metricCopy.Unit, metricCopy.Ratio, snapshot.Source)
 	conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, metricCopy, ks, hideLabel))
 	setTitleForKey(conn, context, customTitle, metricLabel)
+	markFirstDataRendered(context)
 }
 
 // setTitleForKey pre-populates the native title with our label so

@@ -1116,6 +1116,9 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 		case isServerError(snapshot.Error):
 			value = "ERR"
 			subHint = "Server Error"
+		case isBotBlocked(snapshot.Error):
+			value = "AUTH"
+			subHint = "Press to Verify"
 		default:
 			subHint = "See Settings"
 		}
@@ -1879,6 +1882,11 @@ var (
 	extensionNeededRe = regexp.MustCompile(`(?i)Install the Usage Buttons|Paste a Cookie|Helper Chrome extension`)
 	networkRe         = regexp.MustCompile(`(?i)network error|dial tcp|connection refused|i/o timeout|context deadline exceeded|ETIMEDOUT`)
 	serverErrRe       = regexp.MustCompile(`(?i)server error|HTTP [5]\d\d`)
+	// botBlockedRe matches the snapshot.Error a provider sets when its
+	// host's anti-bot interstitial (DataDome / Cloudflare / similar)
+	// kept us from a real response. Routed to its own face so users
+	// see "press to verify" instead of the generic "See Settings".
+	botBlockedRe = regexp.MustCompile(`(?i)blocked by bot detection|datadome|are you human`)
 )
 
 func isRateLimit(msg string) bool        { return rateLimitRe.MatchString(msg) }
@@ -1890,6 +1898,7 @@ func isExtensionTimeout(msg string) bool { return extensionTimeoutRe.MatchString
 func isExtensionNeeded(msg string) bool  { return extensionNeededRe.MatchString(msg) }
 func isNetworkError(msg string) bool     { return networkRe.MatchString(msg) }
 func isServerError(msg string) bool      { return serverErrRe.MatchString(msg) }
+func isBotBlocked(msg string) bool       { return botBlockedRe.MatchString(msg) }
 
 func countVisible() int {
 	return len(visibleKeys)

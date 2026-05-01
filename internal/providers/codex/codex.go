@@ -668,6 +668,7 @@ func (Provider) MetricIDs() []string {
 		"weekly-review-percent", "weekly-review-pace",
 		"credits-balance",
 		"cost-today", "cost-30d",
+		"last-spend",
 	}
 }
 
@@ -933,6 +934,19 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	// window; no-op otherwise so buttons render as dash instead of
 	// faking $0.00.
 	metrics = append(metrics, codexCostMetrics()...)
+
+	// Last credit transaction from the analytics endpoint. Cookie-gated
+	// via the companion extension; silently skipped when the extension
+	// isn't reachable or the configured base URL isn't a chatgpt.com host.
+	if browserPathApplicable(chatGPTBaseURL()) {
+		if ev, evErr := fetchLastCreditEvent(chatGPTBaseURL()); evErr == nil {
+			if m := lastSpendMetric(ev); m != nil {
+				metrics = append(metrics, *m)
+			}
+		} else if providers.LogSink != nil {
+			providers.LogSink(fmt.Sprintf("[codex] last-spend fetch failed: %v", evErr))
+		}
+	}
 
 	provName := humanPlan(resp.PlanType)
 	if provName == "" {

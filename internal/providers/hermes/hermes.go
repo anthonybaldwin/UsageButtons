@@ -21,6 +21,7 @@
 package hermes
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -133,6 +134,11 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	}
 	if looksLikeChallenge(products) {
 		hermesLogf("products body looks like DataDome challenge (%d bytes); triggering reprime", len(products))
+		triggerReprime()
+		return blockedSnapshot(), nil
+	}
+	if looksUnauthenticated(products) {
+		hermesLogf("products body has no Log out link (%d bytes); treating as blocked, triggering reprime", len(products))
 		triggerReprime()
 		return blockedSnapshot(), nil
 	}
@@ -765,6 +771,25 @@ func looksLikeChallenge(body []byte) bool {
 		}
 	}
 	return false
+}
+
+// looksUnauthenticated reports whether the body is the portal shell
+// without a logged-in user. The Nous Next.js nav renders a "Log out"
+// link only when the session is authenticated; the auth-handoff /
+// signed-out / pre-DataDome shell shows only "Log in". Headless
+// fetches that survive looksLikeChallenge but still see this shell
+// have no user data inlined to scrape — same recovery path as a
+// DataDome block (reprime → real browser → cookie refresh →
+// authenticated render).
+func looksUnauthenticated(body []byte) bool {
+	scan := body
+	if len(scan) > 64*1024 {
+		scan = scan[:64*1024]
+	}
+	// Case-sensitive on purpose: portal nav copy is "Log out" with
+	// that exact casing. Avoids matching unrelated "log out" copy
+	// in marketing or footer text.
+	return !bytes.Contains(scan, []byte("Log out"))
 }
 
 // smellsLikeBlock reports whether err looks like DataDome locked us

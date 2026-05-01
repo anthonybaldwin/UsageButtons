@@ -470,7 +470,12 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		return
 	}
 
-	// No cache — first fetch.
+	// No cache — first fetch. Show the provider splash (loadingFaceFor)
+	// until real data arrives, instead of an empty title-only placeholder.
+	// The splash is the brand glyph on the brand background — much less
+	// jarring than a stray label that flashes while the request is in
+	// flight. The provider may not even be registered yet on early
+	// startup; loadingFaceFor handles both cases.
 	mu.Lock()
 	visibleKeys[ev.Context] = &visibleKey{
 		context:       ev.Context,
@@ -481,20 +486,10 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		lastAutoTitle: lastAutoTitle,
 	}
 	mu.Unlock()
+	_ = hideLabel // splash never shows a label; reserved for cache path.
 
-	if prov := providers.Get(providerID); prov != nil {
-		svgLabel := ""
-		if !hideLabel {
-			svgLabel = title
-		}
-		// Merge provider-tier overrides so the initial placeholder
-		// reflects the same colors the live tile will render with.
-		ksEff := settings.EffectiveSettings(ks, prov.ID())
-		conn.SetImage(ev.Context, placeholderFace(prov, svgLabel, "", "", ksEff))
-	} else {
-		ksEff := settings.EffectiveSettings(ks, providerID)
-		conn.SetImage(ev.Context, loadingFaceFor(providerID, &ksEff))
-	}
+	ksEff := settings.EffectiveSettings(ks, providerID)
+	conn.SetImage(ev.Context, loadingFaceFor(providerID, &ksEff))
 	setTitleForKey(conn, ev.Context, customTitle, title)
 	conn.Logf("key appeared, no cache (now tracking %d visible key(s))", countVisible())
 	if settingsLoaded {

@@ -896,8 +896,17 @@ func handleKeyDown(conn *streamdeck.Connection, ev streamdeck.Event) {
 	// not healthy we open the dashboard alongside the forced refresh
 	// so one press re-primes the cookie; a healthy press behaves as a
 	// plain refresh and does not steal focus.
-	if providerNeedsDashboardNudge(providerID) {
-		if dash := providerDashboardURL(providerID); dash != "" {
+	{
+		snap, _ := providers.PeekSnapshotState(providerID)
+		status := "<nil>"
+		if snap != nil {
+			status = snap.Status
+		}
+		dash := providerDashboardURL(providerID)
+		needs := providerNeedsDashboardNudge(providerID)
+		conn.Logf("[keydown] action=%q providerID=%q snap.status=%q dashboardURL=%q needsNudge=%v", ev.Action, providerID, status, dash, needs)
+		if needs && dash != "" {
+			conn.Logf("[keydown] opening dashboard URL for %s", providerID)
 			conn.OpenURL(dash)
 		}
 	}

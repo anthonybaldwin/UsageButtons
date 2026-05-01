@@ -316,10 +316,47 @@ func clientStatusDetail(ctx context.Context) (StatusInfo, bool, error) {
 	}, true, nil
 }
 
+// clientReprime issues a "reprime" message over the IPC socket and
+// returns nil if the extension reported ok (including the "skipped"
+// path), or an error otherwise.
+func clientReprime(ctx context.Context, dashboardURL string) error {
+	reqID := nextRequestID()
+	reqMsg := Message{
+		ID:   reqID,
+		Kind: "reprime",
+		URL:  dashboardURL,
+	}
+
+	started := time.Now()
+	logURL := safeURLForLog(dashboardURL)
+	logf("reprime %s %s (timeout=%s)", reqID, logURL, reprimeBudget)
+
+	resp, err := roundtrip(ctx, reqMsg, reprimeBudget)
+	elapsed := time.Since(started)
+	if err != nil {
+		logf("reprime %s failed after %s: %s", reqID, elapsed, safeErrForLog(err))
+		return err
+	}
+	if resp.Kind == "error" {
+		logf("reprime %s extension-error after %s: %s", reqID, elapsed, safeExtErrForLog(resp.Error))
+		if resp.Error == "extension not connected" {
+			return ErrHostUnavailable
+		}
+		return fmt.Errorf("cookies: extension reprime error: %s", resp.Error)
+	}
+	if resp.Kind != "reprimeResult" {
+		logf("reprime %s unexpected-kind %q after %s", reqID, resp.Kind, elapsed)
+		return fmt.Errorf("cookies: unexpected reply kind %q", resp.Kind)
+	}
+	logf("reprime %s ok after %s", reqID, elapsed)
+	return nil
+}
+
 // init wires the package-level transport closures to the TCP-loopback
 // implementations once ipc.go is linked in.
 func init() {
 	dispatchFetch = clientFetch
+	dispatchReprime = clientReprime
 	probeStatus = clientStatus
 	probeStatusDetail = clientStatusDetail
 }

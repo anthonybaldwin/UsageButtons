@@ -241,6 +241,80 @@ func TestClientProbe_NotReady(t *testing.T) {
 	}
 }
 
+func TestReprime_RoundTrip(t *testing.T) {
+	resetReprimeStateForTest()
+	t.Cleanup(resetReprimeStateForTest)
+
+	gotURL := make(chan string, 1)
+	setupTestIPC(t, func(conn net.Conn) {
+		defer conn.Close()
+		frame, err := ReadFrame(conn)
+		if err != nil {
+			return
+		}
+		req, _ := DecodeMessage(frame)
+		gotURL <- req.URL
+		resp := Message{ID: req.ID, Kind: "reprimeResult"}
+		payload, _ := EncodeMessage(resp)
+		_ = WriteFrame(conn, payload)
+	})
+
+	if err := Reprime(context.Background(), "https://portal.nousresearch.com/usage"); err != nil {
+		t.Fatalf("Reprime: %v", err)
+	}
+	select {
+	case url := <-gotURL:
+		if url != "https://portal.nousresearch.com/usage" {
+			t.Fatalf("forwarded url: %q", url)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ipc handler never saw the request")
+	}
+}
+
+func TestReprime_RateLimited(t *testing.T) {
+	resetReprimeStateForTest()
+	t.Cleanup(resetReprimeStateForTest)
+
+	hits := make(chan struct{}, 4)
+	setupTestIPC(t, func(conn net.Conn) {
+		defer conn.Close()
+		frame, err := ReadFrame(conn)
+		if err != nil {
+			return
+		}
+		req, _ := DecodeMessage(frame)
+		hits <- struct{}{}
+		resp := Message{ID: req.ID, Kind: "reprimeResult"}
+		payload, _ := EncodeMessage(resp)
+		_ = WriteFrame(conn, payload)
+	})
+
+	if err := Reprime(context.Background(), "https://portal.nousresearch.com/usage"); err != nil {
+		t.Fatalf("first Reprime: %v", err)
+	}
+	if err := Reprime(context.Background(), "https://portal.nousresearch.com/usage"); !errors.Is(err, ErrReprimeRateLimited) {
+		t.Fatalf("second Reprime should be rate-limited, got %v", err)
+	}
+	// Confirm we hit the host exactly once.
+	<-hits
+	select {
+	case <-hits:
+		t.Fatal("rate-limited call should not have reached the host")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestReprime_OriginNotAllowed(t *testing.T) {
+	resetReprimeStateForTest()
+	t.Cleanup(resetReprimeStateForTest)
+
+	err := Reprime(context.Background(), "https://example.com/")
+	if !errors.Is(err, ErrOriginNotAllowed) {
+		t.Fatalf("want ErrOriginNotAllowed, got %v", err)
+	}
+}
+
 func TestListenIPC_PublishesPortAndCleansOnClose(t *testing.T) {
 	tmp := t.TempDir()
 	portFile := filepath.Join(tmp, "ipc.port")

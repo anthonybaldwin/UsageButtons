@@ -235,6 +235,43 @@ func TestBridge_Fetch_Timeout(t *testing.T) {
 	}
 }
 
+func TestBridge_Reprime_RoundTrip(t *testing.T) {
+	b := NewBridge()
+	ext := newExtStub()
+	_ = b.Handle(context.Background(), Message{Kind: "ready", UserAgent: "UA-X"}, ext.send)
+
+	plugSide, hostSide := net.Pipe()
+	defer plugSide.Close()
+	go b.HandlePluginConn(context.Background(), hostSide)
+
+	payload, _ := EncodeMessage(Message{ID: "p-77", Kind: "reprime", URL: "https://portal.nousresearch.com/usage"})
+	_ = plugSide.SetDeadline(time.Now().Add(3 * time.Second))
+	if err := WriteFrame(plugSide, payload); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	select {
+	case forwarded := <-ext.out:
+		if forwarded.ID != "p-77" || forwarded.Kind != "reprime" || forwarded.URL != "https://portal.nousresearch.com/usage" {
+			t.Fatalf("forwarded: %+v", forwarded)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("bridge did not forward reprime to extension")
+	}
+
+	reply := Message{ID: "p-77", Kind: "reprimeResult"}
+	_ = b.Handle(context.Background(), reply, ext.send)
+
+	frame, err := ReadFrame(plugSide)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	got, _ := DecodeMessage(frame)
+	if got.ID != "p-77" || got.Kind != "reprimeResult" {
+		t.Fatalf("reply: %+v", got)
+	}
+}
+
 func TestBridge_HandleForwardSendError(t *testing.T) {
 	b := NewBridge()
 	ext := &extStub{err: errors.New("broken pipe"), out: make(chan Message, 1)}

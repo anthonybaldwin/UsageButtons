@@ -890,6 +890,17 @@ func handleKeyDown(conn *streamdeck.Connection, ev streamdeck.Event) {
 		return
 	}
 	providerID := streamdeck.ProviderIDFromAction(ev.Action)
+	// Cookie-based providers can lock up when the host's bot-detection
+	// JS (DataDome on portal.nousresearch.com) only refreshes its
+	// fingerprint cookie on page load. Whenever the cached snapshot is
+	// not healthy we open the dashboard alongside the forced refresh
+	// so one press re-primes the cookie; a healthy press behaves as a
+	// plain refresh and does not steal focus.
+	if providerNeedsDashboardNudge(providerID) {
+		if dash := providerDashboardURL(providerID); dash != "" {
+			conn.OpenURL(dash)
+		}
+	}
 	skipContext := ev.Context
 	go func() {
 		refreshKey(conn, skipContext, true)
@@ -903,6 +914,28 @@ func handleKeyDown(conn *streamdeck.Connection, ev streamdeck.Event) {
 			refreshProviderSiblings(conn, providerID, skipContext)
 		}
 	}()
+}
+
+// providerDashboardURL returns the user-facing dashboard URL for
+// providers whose stats endpoint is gated by browser-only bot detection.
+// Empty for providers that don't need a page-load nudge.
+func providerDashboardURL(providerID string) string {
+	switch providerID {
+	case "hermes":
+		return "https://portal.nousresearch.com/usage"
+	}
+	return ""
+}
+
+// providerNeedsDashboardNudge reports whether pressing a key for
+// providerID should also open the dashboard URL. True when the cached
+// snapshot is missing or not operational — covers both the 200+challenge
+// path (Status="blocked") and the 403/timeout/cookie-missing path
+// (Status="unknown"), since DataDome can serve the challenge either way
+// and both leave the user in a state that a page-load nudge can fix.
+func providerNeedsDashboardNudge(providerID string) bool {
+	snap, _ := providers.PeekSnapshotState(providerID)
+	return snap == nil || snap.Status != "operational"
 }
 
 // refreshProviderSiblings re-renders every visible key of providerID

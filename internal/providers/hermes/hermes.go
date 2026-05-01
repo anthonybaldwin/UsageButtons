@@ -27,6 +27,7 @@ import (
 	"math"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,8 +41,13 @@ import (
 const (
 	productsURL = "https://portal.nousresearch.com/products"
 	apiKeysURL  = "https://portal.nousresearch.com/api-keys"
-	provID      = "hermes"
-	provName    = "Hermes"
+	// dashboardURL is the URL the extension reloads or opens in a hidden
+	// background tab when DataDome blocks our headless fetches. Real
+	// browser page-load JS is the only way DataDome's fingerprint cookie
+	// rotates, so this is the recovery handle.
+	dashboardURL = "https://portal.nousresearch.com/usage"
+	provID       = "hermes"
+	provName     = "Hermes"
 )
 
 // Provider fetches Nous Research portal usage data.
@@ -117,7 +123,14 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 
 	products, err := fetchHTML(ctx, productsURL, headers)
 	if err != nil {
+		if smellsLikeBlock(err) {
+			triggerReprime()
+		}
 		return mapHTTPError(err), nil
+	}
+	if looksLikeChallenge(products) {
+		triggerReprime()
+		return blockedSnapshot(), nil
 	}
 	usage := snapshotFromHTML(products, time.Now().UTC())
 
@@ -700,6 +713,77 @@ func errorSnapshot(message string) providers.Snapshot {
 		Metrics:      []providers.MetricValue{},
 		Status:       "unknown",
 		Error:        message,
+	}
+}
+
+// looksLikeChallenge reports whether body is a bot-detection
+// interstitial (DataDome) rather than a real portal page. The portal's
+// fingerprint cookie only refreshes when the dashboard's own JS runs,
+// so headless polls eventually trip the challenge until the user
+// re-visits the page. The plugin uses this signal to surface a
+// distinct "blocked" status so a button press can open the dashboard.
+func looksLikeChallenge(body []byte) bool {
+	scan := body
+	if len(scan) > 32*1024 {
+		scan = scan[:32*1024]
+	}
+	s := strings.ToLower(string(scan))
+	for _, n := range []string{
+		"geo.captcha-delivery.com",
+		"datadome",
+		"are you human",
+	} {
+		if strings.Contains(s, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// smellsLikeBlock reports whether err looks like DataDome locked us
+// out (401 / 403). A reprime can recover from these because they are
+// often the cookie-rotation path, not real auth loss; if the user is
+// genuinely logged out, opening the dashboard in the background is
+// also harmless. 5xx and network errors are excluded — those don't
+// benefit from a page reload.
+func smellsLikeBlock(err error) bool {
+	var httpErr *httputil.Error
+	if !errors.As(err, &httpErr) {
+		return false
+	}
+	return httpErr.Status == 401 || httpErr.Status == 403
+}
+
+// triggerReprime asks the extension to reload the dashboard so
+// DataDome's JS rotates the fingerprint cookie. Best-effort and async:
+// the request runs on a fresh background context (the caller's Fetch
+// context is about to expire) and the result is logged but not
+// surfaced — providers don't have a feedback channel for it, and the
+// next fetch tick reveals whether it worked.
+func triggerReprime() {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+		defer cancel()
+		if err := cookies.Reprime(ctx, dashboardURL); err != nil {
+			// Rate-limited and host-unavailable are expected; everything
+			// else is mildly interesting but never fatal.
+			_ = err
+		}
+	}()
+}
+
+// blockedSnapshot reports that the portal served a bot-detection
+// interstitial. Status="blocked" is the wire signal the plugin's key
+// handler reads to decide whether a press should also open the
+// dashboard URL alongside the normal refresh.
+func blockedSnapshot() providers.Snapshot {
+	return providers.Snapshot{
+		ProviderID:   provID,
+		ProviderName: provName,
+		Source:       "cookie",
+		Metrics:      []providers.MetricValue{},
+		Status:       "blocked",
+		Error:        "Nous portal blocked by bot detection — open the portal in your browser to refresh.",
 	}
 }
 

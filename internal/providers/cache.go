@@ -265,18 +265,32 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 	if opts.Force {
 		forceStr = "forced "
 	}
-	cacheLog("cache[%s] miss — %sfetching upstream", p.ID(), forceStr)
+	// Cold-start race: handleWillAppear calls MarkActive then `go
+	// refreshKey`. If button A's goroutine starts running before button
+	// B's willAppear has fired, ActiveFor only contains A's metric and
+	// any demand-fetching provider (perplexity, claude local-only) will
+	// skip endpoints B needs — leaving B's button stuck on dashes until
+	// the user force-refreshes. On the FIRST fetch (e.snapshot == nil)
+	// we pass nil ActiveMetricIDs to force a full fetch; demand-fetching
+	// kicks back in once we have a snapshot and the active set has
+	// stabilized.
+	coldStart := e.snapshot == nil
+	cacheLog("cache[%s] miss — %sfetching upstream%s", p.ID(), forceStr, boolStr(coldStart, " (cold-start, full fetch)", ""))
 	e.mu.Unlock()
+
+	var activeIDs []string
+	if !coldStart {
+		activeIDs = ActiveFor(p.ID())
+	}
 
 	// Do the actual fetch outside the lock. ActiveMetricIDs lets opt-in
 	// providers skip endpoints that don't contribute to any displayed
-	// metric. nil = "fetch everything" (cache hasn't seen any
-	// MarkActive call for this provider yet, e.g. cold start), so the
-	// existing fleet keeps its current behavior unchanged.
+	// metric. nil = "fetch everything" — used on the first fetch (above)
+	// and as the documented fallback for non-opt-in providers.
 	snapshot, fetchErr := p.Fetch(FetchContext{
 		PollIntervalMs:  int64(MinTTL / time.Millisecond),
 		Force:           opts.Force,
-		ActiveMetricIDs: ActiveFor(p.ID()),
+		ActiveMetricIDs: activeIDs,
 	})
 
 	e.mu.Lock()

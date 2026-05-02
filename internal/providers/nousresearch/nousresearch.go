@@ -145,8 +145,9 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		triggerReprime()
 		return blockedSnapshot(), nil
 	}
-	if looksUnauthenticated(products) {
-		logf("products body has no Log out link (%d bytes); treating as blocked, triggering reprime", len(products))
+	if !hasUserData(products) {
+		logf("products body lacks user-data markers (%d bytes); treating as blocked, triggering reprime. sniff: %q",
+			len(products), sniffBody(products))
 		triggerReprime()
 		return blockedSnapshot(), nil
 	}
@@ -781,23 +782,39 @@ func looksLikeChallenge(body []byte) bool {
 	return false
 }
 
-// looksUnauthenticated reports whether the body is the portal shell
-// without a logged-in user. The Nous Next.js nav renders a "Log out"
-// link only when the session is authenticated; the auth-handoff /
-// signed-out / pre-DataDome shell shows only "Log in". Headless
-// fetches that survive looksLikeChallenge but still see this shell
-// have no user data inlined to scrape — same recovery path as a
-// DataDome block (reprime → real browser → cookie refresh →
-// authenticated render).
-func looksUnauthenticated(body []byte) bool {
+// hasUserData reports whether the body contains the inline-JSON fields
+// the Nous portal only renders for authenticated users. Used as the
+// auth gate after looksLikeChallenge — the same recovery path applies
+// (reprime → real browser → cookie refresh → authenticated render).
+//
+// Marker-based instead of nav-text-based on purpose: Nous's nav copy
+// has rotated through "Log out" / dropdown-icon / "Sign out" variants
+// with each portal redesign, but the inline JSON shape we depend on
+// for scraping (subscriptionCredits / apiCreditsBalance / activeSubscription)
+// is what actually proves the SSR rendered authenticated user state.
+// Any one of those fields is sufficient — even a Free-tier $0 account
+// still renders the field with a zero value.
+func hasUserData(body []byte) bool {
 	scan := body
-	if len(scan) > 64*1024 {
-		scan = scan[:64*1024]
+	if len(scan) > 256*1024 {
+		scan = scan[:256*1024]
 	}
-	// Case-sensitive on purpose: portal nav copy is "Log out" with
-	// that exact casing. Avoids matching unrelated "log out" copy
-	// in marketing or footer text.
-	return !bytes.Contains(scan, []byte("Log out"))
+	// Markers are in JS-stringified form (\"name\":) because the page
+	// payload lives inside `self.__next_f.push([1, "..."])` where every
+	// quote is escaped. Plain `"name":` would also appear in non-payload
+	// JSON islands but matching the escaped form keeps us anchored to
+	// the SSR'd RSC payload — the only place the user data actually
+	// lives.
+	for _, m := range [][]byte{
+		[]byte(`\"subscriptionCredits\":`),
+		[]byte(`\"apiCreditsBalance\":`),
+		[]byte(`\"activeSubscription\":`),
+	} {
+		if bytes.Contains(scan, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // smellsLikeBlock reports whether err looks like DataDome locked us

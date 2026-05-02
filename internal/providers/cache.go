@@ -601,11 +601,15 @@ func loadPersistentSnapshot(providerID string) (Snapshot, time.Time, bool) {
 		_ = os.Remove(path)
 		return Snapshot{}, time.Time{}, false
 	}
-	s := payload.Snapshot
-	if age >= MinTTL {
-		s = markMetricsStale(s)
-	}
-	return s, payload.FetchedAt, true
+	// Render the restored snapshot at full brightness — the in-flight
+	// refresh kicked off by handleWillAppear / refreshOrRedrawVisible
+	// is about to replace it with fresh data, and if THAT fetch fails
+	// the cache.go fetchErr branch will markStale the snapshot itself
+	// (with a useful error message) — that's the moment to dim the
+	// tile, not the routine cross-session restore. Previously every
+	// restore older than MinTTL (5m) flashed dim → bright on first
+	// appear, which felt like the button was broken.
+	return payload.Snapshot, payload.FetchedAt, true
 }
 
 // providerConfigFingerprint returns a stable fingerprint of the credentials

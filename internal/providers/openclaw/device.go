@@ -40,7 +40,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -260,24 +259,39 @@ func writeFile0600(path string, value any) error {
 
 // buildDeviceAuthPayloadV3 returns the canonical V3 pipe-joined string
 // signed in `device.signature`. Ports buildDeviceAuthPayloadV3 from
-// src/gateway/device-auth.ts:36-52. Field order is fixed:
+// src/gateway/device-auth.ts. Field order is fixed:
 //
 //	v3 | deviceId | clientId | clientMode | role | scopes | signedAt
 //	   | token | nonce | platform | deviceFamily
 //
-// Empty fields render as the empty string. Scopes are comma-joined
-// after sort to match normalizeDeviceAuthScopes' .toSorted() (see
-// src/shared/device-auth.ts:20-37). signedAt is decimal ms epoch.
+// Empty fields render as the empty string. signedAt is decimal ms
+// epoch.
+//
+// Two cross-runtime invariants the signature verifier (server-side
+// resolveDeviceSignaturePayloadVersion) cares about, neither of which
+// is enforced inside this function — both must be honored by the call
+// site:
+//
+//   - scopes ordering: the server uses the wire scopes array AS-IS,
+//     no re-sort. The slice handed to this function must therefore
+//     equal the slice put on connect.params.scopes. requestedScopes
+//     is kept alphabetically sorted as the canonical order.
+//
+//   - token resolution: the server picks `auth.token ?? auth.deviceToken
+//     ?? auth.bootstrapToken ?? ""` to plug into the canonical's token
+//     slot (handshake-auth-helpers.ts:resolveSignatureToken). The caller
+//     must apply the same fallback when it computes `token` here — a
+//     plugin that signs over its empty deviceToken while sending a
+//     non-empty shared `auth.token` will diverge from the server's
+//     reconstruction and the signature will not verify.
 func buildDeviceAuthPayloadV3(deviceID, clientID, clientMode, role string, scopes []string, signedAtMs int64, token, nonce, platform, deviceFamily string) string {
-	sortedScopes := append([]string(nil), scopes...)
-	sort.Strings(sortedScopes)
 	parts := []string{
 		"v3",
 		deviceID,
 		clientID,
 		clientMode,
 		role,
-		strings.Join(sortedScopes, ","),
+		strings.Join(scopes, ","),
 		fmt.Sprintf("%d", signedAtMs),
 		token,
 		nonce,

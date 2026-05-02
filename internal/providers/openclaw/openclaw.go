@@ -332,12 +332,21 @@ type helloResponse struct {
 // requestedScopes is the operator scope set we ask the server for.
 // Same set as the dashboard SPA's CONTROL_UI_OPERATOR_SCOPES at
 // ui/src/ui/gateway.ts:152.
+//
+// Order is load-bearing: the gateway's signature verifier reconstructs
+// the canonical V3 payload using `connectParams.scopes` AS-IS (no
+// re-sort) — see resolveDeviceSignaturePayloadVersion at
+// src/gateway/server/ws-connection/handshake-auth-helpers.ts:300-340.
+// The literal slice we put on the wire must therefore equal the literal
+// slice we hand to buildDeviceAuthPayloadV3. Keeping this constant
+// alphabetically sorted is the simplest way to guarantee that
+// invariant; TestRequestedScopesSorted enforces it.
 var requestedScopes = []string{
 	"operator.admin",
-	"operator.read",
-	"operator.write",
 	"operator.approvals",
 	"operator.pairing",
+	"operator.read",
+	"operator.write",
 }
 
 // errStaleDeviceTokenCleared is the sentinel dialAndConnect returns
@@ -437,6 +446,18 @@ func dialAndConnect(ctx context.Context, base, sharedToken string, identity *dev
 
 	const role = "operator"
 	signedAt := time.Now().UnixMilli()
+	// Mirror the server's resolveSignatureToken precedence
+	// (handshake-auth-helpers.ts:274-281): canonical.token is
+	// auth.token ?? auth.deviceToken ?? auth.bootstrapToken ?? "".
+	// Using deviceToken alone here was the historical bug — the
+	// server reconstructs canonical with the shared sharedToken when
+	// auth.token is set, so signing over an empty deviceToken
+	// produced "device signature invalid" on every connect that had
+	// a configured operator token.
+	signatureToken := sharedToken
+	if signatureToken == "" {
+		signatureToken = deviceToken
+	}
 	canonical := buildDeviceAuthPayloadV3(
 		identity.DeviceID,
 		"gateway-client",
@@ -444,7 +465,7 @@ func dialAndConnect(ctx context.Context, base, sharedToken string, identity *dev
 		role,
 		requestedScopes,
 		signedAt,
-		deviceToken, // signature binds the payload to this token when set
+		signatureToken,
 		nonce,
 		devicePlatform(),
 		"", // deviceFamily — we have no equivalent; server treats empty as ok

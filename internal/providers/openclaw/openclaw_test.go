@@ -2,10 +2,29 @@ package openclaw
 
 import (
 	"errors"
+	"sort"
 	"testing"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
+
+// TestRequestedScopesSorted enforces the wire/canonical scope-order
+// invariant: the gateway's signature verifier reconstructs canonical
+// using `connectParams.scopes` AS-IS (no re-sort). Both the wire frame
+// and buildDeviceAuthPayloadV3 read directly from requestedScopes, so
+// the constant itself has to be in canonical order. If you reorder it
+// (or add a scope out of order), the next gateway connect will fail
+// with INVALID_REQUEST: device signature invalid.
+func TestRequestedScopesSorted(t *testing.T) {
+	got := append([]string(nil), requestedScopes...)
+	want := append([]string(nil), requestedScopes...)
+	sort.Strings(want)
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("requestedScopes is not alphabetically sorted\n got: %v\nwant: %v", got, want)
+		}
+	}
+}
 
 func TestProviderMetadata(t *testing.T) {
 	p := Provider{}

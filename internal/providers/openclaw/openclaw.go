@@ -123,8 +123,22 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		return errorSnapshot("OpenClaw: paste the gateway operator token in the PI (or set OPENCLAW_GATEWAY_TOKEN)."), nil
 	}
 
-	conn, err := dialAndConnect(ctx, base, token)
+	identity, err := loadOrCreateIdentity()
 	if err != nil {
+		logf("identity load/create failed: %v", err)
+		return errorSnapshot(fmt.Sprintf("OpenClaw: cannot read/write device keypair — %s", short(err))), nil
+	}
+	deviceToken, _, err := loadDeviceToken(base, identity.DeviceID)
+	if err != nil {
+		logf("device token load failed (continuing without): %v", err)
+	}
+
+	conn, err := dialAndConnect(ctx, base, token, identity, deviceToken)
+	if err != nil {
+		var pp *pairingPendingError
+		if errors.As(err, &pp) {
+			return pairingPendingSnapshot(pp), nil
+		}
 		return errorSnapshot(short(err)), nil
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
@@ -219,8 +233,11 @@ type errorPayload struct {
 	Details json.RawMessage `json:"details,omitempty"`
 }
 
-// connectParams are the connect frame's params (token-only auth, no
-// device identity — server skips nonce check when device is absent).
+// connectParams are the connect frame's params. Mirrors the server's
+// expected shape from connect handler at message-handler.ts. The
+// device + auth.deviceToken pair is what makes remote (Tailscale)
+// access work — without device pairing, the server strips scopes to
+// the empty set on non-loopback connects.
 type connectParams struct {
 	MinProtocol int                `json:"minProtocol"`
 	MaxProtocol int                `json:"maxProtocol"`
@@ -229,13 +246,17 @@ type connectParams struct {
 	Scopes      []string           `json:"scopes"`
 	Caps        []string           `json:"caps"`
 	Auth        connectAuthPayload `json:"auth"`
+	Device      *connectDevice     `json:"device,omitempty"`
 	UserAgent   string             `json:"userAgent"`
 	Locale      string             `json:"locale"`
 }
 
-// connectClient identifies our process to the gateway. "gateway-client"
-// is the closest fit in GATEWAY_CLIENT_IDS for an external programmatic
-// consumer — we are not the dashboard SPA and not a CLI.
+// connectClient identifies our process to the gateway. We use
+// "gateway-client" + "backend" so the same connect frame triggers
+// the local-loopback bypass (shouldSkipLocalBackendSelfPairing in
+// handshake-auth-helpers.ts:252-272) for users co-locating the
+// plugin with their gateway, while remote users go through the
+// device-pairing path.
 type connectClient struct {
 	ID       string `json:"id"`
 	Version  string `json:"version"`
@@ -243,10 +264,23 @@ type connectClient struct {
 	Mode     string `json:"mode"`
 }
 
-// connectAuthPayload carries the operator token. deviceToken /
-// password are unused.
+// connectAuthPayload carries the shared gateway token plus, after a
+// successful pair, the per-device token returned by the server.
 type connectAuthPayload struct {
-	Token string `json:"token"`
+	Token       string `json:"token,omitempty"`
+	DeviceToken string `json:"deviceToken,omitempty"`
+}
+
+// connectDevice is the signed device block. Server validates id ==
+// sha256(decode(publicKey)), nonce match, signature over the V3
+// canonical payload, and signedAt within DEVICE_SIGNATURE_SKEW_MS of
+// server clock. See message-handler.ts:744-789.
+type connectDevice struct {
+	ID        string `json:"id"`        // hex sha256(rawPublicKey)
+	PublicKey string `json:"publicKey"` // base64url, raw 32-byte Ed25519
+	Signature string `json:"signature"` // base64url Ed25519 sig of canonical payload
+	SignedAt  int64  `json:"signedAt"`  // ms since unix epoch
+	Nonce     string `json:"nonce"`     // from connect.challenge event
 }
 
 // CostUsageTotals mirrors the server's response shape — see
@@ -287,10 +321,89 @@ type helloResponse struct {
 	} `json:"auth"`
 }
 
-// dialAndConnect opens the WS, sends the connect req, waits for the
-// hello response. Returns a usable connection or an error describing
-// the failure.
-func dialAndConnect(ctx context.Context, base, token string) (*websocket.Conn, error) {
+// requestedScopes is the operator scope set we ask the server for.
+// Same set as the dashboard SPA's CONTROL_UI_OPERATOR_SCOPES at
+// ui/src/ui/gateway.ts:152.
+var requestedScopes = []string{
+	"operator.admin",
+	"operator.read",
+	"operator.write",
+	"operator.approvals",
+	"operator.pairing",
+}
+
+// pairingPendingError signals the gateway returned NOT_PAIRED on
+// connect because this device hasn't been approved yet. Carries the
+// requestId the user passes to `openclaw devices approve`.
+type pairingPendingError struct {
+	RequestID string
+	DeviceID  string
+}
+
+// Error returns the formatted pairing-pending error message.
+func (e *pairingPendingError) Error() string {
+	if e.RequestID == "" {
+		return "OpenClaw: device pairing required — run `openclaw devices list` on the gateway host to find the requestId"
+	}
+	return fmt.Sprintf("OpenClaw: device pairing required — run `openclaw devices approve %s` on the gateway host", e.RequestID)
+}
+
+// pairingErrorDetails is the shape of error.details on a NOT_PAIRED
+// response (see message-handler.ts:1083-1107 buildPairingConnectErrorDetails).
+type pairingErrorDetails struct {
+	RequestID string `json:"requestId"`
+	DeviceID  string `json:"deviceId"`
+	Reason    string `json:"reason"`
+}
+
+// challengePayload is the shape of the connect.challenge event body.
+type challengePayload struct {
+	Nonce string `json:"nonce"`
+	TS    int64  `json:"ts"`
+}
+
+// awaitConnectChallenge reads frames until we see a connect.challenge
+// event. The server sends this immediately on socket open; the client
+// MUST wait for it before sending connect (the server's challenge-
+// timeout watchdog rejects clients that fire connect prematurely).
+// Returns the nonce we sign into the connect frame's device.signature.
+func awaitConnectChallenge(ctx context.Context, ws *websocket.Conn) (string, error) {
+	deadline := time.Now().Add(dialTimeout)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+	for {
+		readCtx, cancel := context.WithDeadline(ctx, deadline)
+		_, raw, err := ws.Read(readCtx)
+		cancel()
+		if err != nil {
+			return "", fmt.Errorf("waiting for connect.challenge: %w", err)
+		}
+		var ev eventFrame
+		if err := json.Unmarshal(raw, &ev); err != nil {
+			continue
+		}
+		if ev.Type != "event" || ev.Event != "connect.challenge" {
+			continue
+		}
+		var payload challengePayload
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			return "", fmt.Errorf("malformed connect.challenge payload: %w", err)
+		}
+		if payload.Nonce == "" {
+			return "", errors.New("connect.challenge with empty nonce")
+		}
+		return payload.Nonce, nil
+	}
+}
+
+// dialAndConnect opens the WS, completes the connect handshake
+// (challenge → signed connect → hello-ok), and persists any deviceToken
+// the server returns. Returns a usable connection on success.
+//
+// On NOT_PAIRED, returns a *pairingPendingError carrying the requestId
+// so the caller can surface clear instructions to the user.
+func dialAndConnect(ctx context.Context, base, sharedToken string, identity *deviceIdentity, deviceToken string) (*websocket.Conn, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	ws, _, err := websocket.Dial(dialCtx, base, nil)
@@ -298,6 +411,29 @@ func dialAndConnect(ctx context.Context, base, token string) (*websocket.Conn, e
 		return nil, fmt.Errorf("OpenClaw: cannot dial gateway at %s — %w", base, err)
 	}
 	ws.SetReadLimit(8 * 1024 * 1024)
+
+	nonce, err := awaitConnectChallenge(ctx, ws)
+	if err != nil {
+		ws.Close(websocket.StatusNormalClosure, "")
+		return nil, fmt.Errorf("OpenClaw: %w", err)
+	}
+	logf("connect.challenge received: nonce-len=%d", len(nonce))
+
+	const role = "operator"
+	signedAt := time.Now().UnixMilli()
+	canonical := buildDeviceAuthPayloadV3(
+		identity.DeviceID,
+		"gateway-client",
+		"backend",
+		role,
+		requestedScopes,
+		signedAt,
+		deviceToken, // signature binds the payload to this token when set
+		nonce,
+		devicePlatform(),
+		"", // deviceFamily — we have no equivalent; server treats empty as ok
+	)
+	signature := signCanonicalPayload(identity, canonical)
 
 	connectID, err := newRequestID()
 	if err != nil {
@@ -314,26 +450,23 @@ func dialAndConnect(ctx context.Context, base, token string) (*websocket.Conn, e
 			Client: connectClient{
 				ID:       "gateway-client",
 				Version:  "usage-buttons",
-				Platform: "stream-deck",
-				Mode:     "probe",
+				Platform: devicePlatform(),
+				Mode:     "backend",
 			},
-			Role: "operator",
-			// Full operator scope set, matching the dashboard SPA's
-			// CONTROL_UI_OPERATOR_SCOPES (ui/src/ui/gateway.ts:152).
-			// Asking for just operator.read is rejected by some
-			// gateway builds with a "missing scope" error during
-			// connect — the server validates the requested set
-			// against the role's full capabilities, not just the
-			// methods we'll subsequently call.
-			Scopes: []string{
-				"operator.admin",
-				"operator.read",
-				"operator.write",
-				"operator.approvals",
-				"operator.pairing",
+			Role:   role,
+			Scopes: requestedScopes,
+			Caps:   []string{},
+			Auth: connectAuthPayload{
+				Token:       sharedToken,
+				DeviceToken: deviceToken,
 			},
-			Caps: []string{},
-			Auth:      connectAuthPayload{Token: token},
+			Device: &connectDevice{
+				ID:        identity.DeviceID,
+				PublicKey: identity.PublicKey,
+				Signature: signature,
+				SignedAt:  signedAt,
+				Nonce:     nonce,
+			},
 			UserAgent: "UsageButtons/Stream-Deck",
 			Locale:    "en-US",
 		},
@@ -343,17 +476,48 @@ func dialAndConnect(ctx context.Context, base, token string) (*websocket.Conn, e
 		return nil, fmt.Errorf("OpenClaw connect frame write failed: %w", err)
 	}
 	var hello helloResponse
-	if err := awaitResponse(ctx, ws, connectID, &hello); err != nil {
+	err = awaitResponse(ctx, ws, connectID, &hello)
+	if err != nil {
 		ws.Close(websocket.StatusNormalClosure, "")
+		// NOT_PAIRED → pairing-pending: extract the requestId so we
+		// can tell the user what to type at the gateway host.
+		var ge *gatewayError
+		if errors.As(err, &ge) && ge.Code == "NOT_PAIRED" {
+			pp := &pairingPendingError{DeviceID: identity.DeviceID}
+			if ge.Details != nil {
+				var d pairingErrorDetails
+				if jsonErr := json.Unmarshal(ge.Details, &d); jsonErr == nil {
+					pp.RequestID = d.RequestID
+					if d.DeviceID != "" {
+						pp.DeviceID = d.DeviceID
+					}
+				}
+			}
+			logf("connect rejected NOT_PAIRED: requestId=%s deviceId=%s", pp.RequestID, pp.DeviceID)
+			return nil, pp
+		}
+		// Token-mismatch → wipe stored deviceToken so next poll re-pairs
+		// from the bootstrap signed-device path.
+		if errors.As(err, &ge) && (ge.Code == "DEVICE_TOKEN_MISMATCH" || strings.Contains(strings.ToLower(ge.Message), "device token")) {
+			_ = clearDeviceToken()
+			logf("device token rejected, cleared local store: %v", err)
+			return nil, fmt.Errorf("OpenClaw: gateway rejected the cached device token — pairing will retry on next poll: %w", err)
+		}
 		if isAuthErr(err) {
 			return nil, errors.New("OpenClaw rejected the gateway token. Check it in the PI.")
 		}
 		return nil, fmt.Errorf("OpenClaw connect failed: %w", err)
 	}
-	logf("connect ok: role=%q granted-scopes=%v deviceToken=%v", hello.Auth.Role, hello.Auth.Scopes, hello.Auth.DeviceToken != "")
+	logf("connect ok: role=%q granted-scopes=%v deviceToken-issued=%v deviceToken-cached=%v",
+		hello.Auth.Role, hello.Auth.Scopes, hello.Auth.DeviceToken != "", deviceToken != "")
+	if hello.Auth.DeviceToken != "" {
+		if err := saveDeviceToken(base, identity.DeviceID, hello.Auth.DeviceToken, hello.Auth.Role, hello.Auth.Scopes); err != nil {
+			logf("save device token: %v (continuing without persistence)", err)
+		}
+	}
 	if !hasScope(hello.Auth.Scopes, "operator.read") {
 		ws.Close(websocket.StatusNormalClosure, "")
-		return nil, errors.New("OpenClaw connected but the granted session is missing scope operator.read. Server strips scopes for non-loopback clients without device pairing. Workaround: run the plugin on the same host as the gateway with base URL ws://127.0.0.1:<port>. Remote (Tailscale) access needs device-pairing support which the plugin doesn't yet implement.")
+		return nil, errors.New("OpenClaw connected but the granted session is missing scope operator.read. Approve the device pairing on the gateway host: `openclaw devices list` then `openclaw devices approve <requestId>`.")
 	}
 	return ws, nil
 }
@@ -437,7 +601,7 @@ func awaitResponse(ctx context.Context, ws *websocket.Conn, id string, dst any) 
 			}
 			if !res.OK {
 				if res.Error != nil {
-					return &gatewayError{Code: res.Error.Code, Message: res.Error.Message}
+					return &gatewayError{Code: res.Error.Code, Message: res.Error.Message, Details: res.Error.Details}
 				}
 				return errors.New("OpenClaw: request failed without error detail")
 			}
@@ -454,10 +618,13 @@ func awaitResponse(ctx context.Context, ws *websocket.Conn, id string, dst any) 
 }
 
 // gatewayError carries a server-reported error code + message so the
-// caller can react (auth failures vs other errors).
+// caller can react (auth failures vs other errors). Details captures
+// the per-error structured payload — for NOT_PAIRED that contains the
+// requestId the user passes to `openclaw devices approve`.
 type gatewayError struct {
 	Code    string
 	Message string
+	Details json.RawMessage
 }
 
 // Error returns the formatted gateway error string.
@@ -587,6 +754,29 @@ func errorSnapshot(message string) providers.Snapshot {
 		Metrics:      []providers.MetricValue{},
 		Status:       "unknown",
 		Error:        message,
+	}
+}
+
+// pairingPendingSnapshot returns the snapshot we surface while the
+// gateway is waiting for the user to approve our device pairing
+// request. The Error message starts with "pairing required" so the
+// plugin's renderer routes it to the PAIR face and includes the
+// literal CLI command (verbatim, with requestId) so a user inspecting
+// the snapshot.Error sees exactly what to type at their gateway host.
+func pairingPendingSnapshot(pp *pairingPendingError) providers.Snapshot {
+	var msg string
+	if pp.RequestID != "" {
+		msg = fmt.Sprintf("pairing required — on the OpenClaw gateway host, run: openclaw devices approve %s   (then the next plugin poll will succeed)", pp.RequestID)
+	} else {
+		msg = "pairing required — on the OpenClaw gateway host, run: openclaw devices list   (then approve the request matching this Stream Deck plugin's deviceId)"
+	}
+	return providers.Snapshot{
+		ProviderID:   providerID,
+		ProviderName: providerName,
+		Source:       "self-hosted",
+		Metrics:      []providers.MetricValue{},
+		Status:       "pairing-pending",
+		Error:        msg,
 	}
 }
 

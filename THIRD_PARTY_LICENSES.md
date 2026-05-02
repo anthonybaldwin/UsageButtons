@@ -86,9 +86,10 @@ and `action-hermes-agent-key.svg` for the Stream Deck action thumbnail
 / key preview, plus the `"hermes-agent"` entry in
 `internal/icons/icons.go` for the button-face watermark. The lobe-icons
 `nousresearch-text` SVG path data is embedded in the `"nousresearch"`
-entry in `internal/icons/icons.go`, and the matching `nousresearch-text`
-PNG ships at `io.github.anthonybaldwin.UsageButtons.sdPlugin/assets/action-nousresearch.png`
-(plus the `-key.png` companion) for the Stream Deck action thumbnail.
+entry in `internal/icons/icons.go` and in
+`io.github.anthonybaldwin.UsageButtons.sdPlugin/assets/action-nousresearch.svg`
+(plus the `-key.svg` companion) — the same wordmark path, wrapped in
+a square viewBox we sized for the Stream Deck action thumbnail.
 Path data is unmodified from upstream; only the surrounding SVG / Go
 map wrapper is ours.
 

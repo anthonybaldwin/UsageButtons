@@ -57,7 +57,15 @@ const (
 	providerName  = "Hermes Agent"
 	defaultBase   = "http://127.0.0.1:9119"
 	sessionHeader = "X-Hermes-Session-Token"
-	fetchTimeout  = 20 * time.Second
+	// perCallTimeout caps each individual HTTP request. Each window
+	// fetch and the scrape get their own budget rather than chunks of
+	// a shared deadline — on slow Tailscale links the previous shared-
+	// 20s approach starved the third window's fetch.
+	perCallTimeout = 20 * time.Second
+	// totalTimeout caps the whole Fetch() (scrape + 3 windows + status).
+	// Long enough that cold-start scrapes don't kill the run; short
+	// enough that a stuck dashboard doesn't pile poll runs.
+	totalTimeout = 90 * time.Second
 )
 
 // tokenInjectionRe matches the line the dashboard injects into its
@@ -156,18 +164,22 @@ func (Provider) MetricIDs() []string {
 
 // Fetch returns the latest Hermes Agent usage snapshot.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), totalTimeout)
 	defer cancel()
 
 	base := resolveBase()
 	if base == "" {
-		return errorSnapshot("Hermes Agent base URL is not set."), nil
+		logf("fetch skipped: base URL not configured")
+		return errorSnapshot("Hermes Agent: paste a base URL in PI (or set HERMES_AGENT_BASE_URL)."), nil
 	}
+	logf("fetch starting: base=%s", base)
 
 	token, err := resolveToken(ctx, base)
 	if err != nil {
+		logf("token resolve failed: %v", err)
 		return errorSnapshot(err.Error()), nil
 	}
+	logf("token resolved (len=%d)", len(token))
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	var metrics []providers.MetricValue
@@ -177,17 +189,23 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		if err != nil {
 			if isAuthFailure(err) {
 				clearCachedToken()
-				return errorSnapshot("Hermes Agent rejected the session token. Restart the dashboard or paste a fresh token in the PI."), nil
+				logf("auth failure on days=%d, cleared cached token: %v", w.Days, err)
+				return errorSnapshot("Hermes Agent unauthorized — restart dashboard or paste fresh token in PI."), nil
 			}
+			logf("usage fetch failed days=%d: %v", w.Days, err)
 			return errorSnapshot(fmt.Sprintf("Hermes Agent /api/analytics/usage failed: %s", short(err))), nil
 		}
+		logf("usage ok days=%d input=%d output=%d cost=%.4f", w.Days, usage.Totals.TotalInput, usage.Totals.TotalOutput, usage.Totals.TotalEstimatedCost)
 		metrics = append(metrics, windowMetrics(w, usage.Totals, now)...)
 	}
 
 	if active, err := fetchStatus(ctx, base); err == nil {
 		metrics = append(metrics, activeSessionsMetric(active.ActiveSessions, now))
+	} else {
+		logf("status fetch failed (best-effort, ignored): %v", err)
 	}
 
+	logf("fetch complete: %d metrics", len(metrics))
 	return providers.Snapshot{
 		ProviderID:   providerID,
 		ProviderName: providerName,
@@ -195,6 +213,15 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		Metrics:      metrics,
 		Status:       "operational",
 	}, nil
+}
+
+// logf emits a [hermes-agent] log line via providers.LogSink when the
+// plugin has wired one. No-op in tests.
+func logf(format string, args ...any) {
+	if providers.LogSink == nil {
+		return
+	}
+	providers.LogSink(fmt.Sprintf("[hermes-agent] "+format, args...))
 }
 
 // windowMetrics builds the five metrics emitted for one time-window
@@ -280,7 +307,7 @@ func resolveToken(ctx context.Context, base string) (string, error) {
 		return "", fmt.Errorf("Hermes Agent: cannot reach dashboard at %s — %s", base, short(err))
 	}
 	if t == "" {
-		return "", fmt.Errorf("Hermes Agent: no session token in dashboard HTML at %s — paste a token in the PI as fallback", base)
+		return "", fmt.Errorf("Hermes Agent: No session token found in dashboard HTML at %s. Paste a token in PI.", base)
 	}
 	setCachedToken(base, t)
 	return t, nil
@@ -384,17 +411,12 @@ func getRaw(ctx context.Context, rawURL string) ([]byte, error) {
 	return body, nil
 }
 
-// getJSONWithCtx is GetJSON with our caller's context — saves the
-// per-call timeout-context dance every fetch site would otherwise need.
-func getJSONWithCtx(ctx context.Context, rawURL string, headers map[string]string, dst any) error {
-	deadline, ok := ctx.Deadline()
-	timeout := fetchTimeout
-	if ok {
-		if d := time.Until(deadline); d > 0 && d < timeout {
-			timeout = d
-		}
-	}
-	return httputil.GetJSON(rawURL, headers, timeout, dst)
+// getJSONWithCtx is GetJSON with a per-call timeout. We intentionally
+// don't shrink this by the parent ctx's remaining deadline — each
+// window fetch should get its own full budget. The outer Fetch
+// already caps total runtime via totalTimeout for runaway protection.
+func getJSONWithCtx(_ context.Context, rawURL string, headers map[string]string, dst any) error {
+	return httputil.GetJSON(rawURL, headers, perCallTimeout, dst)
 }
 
 // isAuthFailure reports whether err means the dashboard rejected our

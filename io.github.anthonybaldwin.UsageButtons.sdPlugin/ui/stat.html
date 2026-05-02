@@ -458,6 +458,10 @@
         <button type="button" class="reveal-btn" data-reveal-target="openclawToken">Show</button>
       </div>
       <p class="hint"><code>http(s)://</code> URLs are auto-converted to <code>ws(s)://</code>. Fallbacks: <code>OPENCLAW_BASE_URL</code>, <code>OPENCLAW_GATEWAY_TOKEN</code>.</p>
+      <p class="hint" style="margin-top:8px">
+        <strong>One-time pairing (Tailscale / remote gateway):</strong><br>
+        After you fill in the URL + token and add a button, the button face will read <strong>PAIR / Run CLI on host</strong>. SSH into your OpenClaw gateway host and run <code>openclaw devices list</code> to find the pending request, then <code>openclaw devices approve &lt;requestId&gt;</code>. The next plugin poll will pull metrics. Co-located on the same host? Use <code>ws://127.0.0.1:&lt;port&gt;</code> and pairing is skipped automatically.
+      </p>
     </div>
 
     <!-- Warp auth -->

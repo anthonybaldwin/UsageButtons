@@ -1121,6 +1121,9 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 		case isBotBlocked(snapshot.Error):
 			value = "AUTH"
 			subHint = "Press to Verify"
+		case isPairingRequired(snapshot.Error):
+			value = "PAIR"
+			subHint = "Run CLI on host"
 		default:
 			subHint = "See Settings"
 		}
@@ -1961,6 +1964,12 @@ var (
 	// kept us from a real response. Routed to its own face so users
 	// see "press to verify" instead of the generic "See Settings".
 	botBlockedRe = regexp.MustCompile(`(?i)blocked by bot detection|datadome|are you human`)
+	// pairingRequiredRe matches the snapshot.Error OpenClaw (and any
+	// future provider with a similar device-pairing handshake) sets
+	// when the gateway is waiting for a one-time approval CLI
+	// command. The button face routes this to a "PAIR" tile so the
+	// user sees exactly what to do, instead of the generic ERR face.
+	pairingRequiredRe = regexp.MustCompile(`(?i)pairing required`)
 )
 
 func isRateLimit(msg string) bool        { return rateLimitRe.MatchString(msg) }
@@ -1973,6 +1982,7 @@ func isExtensionNeeded(msg string) bool  { return extensionNeededRe.MatchString(
 func isNetworkError(msg string) bool     { return networkRe.MatchString(msg) }
 func isServerError(msg string) bool      { return serverErrRe.MatchString(msg) }
 func isBotBlocked(msg string) bool       { return botBlockedRe.MatchString(msg) }
+func isPairingRequired(msg string) bool  { return pairingRequiredRe.MatchString(msg) }
 
 func countVisible() int {
 	return len(visibleKeys)

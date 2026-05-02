@@ -95,6 +95,27 @@ map wrapper is ours.
 Authoritative license text:
 <https://github.com/lobehub/lobe-icons/blob/master/LICENSE>
 
+## openclaw/openclaw — MIT
+
+<https://github.com/openclaw/openclaw>
+
+The OpenClaw provider's action icon (lobster mascot) is the unmodified
+upstream favicon (`ui/public/favicon.svg`) saved as
+`io.github.anthonybaldwin.UsageButtons.sdPlugin/assets/action-openclaw.svg`
+and `action-openclaw-key.svg`. The `"openclaw"` entry in
+`internal/icons/icons.go` is a derivative — the body and claw paths
+extracted as a monochrome silhouette so the renderer can fill it with
+`currentColor`. Path data is unmodified; the simplification (dropping
+gradient definitions, antennae, and eye highlights) is ours. The
+WebSocket JSON-RPC protocol shape (frame types, connect params, method
+names like `usage.cost`) is borrowed knowledge from
+`ui/src/ui/gateway.ts`, `src/gateway/server-methods/usage.ts`, and
+`src/infra/session-cost-usage.types.ts` — the Go re-implementation in
+`internal/providers/openclaw/` is ours.
+
+Authoritative license text:
+<https://github.com/openclaw/openclaw/blob/main/LICENSE>
+
 ## UsmanDevCraft/grok-shooting-stars — MIT
 
 <https://github.com/UsmanDevCraft/grok-shooting-stars>

@@ -80,6 +80,7 @@ UsageButtons/
 │   │   ├── minimax/                      # MiniMax (browser/API key)
 │   │   ├── mistral/                      # Mistral (browser)
 │   │   ├── ollama/                       # Ollama (browser)
+│   │   ├── openclaw/                     # OpenClaw (self-hosted gateway, WS)
 │   │   ├── opencode/                     # OpenCode (browser)
 │   │   ├── opencodego/                   # OpenCode Go (browser)
 │   │   ├── openrouter/                   # OpenRouter (API key)

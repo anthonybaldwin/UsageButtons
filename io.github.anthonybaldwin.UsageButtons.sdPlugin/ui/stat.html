@@ -448,6 +448,18 @@
       <p class="hint">Token auto-scrapes from <code>&lt;base&gt;/index.html</code>. Paste only if scrape fails. Fallbacks: <code>HERMES_AGENT_BASE_URL</code>, <code>HERMES_AGENT_TOKEN</code>.</p>
     </div>
 
+    <!-- OpenClaw (self-hosted gateway) auth -->
+    <div id="authConfig-openclaw" class="auth-config" style="display:none">
+      <label for="openclawBaseURL">Gateway base URL</label>
+      <input id="openclawBaseURL" type="text" placeholder="ws://127.0.0.1:18789" data-provider-key="openClawBaseURL">
+      <label for="openclawToken">Operator gateway token</label>
+      <div class="key-row">
+        <input id="openclawToken" type="password" autocomplete="off" placeholder="from gateway config" data-provider-key="openClawToken">
+        <button type="button" class="reveal-btn" data-reveal-target="openclawToken">Show</button>
+      </div>
+      <p class="hint"><code>http(s)://</code> URLs are auto-converted to <code>ws(s)://</code>. Fallbacks: <code>OPENCLAW_BASE_URL</code>, <code>OPENCLAW_GATEWAY_TOKEN</code>.</p>
+    </div>
+
     <!-- Warp auth -->
     <div id="authConfig-warp" class="auth-config" style="display:none">
       <label for="warpKey">Warp API key</label>
@@ -1089,6 +1101,26 @@
         // Live count
         ["hermes-agent-active-sessions",       "Sessions active in the last 5 minutes", "ref"],
       ],
+      openclaw: [
+        // Daily window
+        ["openclaw-input-tokens-daily",    "Input tokens — today",    "ref"],
+        ["openclaw-output-tokens-daily",   "Output tokens — today",   "ref"],
+        ["openclaw-cache-tokens-daily",    "Cache-read tokens — today", "ref"],
+        ["openclaw-total-tokens-daily",    "Total tokens — today",    "ref"],
+        ["openclaw-cost-daily",            "Total cost ($) — today",  "ref-dollar"],
+        // Weekly window
+        ["openclaw-input-tokens-weekly",   "Input tokens — this week",  "ref"],
+        ["openclaw-output-tokens-weekly",  "Output tokens — this week", "ref"],
+        ["openclaw-cache-tokens-weekly",   "Cache-read tokens — this week", "ref"],
+        ["openclaw-total-tokens-weekly",   "Total tokens — this week",  "ref"],
+        ["openclaw-cost-weekly",           "Total cost ($) — this week", "ref-dollar"],
+        // Monthly window
+        ["openclaw-input-tokens-monthly",  "Input tokens — this month",  "ref"],
+        ["openclaw-output-tokens-monthly", "Output tokens — this month", "ref"],
+        ["openclaw-cache-tokens-monthly",  "Cache-read tokens — this month", "ref"],
+        ["openclaw-total-tokens-monthly",  "Total tokens — this month",  "ref"],
+        ["openclaw-cost-monthly",          "Total cost ($) — this month", "ref-dollar"],
+      ],
       warp: [
         ["credits-percent", "Credits remaining %",       "pct"],
         ["bonus-credits",   "Bonus credits remaining %", "pct"],
@@ -1152,6 +1184,7 @@
       grok:       "#ffffff",
       nousresearch: "#14b8a6",
       "hermes-agent": "#10b981",
+      openclaw:   "#ef4444",
       warp:       "#938bb4",
       zai:        "#e85a6a",
       kimi:       "#fe603c",
@@ -1188,6 +1221,7 @@
       grok:       "#000000",
       nousresearch: "#042f2e",
       "hermes-agent": "#022c22",
+      openclaw:   "#1c0606",
       warp:       "#171521",
       zai:        "#211012",
       kimi:       "#260d08",
@@ -1201,7 +1235,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "hermes-agent", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "hermes-agent", "ollama", "openclaw", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -1225,6 +1259,7 @@
       grok:       "Grok",
       nousresearch: "Nous Research",
       "hermes-agent": "Hermes Agent",
+      openclaw:   "OpenClaw",
       warp:       "Warp",
       zai:        "z.ai",
       kimi:       "Kimi",

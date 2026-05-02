@@ -1,11 +1,14 @@
-// Package hermes implements the Nous Research portal usage provider.
+// Package nousresearch implements the Nous Research portal usage
+// provider (the public hermes.nousresearch.com / portal.nousresearch.com
+// product). Hermes Agent's self-hosted dashboard is a separate provider
+// in internal/providers/hermesagent/.
 //
 // Auth: Usage Buttons Helper extension with the user's
-// portal.nousresearch.com browser session (cookies). Branded "Hermes"
-// after the Hermes Agent product, but the same subscription pool funds
-// both Hermes Agent and Nous Chat — see the IMPORTANT note in the
-// portal's API-keys page: "Subscription credits are for Nous Chat and
-// Hermes Agent and do not count towards direct API access."
+// portal.nousresearch.com browser session (cookies). The same
+// subscription pool funds both Hermes Agent and Nous Chat — see the
+// IMPORTANT note in the portal's API-keys page: "Subscription credits
+// are for Nous Chat and Hermes Agent and do not count towards direct
+// API access."
 //
 // Endpoints (all GET, both server-render the relevant JSON inline):
 //
@@ -18,7 +21,12 @@
 // Nous deploy, which would mean shipping a plugin update every time
 // the portal redeploys. The server-rendered HTML is stable, public,
 // and exposes the figures we need — so we read them directly.
-package hermes
+//
+// Metric IDs retain the `hermes-*` prefix from when this provider was
+// branded "Hermes" — the user-visible name was rebranded to "Nous
+// Research" but the wire IDs stay stable so existing button bindings
+// keep working.
+package nousresearch
 
 import (
 	"bytes"
@@ -47,8 +55,8 @@ const (
 	// browser page-load JS is the only way DataDome's fingerprint cookie
 	// rotates, so this is the recovery handle.
 	dashboardURL = "https://portal.nousresearch.com/usage"
-	provID       = "hermes"
-	provName     = "Hermes"
+	provID       = "nousresearch"
+	provName     = "Nous Research"
 )
 
 // Provider fetches Nous Research portal usage data.
@@ -114,7 +122,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if !cookies.HostAvailable(ctx) {
-		hermesLogf("fetch skipped: cookie host unavailable")
+		logf("fetch skipped: cookie host unavailable")
 		return errorSnapshot(cookieaux.MissingMessage("nousresearch.com")), nil
 	}
 	headers := map[string]string{
@@ -126,42 +134,42 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	products, err := fetchHTML(ctx, productsURL, headers)
 	if err != nil {
 		block := smellsLikeBlock(err)
-		hermesLogf("products fetch err: %v (smellsLikeBlock=%v)", err, block)
+		logf("products fetch err: %v (smellsLikeBlock=%v)", err, block)
 		if block {
 			triggerReprime()
 		}
 		return mapHTTPError(err), nil
 	}
 	if looksLikeChallenge(products) {
-		hermesLogf("products body looks like DataDome challenge (%d bytes); triggering reprime", len(products))
+		logf("products body looks like DataDome challenge (%d bytes); triggering reprime", len(products))
 		triggerReprime()
 		return blockedSnapshot(), nil
 	}
 	if looksUnauthenticated(products) {
-		hermesLogf("products body has no Log out link (%d bytes); treating as blocked, triggering reprime", len(products))
+		logf("products body has no Log out link (%d bytes); treating as blocked, triggering reprime", len(products))
 		triggerReprime()
 		return blockedSnapshot(), nil
 	}
-	hermesLogf("products fetch ok: %d bytes", len(products))
+	logf("products fetch ok: %d bytes", len(products))
 	usage := snapshotFromHTML(products, time.Now().UTC())
 
 	// /api-keys is best-effort: an account with zero API activity still
 	// renders the page, but if the request fails we still emit the
 	// subscription tile from /products. The api-* metrics simply omit.
 	if api, err := fetchHTML(ctx, apiKeysURL, headers); err == nil {
-		hermesLogf("api-keys fetch ok: %d bytes", len(api))
+		logf("api-keys fetch ok: %d bytes", len(api))
 		mergeAPIKeysHTML(api, &usage)
 	} else {
-		hermesLogf("api-keys fetch err (best-effort, ignored): %v", err)
+		logf("api-keys fetch err (best-effort, ignored): %v", err)
 	}
 	snap := snapshotToProvider(usage)
-	hermesLogf("fetch complete: status=%q metrics=%d", snap.Status, len(snap.Metrics))
+	logf("fetch complete: status=%q metrics=%d", snap.Status, len(snap.Metrics))
 	if len(snap.Metrics) == 0 {
 		// Parsed cleanly but extracted nothing — usually a new failure
 		// mode (auth shell variant, schema rename) the looksLikeChallenge
 		// detector didn't catch. Dump a body excerpt so the next person
 		// triaging this can see what was served.
-		hermesLogf("zero-metric snapshot, products body sniff: %q", sniffBody(products))
+		logf("zero-metric snapshot, products body sniff: %q", sniffBody(products))
 	}
 	return snap, nil
 }
@@ -610,7 +618,7 @@ var totalsViewSet = []struct {
 
 // totalsSourceSet maps the metric-ID source slug to the in-snapshot
 // totals struct + button label. "total" intentionally renders as
-// "ALL" so a row of Hermes tiles reads as labels at-a-glance.
+// "ALL" so a row of Nous Research tiles reads as labels at-a-glance.
 type totalsSource struct {
 	Slug   string // metric-ID suffix: "total" | "api" | "sub"
 	Label  string // tile title: "ALL" | "API" | "SUB"
@@ -692,7 +700,7 @@ func renewSeconds(renewAt *time.Time, now time.Time) *float64 {
 }
 
 // providerName decorates the display name with the active tier when we
-// know it. Free-tier or unknown accounts read as plain "Hermes".
+// know it. Free-tier or unknown accounts read as plain "Nous Research".
 func providerName(u usageSnapshot) string {
 	if u.Tier == "" {
 		return provName
@@ -813,26 +821,26 @@ func smellsLikeBlock(err error) bool {
 // surfaced — providers don't have a feedback channel for it, and the
 // next fetch tick reveals whether it worked.
 func triggerReprime() {
-	hermesLogf("triggerReprime: dispatching cookies.Reprime(%s)", dashboardURL)
+	logf("triggerReprime: dispatching cookies.Reprime(%s)", dashboardURL)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 		defer cancel()
 		if err := cookies.Reprime(ctx, dashboardURL); err != nil {
-			hermesLogf("reprime returned: %v", err)
+			logf("reprime returned: %v", err)
 			return
 		}
-		hermesLogf("reprime returned ok")
+		logf("reprime returned ok")
 	}()
 }
 
-// hermesLogf emits a [hermes] tagged log line via providers.LogSink
+// logf emits a [nousresearch] tagged log line via providers.LogSink
 // when one is wired by the plugin. No-op in tests where the sink is
 // unset.
-func hermesLogf(format string, args ...any) {
+func logf(format string, args ...any) {
 	if providers.LogSink == nil {
 		return
 	}
-	providers.LogSink(fmt.Sprintf("[hermes] "+format, args...))
+	providers.LogSink(fmt.Sprintf("[nousresearch] "+format, args...))
 }
 
 // sniffBody returns a compact, log-safe excerpt of body for diagnosing
@@ -876,7 +884,7 @@ func blockedSnapshot() providers.Snapshot {
 	}
 }
 
-// init registers the Hermes provider with the package registry.
+// init registers the Nous Research provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

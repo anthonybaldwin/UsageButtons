@@ -219,16 +219,16 @@
       ]
     },
     {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.hermes",
-      "Name": "Hermes",
-      "Tooltip": "Nous Research usage stats — Hermes Agent / Nous Chat subscription credits, API credits, API spend.",
-      "Icon": "assets/action-hermes",
+      "UUID": "io.github.anthonybaldwin.UsageButtons.nousresearch",
+      "Name": "Nous Research",
+      "Tooltip": "Nous Research portal usage stats — Hermes Agent / Nous Chat subscription credits, API credits, API spend.",
+      "Icon": "assets/action-nousresearch",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
       "UserTitleEnabled": true,
       "States": [
         {
-          "Image": "assets/action-hermes-key",
+          "Image": "assets/action-nousresearch-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }

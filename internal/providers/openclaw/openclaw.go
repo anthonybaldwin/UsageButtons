@@ -272,6 +272,21 @@ type CostUsageSummary struct {
 	Totals    CostUsageTotals `json:"totals"`
 }
 
+// helloResponse is the slice of hello-ok the connect call returns.
+// The server's connect handler at src/gateway/server/ws-connection/
+// message-handler.ts:1438-1467 sets payload.auth.scopes to the
+// granted-scope list — which is empty when the default-deny strip
+// path runs (no device identity, non-control-UI client). Logging
+// this on every connect is how we confirm whether the user's setup
+// hit the strip-on-no-device path.
+type helloResponse struct {
+	Auth struct {
+		Role        string   `json:"role"`
+		Scopes      []string `json:"scopes"`
+		DeviceToken string   `json:"deviceToken,omitempty"`
+	} `json:"auth"`
+}
+
 // dialAndConnect opens the WS, sends the connect req, waits for the
 // hello response. Returns a usable connection or an error describing
 // the failure.
@@ -327,14 +342,39 @@ func dialAndConnect(ctx context.Context, base, token string) (*websocket.Conn, e
 		ws.Close(websocket.StatusNormalClosure, "")
 		return nil, fmt.Errorf("OpenClaw connect frame write failed: %w", err)
 	}
-	if err := awaitResponse(ctx, ws, connectID, nil); err != nil {
+	var hello helloResponse
+	if err := awaitResponse(ctx, ws, connectID, &hello); err != nil {
 		ws.Close(websocket.StatusNormalClosure, "")
 		if isAuthErr(err) {
 			return nil, errors.New("OpenClaw rejected the gateway token. Check it in the PI.")
 		}
 		return nil, fmt.Errorf("OpenClaw connect failed: %w", err)
 	}
+	logf("connect ok: role=%q granted-scopes=%v deviceToken=%v", hello.Auth.Role, hello.Auth.Scopes, hello.Auth.DeviceToken != "")
+	if !hasScope(hello.Auth.Scopes, "operator.read") {
+		ws.Close(websocket.StatusNormalClosure, "")
+		return nil, errors.New("OpenClaw connected but the granted session is missing scope operator.read. Server strips scopes for non-loopback clients without device pairing. Workaround: run the plugin on the same host as the gateway with base URL ws://127.0.0.1:<port>. Remote (Tailscale) access needs device-pairing support which the plugin doesn't yet implement.")
+	}
 	return ws, nil
+}
+
+// hasScope reports whether scopes contains target (exact match).
+func hasScope(scopes []string, target string) bool {
+	for _, s := range scopes {
+		if s == target {
+			return true
+		}
+	}
+	return false
+}
+
+// logf emits an [openclaw] log line via providers.LogSink when the
+// plugin has wired one. No-op in tests.
+func logf(format string, args ...any) {
+	if providers.LogSink == nil {
+		return
+	}
+	providers.LogSink(fmt.Sprintf("[openclaw] "+format, args...))
 }
 
 // requestUsageCost sends one usage.cost request and waits for the

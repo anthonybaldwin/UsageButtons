@@ -436,6 +436,18 @@
       <p class="hint">Via extension from <code>portal.nousresearch.com</code>.</p>
     </div>
 
+    <!-- Hermes Agent (self-hosted) auth -->
+    <div id="authConfig-hermes-agent" class="auth-config" style="display:none">
+      <label for="hermesAgentBaseURL">Dashboard base URL</label>
+      <input id="hermesAgentBaseURL" type="text" placeholder="http://127.0.0.1:9119" data-provider-key="hermesAgentBaseURL">
+      <label for="hermesAgentToken">Session token (optional)</label>
+      <div class="key-row">
+        <input id="hermesAgentToken" type="password" autocomplete="off" placeholder="auto-scraped from dashboard" data-provider-key="hermesAgentToken">
+        <button type="button" class="reveal-btn" data-reveal-target="hermesAgentToken">Show</button>
+      </div>
+      <p class="hint">Token auto-scrapes from <code>&lt;base&gt;/index.html</code>. Paste only if scrape fails. Fallbacks: <code>HERMES_AGENT_BASE_URL</code>, <code>HERMES_AGENT_TOKEN</code>.</p>
+    </div>
+
     <!-- Warp auth -->
     <div id="authConfig-warp" class="auth-config" style="display:none">
       <label for="warpKey">Warp API key</label>
@@ -1055,6 +1067,28 @@
         // still emit but are NOT in the dropdown — selecting hermes-spend-total
         // or hermes-requests-total gives the same data with cleaner naming.)
       ],
+      "hermes-agent": [
+        // Daily window
+        ["hermes-agent-input-tokens-daily",    "Input tokens — today",    "ref"],
+        ["hermes-agent-output-tokens-daily",   "Output tokens — today",   "ref"],
+        ["hermes-agent-cache-tokens-daily",    "Cache-read tokens — today", "ref"],
+        ["hermes-agent-total-tokens-daily",    "Total tokens — today",    "ref"],
+        ["hermes-agent-cost-daily",            "Estimated cost ($) — today", "ref-dollar"],
+        // Weekly window
+        ["hermes-agent-input-tokens-weekly",   "Input tokens — this week",  "ref"],
+        ["hermes-agent-output-tokens-weekly",  "Output tokens — this week", "ref"],
+        ["hermes-agent-cache-tokens-weekly",   "Cache-read tokens — this week", "ref"],
+        ["hermes-agent-total-tokens-weekly",   "Total tokens — this week",  "ref"],
+        ["hermes-agent-cost-weekly",           "Estimated cost ($) — this week", "ref-dollar"],
+        // Monthly window
+        ["hermes-agent-input-tokens-monthly",  "Input tokens — this month",  "ref"],
+        ["hermes-agent-output-tokens-monthly", "Output tokens — this month", "ref"],
+        ["hermes-agent-cache-tokens-monthly",  "Cache-read tokens — this month", "ref"],
+        ["hermes-agent-total-tokens-monthly",  "Total tokens — this month",  "ref"],
+        ["hermes-agent-cost-monthly",          "Estimated cost ($) — this month", "ref-dollar"],
+        // Live count
+        ["hermes-agent-active-sessions",       "Sessions active in the last 5 minutes", "ref"],
+      ],
       warp: [
         ["credits-percent", "Credits remaining %",       "pct"],
         ["bonus-credits",   "Bonus credits remaining %", "pct"],
@@ -1117,6 +1151,7 @@
       perplexity: "#20b2aa",
       grok:       "#ffffff",
       nousresearch: "#14b8a6",
+      "hermes-agent": "#10b981",
       warp:       "#938bb4",
       zai:        "#e85a6a",
       kimi:       "#fe603c",
@@ -1152,6 +1187,7 @@
       perplexity: "#082423",
       grok:       "#000000",
       nousresearch: "#042f2e",
+      "hermes-agent": "#022c22",
       warp:       "#171521",
       zai:        "#211012",
       kimi:       "#260d08",
@@ -1165,7 +1201,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "hermes-agent", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -1188,6 +1224,7 @@
       perplexity: "Perplexity",
       grok:       "Grok",
       nousresearch: "Nous Research",
+      "hermes-agent": "Hermes Agent",
       warp:       "Warp",
       zai:        "z.ai",
       kimi:       "Kimi",

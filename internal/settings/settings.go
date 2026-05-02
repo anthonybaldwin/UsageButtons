@@ -135,6 +135,11 @@ type ProviderKeys struct {
 	MiniMaxKey    string `json:"miniMaxKey,omitempty"`
 	AlibabaKey    string `json:"alibabaKey,omitempty"`
 	FactoryToken  string `json:"factoryToken,omitempty"`
+	// HermesAgentToken is the user-pasted session token used when the
+	// dashboard's HTML scrape fails. The provider auto-scrapes the
+	// per-process X-Hermes-Session-Token from <base>/index.html on
+	// first use and only consults this value as a fallback.
+	HermesAgentToken string `json:"hermesAgentToken,omitempty"`
 
 	// Endpoint overrides
 	OpenRouterURL       string `json:"openRouterURL,omitempty"`
@@ -147,6 +152,11 @@ type ProviderKeys struct {
 	AlibabaQuotaURL     string `json:"alibabaQuotaURL,omitempty"`
 	FactoryBaseURL      string `json:"factoryBaseURL,omitempty"`
 	CodexChatGPTBaseURL string `json:"codexChatGPTBaseURL,omitempty"`
+	// HermesAgentBaseURL is the user's Hermes Agent dashboard URL
+	// (e.g. http://127.0.0.1:9119 for a local install, or a Tailscale
+	// node like https://hermes.tailnet-XXXX.ts.net). Empty falls back
+	// to the loopback default in the provider.
+	HermesAgentBaseURL string `json:"hermesAgentBaseURL,omitempty"`
 }
 
 // KeySettings are per-button settings stored by Stream Deck.
@@ -613,6 +623,10 @@ func ChangedProviderIDs(prev, next ProviderKeys) []string {
 	if prev.FactoryToken != next.FactoryToken ||
 		prev.FactoryBaseURL != next.FactoryBaseURL {
 		out = append(out, "factory")
+	}
+	if prev.HermesAgentToken != next.HermesAgentToken ||
+		prev.HermesAgentBaseURL != next.HermesAgentBaseURL {
+		out = append(out, "hermes-agent")
 	}
 	if prev.CodexChatGPTBaseURL != next.CodexChatGPTBaseURL {
 		out = append(out, "codex")

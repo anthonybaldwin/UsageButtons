@@ -70,6 +70,7 @@ UsageButtons/
 │   │   ├── factory/                      # Droid / Factory (browser/token)
 │   │   ├── gemini/                       # Gemini CLI OAuth
 │   │   ├── grok/                         # Grok / xAI (browser)
+│   │   ├── hermesagent/                  # Hermes Agent (self-hosted dashboard)
 │   │   ├── nousresearch/                 # Nous Research portal (Hermes / Nous Chat, browser)
 │   │   ├── jetbrains/                    # JetBrains AI
 │   │   ├── kilo/                         # Kilo

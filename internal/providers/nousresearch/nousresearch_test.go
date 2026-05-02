@@ -1,4 +1,4 @@
-package hermes
+package nousresearch
 
 import (
 	"strings"
@@ -119,8 +119,8 @@ func TestSnapshotToProvider_FullPlusAccount(t *testing.T) {
 	mergeAPIKeysHTML([]byte(apiKeysFixture), &u)
 	snap := snapshotToProvider(u)
 
-	if snap.ProviderName != "Hermes Plus" {
-		t.Errorf("ProviderName: got %q, want \"Hermes Plus\"", snap.ProviderName)
+	if snap.ProviderName != "Nous Research Plus" {
+		t.Errorf("ProviderName: got %q, want \"Nous Research Plus\"", snap.ProviderName)
 	}
 
 	// Expected emission for an account with sub + both allowance
@@ -269,8 +269,8 @@ func TestSnapshotToProvider_FreeTierOmitsSubMetric(t *testing.T) {
 }
 
 func TestProviderName_NoTier(t *testing.T) {
-	if got := providerName(usageSnapshot{}); got != "Hermes" {
-		t.Errorf("got %q, want plain Hermes when tier missing", got)
+	if got := providerName(usageSnapshot{}); got != "Nous Research" {
+		t.Errorf("got %q, want plain \"Nous Research\" when tier missing", got)
 	}
 }
 
@@ -299,10 +299,10 @@ func TestMapHTTPError_GenericNoBodyLeak(t *testing.T) {
 
 func TestProviderMetadata(t *testing.T) {
 	p := Provider{}
-	if p.ID() != "hermes" {
+	if p.ID() != "nousresearch" {
 		t.Errorf("ID: got %q", p.ID())
 	}
-	if p.Name() != "Hermes" {
+	if p.Name() != "Nous Research" {
 		t.Errorf("Name: got %q", p.Name())
 	}
 	want := map[string]bool{

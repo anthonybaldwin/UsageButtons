@@ -25,7 +25,7 @@ account or API response includes that quota lane.
 | Droid / Factory | Droid bearer token from the Provider tab, `FACTORY_TOKEN`, or Usage Buttons Helper from `app.factory.ai`. Optional API base URL override in the Provider tab / `FACTORY_BASE_URL`. | Standard tokens remaining %, premium tokens remaining %. |
 | Gemini | Gemini CLI OAuth from `~/.gemini/oauth_creds.json`. Run `gemini` and sign in with Google. | Pro quota remaining %, Flash quota remaining %, Flash Lite quota remaining %. |
 | Grok | Usage Buttons Helper from `grok.com`. | Grok 3 queries remaining %, Grok 3 tokens remaining %, Grok 4 Heavy queries remaining %. |
-| Hermes / Nous Research | Usage Buttons Helper from `portal.nousresearch.com`. | Subscription credits ($, Hermes Agent + Nous Chat pool), API credits balance ($), all-time totals (spend $, requests, tokens, input/output/cache-read/cache-write tokens) — combined or split by allowance (api / sub). |
+| Nous Research | Usage Buttons Helper from `portal.nousresearch.com`. | Subscription credits ($, Hermes Agent + Nous Chat pool), API credits balance ($), all-time totals (spend $, requests, tokens, input/output/cache-read/cache-write tokens) — combined or split by allowance (api / sub). |
 | JetBrains AI | Local JetBrains IDE quota files. Optional overrides: `CODEXBAR_JETBRAINS_IDE_BASE_PATH` or `JETBRAINS_QUOTA_FILE`. | Current credits remaining %. |
 | Kilo | Kilo API key from the Provider tab, `KILO_API_KEY`, or `~/.local/share/kilo/auth.json`. | Credits remaining %, Kilo Pass remaining %. |
 | Kimi | Usage Buttons Helper from `kimi.com`. | Weekly coding quota remaining %, 5-hour rate limit remaining %. |

@@ -431,8 +431,8 @@
       <p class="hint">Via extension from <code>grok.com</code>.</p>
     </div>
 
-    <!-- Hermes / Nous Research auth -->
-    <div id="authConfig-hermes" class="auth-config" style="display:none">
+    <!-- Nous Research portal auth -->
+    <div id="authConfig-nousresearch" class="auth-config" style="display:none">
       <p class="hint">Via extension from <code>portal.nousresearch.com</code>.</p>
     </div>
 
@@ -1023,7 +1023,7 @@
         ["grok3-tokens-remaining",        "Grok 3 tokens remaining (API tier)",    "pct"],
         ["grok4-heavy-queries-remaining", "Grok 4 Heavy queries remaining (count)","pct"],
       ],
-      hermes: [
+      nousresearch: [
         // Balance tiles (from /products page).
         ["hermes-sub-credits-remaining", "Subscription credits ($) — Hermes Agent + Nous Chat", "ref-dollar"],
         ["hermes-api-credits-remaining", "API credits balance ($) — separate from subscription", "ref-dollar"],
@@ -1116,7 +1116,7 @@
       openrouter: "#6467f2",
       perplexity: "#20b2aa",
       grok:       "#ffffff",
-      hermes:     "#14b8a6",
+      nousresearch: "#14b8a6",
       warp:       "#938bb4",
       zai:        "#e85a6a",
       kimi:       "#fe603c",
@@ -1151,7 +1151,7 @@
       openrouter: "#101028",
       perplexity: "#082423",
       grok:       "#000000",
-      hermes:     "#042f2e",
+      nousresearch: "#042f2e",
       warp:       "#171521",
       zai:        "#211012",
       kimi:       "#260d08",
@@ -1165,7 +1165,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "hermes", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -1187,7 +1187,7 @@
       openrouter: "OpenRouter",
       perplexity: "Perplexity",
       grok:       "Grok",
-      hermes:     "Hermes",
+      nousresearch: "Nous Research",
       warp:       "Warp",
       zai:        "z.ai",
       kimi:       "Kimi",

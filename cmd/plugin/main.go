@@ -38,7 +38,6 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/factory"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/gemini"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/grok"
-	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/hermes"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/jetbrains"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kilo"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimi"
@@ -46,6 +45,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kiro"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/minimax"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/mistral"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/nousresearch"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/ollama"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/opencode"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/opencodego"
@@ -922,7 +922,7 @@ func handleKeyDown(conn *streamdeck.Connection, ev streamdeck.Event) {
 // Empty for providers that don't need a page-load nudge.
 func providerDashboardURL(providerID string) string {
 	switch providerID {
-	case "hermes":
+	case "nousresearch":
 		return "https://portal.nousresearch.com/usage"
 	}
 	return ""

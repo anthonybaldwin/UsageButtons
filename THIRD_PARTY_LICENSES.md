@@ -17,9 +17,9 @@ distributed under the MIT license:
 - `internal/icons/icons.go` — the `d` attribute of each provider's
   SVG is embedded into a Go map for compile-time inlining. The path
   data is unmodified from upstream; only the surrounding Go map
-  structure is ours. A few entries (codex, grok, hermes) come from
-  lobehub/lobe-icons instead and are flagged inline; see the
-  lobehub/lobe-icons section below.
+  structure is ours. A few entries (codex, grok, hermes-agent,
+  nousresearch) come from lobehub/lobe-icons instead and are flagged
+  inline; see the lobehub/lobe-icons section below.
 
 - The `BrandColor()` / `BrandBg()` constants on each Go provider
   under `internal/providers/<name>/` mirror the RGB values from
@@ -81,11 +81,16 @@ preview. The path data is unmodified from upstream; only the
 surrounding Go map structure / SVG wrapper is ours.
 
 The same lobe-icons `hermes-agent` SVG path data is embedded in
-`io.github.anthonybaldwin.UsageButtons.sdPlugin/assets/action-hermes.svg`
-and `action-hermes-key.svg` for the Stream Deck action thumbnail / key
-preview, plus the `"hermes"` entry in `internal/icons/icons.go` for the
-button-face watermark. The path data is unmodified from upstream; only
-the surrounding SVG / Go map wrapper is ours.
+`io.github.anthonybaldwin.UsageButtons.sdPlugin/assets/action-hermes-agent.svg`
+and `action-hermes-agent-key.svg` for the Stream Deck action thumbnail
+/ key preview, plus the `"hermes-agent"` entry in
+`internal/icons/icons.go` for the button-face watermark. The lobe-icons
+`nousresearch-text` SVG path data is embedded in the `"nousresearch"`
+entry in `internal/icons/icons.go`, and the matching `nousresearch-text`
+PNG ships at `io.github.anthonybaldwin.UsageButtons.sdPlugin/assets/action-nousresearch.png`
+(plus the `-key.png` companion) for the Stream Deck action thumbnail.
+Path data is unmodified from upstream; only the surrounding SVG / Go
+map wrapper is ours.
 
 Authoritative license text:
 <https://github.com/lobehub/lobe-icons/blob/master/LICENSE>

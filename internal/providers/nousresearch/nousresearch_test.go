@@ -342,3 +342,58 @@ func TestProviderMetadata(t *testing.T) {
 		}
 	}
 }
+
+// TestHasUserData covers the auth-gate marker check that decides
+// whether a /products body has authenticated user data inlined or
+// should be treated as blocked. Replaces an earlier "Log out link
+// present" heuristic that broke when Nous rotated their nav copy.
+func TestHasUserData(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{
+			name: "fixture with all three markers",
+			body: productsFixture,
+			want: true,
+		},
+		{
+			name: "subscriptionCredits alone is enough",
+			body: `<html><script>self.__next_f.push([1, "x:{\"subscriptionCredits\":{\"balance\":0}}"])</script></html>`,
+			want: true,
+		},
+		{
+			name: "apiCreditsBalance alone is enough",
+			body: `<html><script>self.__next_f.push([1, "x:{\"apiCreditsBalance\":0}"])</script></html>`,
+			want: true,
+		},
+		{
+			name: "activeSubscription alone is enough",
+			body: `<html><script>self.__next_f.push([1, "x:{\"activeSubscription\":{}}"])</script></html>`,
+			want: true,
+		},
+		{
+			name: "marketing shell with neither marker",
+			body: `<html><body><nav><a href="/login">Log in</a></nav></body></html>`,
+			want: false,
+		},
+		{
+			name: "DataDome interstitial body",
+			body: `<html><body>Are you human? geo.captcha-delivery.com</body></html>`,
+			want: false,
+		},
+		{
+			name: "auth-handoff stall with no markers",
+			body: `<html><body>Refreshing authentication...</body></html>`,
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hasUserData([]byte(tc.body)); got != tc.want {
+				t.Errorf("hasUserData(%q) = %v, want %v", tc.name, got, tc.want)
+			}
+		})
+	}
+}

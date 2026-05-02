@@ -68,15 +68,15 @@ func (Provider) ID() string { return provID }
 // Name returns the human-readable provider name.
 func (Provider) Name() string { return provName }
 
-// BrandColor returns the meter-fill accent (teal-500). Nous's own
-// portal accents on teal-700, but at Stream Deck button size that
-// darker shade smudges into the teal-950 bg — bumping to the brighter
-// teal-500 keeps fill and bg visually distinct so the meter reads
-// crisply at every fill level.
-func (Provider) BrandColor() string { return "#14b8a6" }
+// BrandColor returns the meter-fill accent. Matches the cyanotype-style
+// blue Nous Research uses across nousresearch.com (#2563eb feels like
+// the right print-press blue at button size — bright enough to stay
+// crisp against the dark navy bg, cool enough to read as Nous-branded).
+func (Provider) BrandColor() string { return "#2563eb" }
 
-// BrandBg returns the background color (deep complement of the teal).
-func (Provider) BrandBg() string { return "#042f2e" }
+// BrandBg returns the background color (deep navy complement of the
+// blue accent).
+func (Provider) BrandBg() string { return "#0c1a33" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 //

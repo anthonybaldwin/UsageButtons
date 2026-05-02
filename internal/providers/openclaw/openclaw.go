@@ -36,6 +36,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -444,6 +445,34 @@ type challengePayload struct {
 	TS    int64  `json:"ts"`
 }
 
+// dialHeaders builds the HTTP headers we attach to the WebSocket
+// upgrade request. The Origin matters because the gateway's Control
+// UI auth path enforces an Origin allowlist
+// (gateway.controlUi.allowedOrigins) — defaults trust the gateway's
+// own URL, so we set Origin to the http(s) form of the gateway's
+// own ws(s) URL. That keeps Tailscale-Serve auto-pair viable for
+// Control-UI-class sessions without the user having to add anything
+// to allowedOrigins on the gateway.
+//
+// Tailscale Serve doesn't inject an Origin into upstream — Go's
+// websocket dialer won't synthesize one either — so without this
+// the server falls back to the dangerous host-header origin
+// fallback (off by default) and rejects with "origin not allowed".
+func dialHeaders(base string) http.Header {
+	h := http.Header{}
+	if u, err := url.Parse(base); err == nil {
+		switch u.Scheme {
+		case "ws":
+			u.Scheme = "http"
+		case "wss":
+			u.Scheme = "https"
+		}
+		u.Path, u.RawQuery, u.Fragment = "", "", ""
+		h.Set("Origin", strings.TrimSuffix(u.String(), "/"))
+	}
+	return h
+}
+
 // awaitConnectChallenge reads frames until we see a connect.challenge
 // event. The server sends this immediately on socket open; the client
 // MUST wait for it before sending connect (the server's challenge-
@@ -488,7 +517,9 @@ func awaitConnectChallenge(ctx context.Context, ws *websocket.Conn) (string, err
 func dialAndConnect(ctx context.Context, base, sharedToken string, identity *deviceIdentity, deviceToken string) (*websocket.Conn, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-	ws, _, err := websocket.Dial(dialCtx, base, nil)
+	ws, _, err := websocket.Dial(dialCtx, base, &websocket.DialOptions{
+		HTTPHeader: dialHeaders(base),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("OpenClaw: cannot dial gateway at %s — %w", base, err)
 	}
@@ -662,7 +693,9 @@ func hasScope(scopes []string, target string) bool {
 func autoApproveSelfPairing(ctx context.Context, base, sharedToken, requestID string) error {
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-	ws, _, err := websocket.Dial(dialCtx, base, nil)
+	ws, _, err := websocket.Dial(dialCtx, base, &websocket.DialOptions{
+		HTTPHeader: dialHeaders(base),
+	})
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}

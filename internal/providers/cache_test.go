@@ -85,8 +85,14 @@ func TestPersistentCacheHydratesPeek(t *testing.T) {
 	}
 }
 
-// TestPersistentCacheStaleMarksRestoredMetrics verifies old disk snapshots dim metrics.
-func TestPersistentCacheStaleMarksRestoredMetrics(t *testing.T) {
+// TestPersistentCacheRestoresMetricsBright verifies cross-session restores
+// render at full brightness, leaving the dim "stale" signal for the live
+// refresh's failure path. Restoring dim flashed dim → bright on every
+// startup; the in-flight refresh kicked off by handleWillAppear will
+// either replace the snapshot or hit the fetchErr branch in cache.go
+// (which markStales it with a real reason), so dimming pre-emptively
+// just made the routine restore look broken.
+func TestPersistentCacheRestoresMetricsBright(t *testing.T) {
 	withTempPersistentCache(t)
 	p := newCacheTestProvider("test-stale-provider")
 	_ = GetSnapshot(p, GetSnapshotOptions{})
@@ -117,11 +123,11 @@ func TestPersistentCacheStaleMarksRestoredMetrics(t *testing.T) {
 	if snapshot == nil || len(snapshot.Metrics) != 1 {
 		t.Fatalf("restored snapshot metrics = %#v, want one metric", snapshot)
 	}
-	if snapshot.Metrics[0].Stale == nil || !*snapshot.Metrics[0].Stale {
-		t.Fatal("restored old metric was not marked stale")
+	if snapshot.Metrics[0].Stale != nil && *snapshot.Metrics[0].Stale {
+		t.Fatal("restored metric should NOT be marked stale; in-flight refresh handles freshness")
 	}
 	if snapshot.Error != "" {
-		t.Fatalf("restored stale snapshot error = %q, want empty", snapshot.Error)
+		t.Fatalf("restored snapshot error = %q, want empty", snapshot.Error)
 	}
 }
 

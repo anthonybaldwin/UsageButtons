@@ -219,6 +219,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.hermesagent",
+      "Name": "Hermes Agent",
+      "Tooltip": "Hermes Agent self-hosted dashboard usage stats — input/output/cached/total tokens and cost across daily/weekly/monthly windows.",
+      "Icon": "assets/action-hermes-agent",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-hermes-agent-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.nousresearch",
       "Name": "Nous Research",
       "Tooltip": "Nous Research portal usage stats — Hermes Agent / Nous Chat subscription credits, API credits, API spend.",

@@ -38,6 +38,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/factory"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/gemini"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/grok"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/hermesagent"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/jetbrains"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kilo"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimi"
@@ -1745,6 +1746,25 @@ var knownLabels = map[string]string{
 	"hermes-output-tokens-sub":        "SUB",
 	"hermes-cache-read-tokens-sub":    "SUB",
 	"hermes-cache-write-tokens-sub":   "SUB",
+	// Hermes Agent: tile label is the time window; caption (set below)
+	// disambiguates Input / Output / Cache / Total / Cost so a row of
+	// Hermes Agent buttons reads as DAY • Input, DAY • Output, ….
+	"hermes-agent-input-tokens-daily":    "DAY",
+	"hermes-agent-output-tokens-daily":   "DAY",
+	"hermes-agent-cache-tokens-daily":    "DAY",
+	"hermes-agent-total-tokens-daily":    "DAY",
+	"hermes-agent-cost-daily":            "DAY",
+	"hermes-agent-input-tokens-weekly":   "WEEK",
+	"hermes-agent-output-tokens-weekly":  "WEEK",
+	"hermes-agent-cache-tokens-weekly":   "WEEK",
+	"hermes-agent-total-tokens-weekly":   "WEEK",
+	"hermes-agent-cost-weekly":           "WEEK",
+	"hermes-agent-input-tokens-monthly":  "MONTH",
+	"hermes-agent-output-tokens-monthly": "MONTH",
+	"hermes-agent-cache-tokens-monthly":  "MONTH",
+	"hermes-agent-total-tokens-monthly":  "MONTH",
+	"hermes-agent-cost-monthly":          "MONTH",
+	"hermes-agent-active-sessions":       "ACTIVE",
 	// Perplexity: per-feature daily quotas + Comet/API dollar metrics.
 	// Titles match the live-tile labels emitted from snapshotFromUsage
 	// so a placeholder Perplexity tile reads identically to the live
@@ -1817,6 +1837,25 @@ var knownCaptions = map[string]string{
 	"hermes-output-tokens-sub":        "Out-tokens",
 	"hermes-cache-read-tokens-sub":    "Cache-R",
 	"hermes-cache-write-tokens-sub":   "Cache-W",
+	// Hermes Agent: caption disambiguates the metric type within a
+	// single time window. Mirrors the live-tile captions emitted by
+	// the provider so placeholder reads identical to the live render.
+	"hermes-agent-input-tokens-daily":    "Input",
+	"hermes-agent-output-tokens-daily":   "Output",
+	"hermes-agent-cache-tokens-daily":    "Cache",
+	"hermes-agent-total-tokens-daily":    "Total",
+	"hermes-agent-cost-daily":            "Cost",
+	"hermes-agent-input-tokens-weekly":   "Input",
+	"hermes-agent-output-tokens-weekly":  "Output",
+	"hermes-agent-cache-tokens-weekly":   "Cache",
+	"hermes-agent-total-tokens-weekly":   "Total",
+	"hermes-agent-cost-weekly":           "Cost",
+	"hermes-agent-input-tokens-monthly":  "Input",
+	"hermes-agent-output-tokens-monthly": "Output",
+	"hermes-agent-cache-tokens-monthly":  "Cache",
+	"hermes-agent-total-tokens-monthly":  "Total",
+	"hermes-agent-cost-monthly":          "Cost",
+	"hermes-agent-active-sessions":       "Sessions",
 	// Perplexity placeholder captions mirror the live-tile subvalue —
 	// constant "Queries" for the per-feature counts, "Balance"/"Spend"
 	// for the dollar metrics so a row of Perplexity tiles reads as

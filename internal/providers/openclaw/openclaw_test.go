@@ -149,3 +149,38 @@ func TestIsAuthErr(t *testing.T) {
 		t.Error("plain error without auth signal should not be flagged")
 	}
 }
+
+// TestIsStaleCachedTokenRejection covers the recovery trigger that
+// wipes a local deviceToken when the gateway can no longer match it.
+// The signature-invalid case is the one that bit a user after they
+// ran `openclaw devices clear` on the gateway side: the server forgot
+// the device, reconstructed canonical payload with an empty token,
+// and rejected our signature over the cached non-empty token.
+func TestIsStaleCachedTokenRejection(t *testing.T) {
+	cases := []struct {
+		name string
+		err  *gatewayError
+		want bool
+	}{
+		{"explicit DEVICE_TOKEN_MISMATCH", &gatewayError{Code: "DEVICE_TOKEN_MISMATCH"}, true},
+		{"message mentions device token", &gatewayError{Code: "INTERNAL", Message: "device token expired"}, true},
+		{"INVALID_REQUEST signature invalid (admin wiped device list)",
+			&gatewayError{Code: "INVALID_REQUEST", Message: "device signature invalid"}, true},
+		{"INVALID_REQUEST signature invalid mixed case",
+			&gatewayError{Code: "INVALID_REQUEST", Message: "Device Signature Invalid"}, true},
+		{"INVALID_REQUEST without signature mention",
+			&gatewayError{Code: "INVALID_REQUEST", Message: "missing field"}, false},
+		{"NOT_PAIRED is its own path, not a stale-token signal",
+			&gatewayError{Code: "NOT_PAIRED"}, false},
+		{"AUTH_TOKEN_MISMATCH is the shared token, not the device token",
+			&gatewayError{Code: "AUTH_TOKEN_MISMATCH"}, false},
+		{"random INTERNAL", &gatewayError{Code: "INTERNAL", Message: "kaboom"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isStaleCachedTokenRejection(tc.err); got != tc.want {
+				t.Errorf("isStaleCachedTokenRejection(%+v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}

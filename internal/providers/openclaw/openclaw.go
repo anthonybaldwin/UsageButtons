@@ -134,6 +134,14 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	}
 
 	conn, err := dialAndConnect(ctx, base, token, identity, deviceToken)
+	// dialAndConnect signals a stale cached deviceToken by returning
+	// errStaleDeviceTokenCleared after wiping local state. Retry once
+	// without the token so the bootstrap path runs this poll cycle and
+	// the user sees the PAIR face immediately, instead of waiting up
+	// to MinTTL for the next poll.
+	if errors.Is(err, errStaleDeviceTokenCleared) {
+		conn, err = dialAndConnect(ctx, base, token, identity, "")
+	}
 	if err != nil {
 		var pp *pairingPendingError
 		if errors.As(err, &pp) {
@@ -332,6 +340,14 @@ var requestedScopes = []string{
 	"operator.pairing",
 }
 
+// errStaleDeviceTokenCleared is the sentinel dialAndConnect returns
+// after wiping a locally cached deviceToken the gateway no longer
+// honors. The caller (Fetch) retries the connect with an empty
+// deviceToken on the same poll so the user sees the resulting state
+// (PAIR face, success, or a real error) immediately instead of
+// waiting for the next poll cycle.
+var errStaleDeviceTokenCleared = errors.New("openclaw: cleared stale cached device token, retry without it")
+
 // pairingPendingError signals the gateway returned NOT_PAIRED on
 // connect because this device hasn't been approved yet. Carries the
 // requestId the user passes to `openclaw devices approve`.
@@ -496,12 +512,25 @@ func dialAndConnect(ctx context.Context, base, sharedToken string, identity *dev
 			logf("connect rejected NOT_PAIRED: requestId=%s deviceId=%s", pp.RequestID, pp.DeviceID)
 			return nil, pp
 		}
-		// Token-mismatch → wipe stored deviceToken so next poll re-pairs
-		// from the bootstrap signed-device path.
-		if errors.As(err, &ge) && (ge.Code == "DEVICE_TOKEN_MISMATCH" || strings.Contains(strings.ToLower(ge.Message), "device token")) {
+		// Stale-pairing recovery → wipe stored deviceToken and signal the
+		// caller to retry the connect with no deviceToken so the bootstrap
+		// path runs this poll cycle (NOT_PAIRED → PAIR face) instead of
+		// the user waiting for the next poll. Two failure modes converge
+		// here when the gateway has forgotten our pairing (e.g. admin ran
+		// `openclaw devices clear`, gateway DB rebuilt):
+		//   - Explicit DEVICE_TOKEN_MISMATCH / "device token" message
+		//     when the server has the device but a different token.
+		//   - INVALID_REQUEST "device signature invalid" when the server
+		//     has no record of the device at all and reconstructs the
+		//     canonical payload with an empty token, so the signature we
+		//     made over the cached non-empty token can't verify.
+		// Only act when we actually have a cached deviceToken to clear —
+		// a fresh-bootstrap signature failure (no token sent) is a real
+		// error worth surfacing, not stale state worth retrying past.
+		if errors.As(err, &ge) && deviceToken != "" && isStaleCachedTokenRejection(ge) {
 			_ = clearDeviceToken()
-			logf("device token rejected, cleared local store: %v", err)
-			return nil, fmt.Errorf("OpenClaw: gateway rejected the cached device token — pairing will retry on next poll: %w", err)
+			logf("server rejected cached device token (code=%s msg=%q); cleared local store, retrying without it", ge.Code, ge.Message)
+			return nil, errStaleDeviceTokenCleared
 		}
 		if isAuthErr(err) {
 			return nil, errors.New("OpenClaw rejected the gateway token. Check it in the PI.")
@@ -633,6 +662,28 @@ func (e *gatewayError) Error() string {
 		return e.Code
 	}
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
+}
+
+// isStaleCachedTokenRejection reports whether ge is the gateway's way
+// of saying "your cached deviceToken doesn't match what I have on file
+// for this device" — which the caller treats as a signal to wipe the
+// local token and retry from the bootstrap path.
+//
+// Two server-side shapes converge here:
+//   - DEVICE_TOKEN_MISMATCH (or any message mentioning "device token"):
+//     the gateway has the device but a different token. Documented
+//     rejection from message-handler.ts.
+//   - INVALID_REQUEST + "signature": the gateway has no record of the
+//     device at all (admin ran `openclaw devices clear`, gateway DB
+//     rebuilt) and reconstructs the canonical payload with an empty
+//     token, so our signature over the cached non-empty token can't
+//     verify. Surfaces as the generic invalid-signature rejection.
+func isStaleCachedTokenRejection(ge *gatewayError) bool {
+	lower := strings.ToLower(ge.Message)
+	if ge.Code == "DEVICE_TOKEN_MISMATCH" || strings.Contains(lower, "device token") {
+		return true
+	}
+	return ge.Code == "INVALID_REQUEST" && strings.Contains(lower, "signature")
 }
 
 // isAuthErr reports whether err is an auth-related gateway error.

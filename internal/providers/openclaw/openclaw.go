@@ -144,10 +144,37 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	}
 	if err != nil {
 		var pp *pairingPendingError
-		if errors.As(err, &pp) {
+		if errors.As(err, &pp) && pp.RequestID != "" {
+			// Auto-approve our own pending pairing using the configured
+			// shared operator token. The token already has admin/pairing
+			// scope (the user pasted it in the PI), so we open a second
+			// shared-token-only session — no device block, no signature
+			// roundtrip — and call device.pair.approve. On success retry
+			// the device-paired connect; the server now finds us in the
+			// approved set and issues a deviceToken via hello-ok.
+			//
+			// Falls back to the PAIR face if the approve RPC errors —
+			// that preserves the manual `openclaw devices approve …`
+			// recovery path for setups where the PI token isn't
+			// admin-scoped.
+			logf("auto-approving self-pairing requestId=%s deviceId=%s", pp.RequestID, pp.DeviceID)
+			if approveErr := autoApproveSelfPairing(ctx, base, token, pp.RequestID); approveErr != nil {
+				logf("auto-approve failed (%v); surfacing PAIR face for manual approval", approveErr)
+				return pairingPendingSnapshot(pp), nil
+			}
+			logf("auto-approve ok; retrying connect")
+			conn, err = dialAndConnect(ctx, base, token, identity, "")
+			if err != nil {
+				if errors.As(err, &pp) {
+					return pairingPendingSnapshot(pp), nil
+				}
+				return errorSnapshot(short(err)), nil
+			}
+		} else if errors.As(err, &pp) {
 			return pairingPendingSnapshot(pp), nil
+		} else {
+			return errorSnapshot(short(err)), nil
 		}
-		return errorSnapshot(short(err)), nil
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
@@ -580,6 +607,106 @@ func hasScope(scopes []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// autoApproveSelfPairing approves a pending device-pairing requestId
+// using the user's already-configured shared operator token, so the
+// plugin can self-onboard without an SSH-and-CLI step. We open a
+// second, transient WebSocket session that:
+//
+//   - presents only `auth.token` (no `device` block) — this is the
+//     same posture the openclaw CLI uses; the server treats it as a
+//     shared-token operator session (client.id = "cli") and grants
+//     whatever scopes the token carries (admin → pairing included).
+//
+//   - calls the `device.pair.approve { requestId }` RPC documented at
+//     docs/gateway/protocol.md and gated by operator.pairing in
+//     src/gateway/method-scopes.ts.
+//
+//   - closes immediately after.
+//
+// Returns nil on a successful approve. Surfaces errors otherwise so
+// the caller can fall back to the manual PAIR-face workflow when the
+// configured token isn't pairing-capable (e.g. read-only operator
+// token), instead of silently swallowing the rejection.
+func autoApproveSelfPairing(ctx context.Context, base, sharedToken, requestID string) error {
+	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
+	ws, _, err := websocket.Dial(dialCtx, base, nil)
+	if err != nil {
+		return fmt.Errorf("dial: %w", err)
+	}
+	defer ws.Close(websocket.StatusNormalClosure, "")
+	ws.SetReadLimit(8 * 1024 * 1024)
+
+	// Drain the connect.challenge — the server emits it eagerly even
+	// when the eventual connect won't include a device block, and the
+	// challenge-timeout watchdog fires if the client never reads it.
+	if _, err := awaitConnectChallenge(ctx, ws); err != nil {
+		return fmt.Errorf("challenge: %w", err)
+	}
+
+	connectID, err := newRequestID()
+	if err != nil {
+		return err
+	}
+	frame := reqFrame{
+		Type:   "req",
+		ID:     connectID,
+		Method: connectMethod,
+		Params: connectParams{
+			MinProtocol: 3,
+			MaxProtocol: 3,
+			Client: connectClient{
+				// "cli" / "cli" is the CLI tool's own posture — the
+				// gateway recognizes it as a shared-token operator
+				// session that doesn't require device pairing.
+				ID:       "cli",
+				Version:  "usage-buttons",
+				Platform: devicePlatform(),
+				Mode:     "cli",
+			},
+			Role:   "operator",
+			Scopes: requestedScopes,
+			Caps:   []string{},
+			Auth: connectAuthPayload{
+				Token: sharedToken,
+			},
+			// No Device block — that's what makes this a shared-token
+			// session instead of a paired-device session.
+			UserAgent: "UsageButtons/Stream-Deck-Auto-Approver",
+			Locale:    "en-US",
+		},
+	}
+	if err := wsjson.Write(ctx, ws, frame); err != nil {
+		return fmt.Errorf("connect write: %w", err)
+	}
+	var hello helloResponse
+	if err := awaitResponse(ctx, ws, connectID, &hello); err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	if !hasScope(hello.Auth.Scopes, "operator.pairing") && !hasScope(hello.Auth.Scopes, "operator.admin") {
+		return fmt.Errorf("shared token lacks operator.pairing/admin scope; granted=%v", hello.Auth.Scopes)
+	}
+
+	approveID, err := newRequestID()
+	if err != nil {
+		return err
+	}
+	approveFrame := reqFrame{
+		Type:   "req",
+		ID:     approveID,
+		Method: "device.pair.approve",
+		Params: map[string]string{"requestId": requestID},
+	}
+	if err := wsjson.Write(ctx, ws, approveFrame); err != nil {
+		return fmt.Errorf("approve write: %w", err)
+	}
+	var approveResp json.RawMessage
+	if err := awaitResponse(ctx, ws, approveID, &approveResp); err != nil {
+		return fmt.Errorf("approve rpc: %w", err)
+	}
+	return nil
 }
 
 // logf emits an [openclaw] log line via providers.LogSink when the

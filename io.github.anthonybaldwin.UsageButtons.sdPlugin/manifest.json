@@ -219,7 +219,7 @@
       ]
     },
     {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.hermesagent",
+      "UUID": "io.github.anthonybaldwin.UsageButtons.hermes-agent",
       "Name": "Hermes Agent",
       "Tooltip": "Hermes Agent self-hosted dashboard usage stats — input/output/cached/total tokens and cost across daily/weekly/monthly windows.",
       "Icon": "assets/action-hermes-agent",

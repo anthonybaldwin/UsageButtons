@@ -470,8 +470,12 @@
       </div>
       <p class="hint"><code>http(s)://</code> URLs are auto-converted to <code>ws(s)://</code>. Fallbacks: <code>OPENCLAW_BASE_URL</code>, <code>OPENCLAW_GATEWAY_TOKEN</code>.</p>
       <p class="hint" style="margin-top:8px">
-        <strong>One-time pairing (Tailscale / remote gateway):</strong><br>
-        After you fill in the URL + token and add a button, the button face will read <strong>PAIR / Run CLI on host</strong>. SSH into your OpenClaw gateway host and run <code>openclaw devices list</code> to find the pending request, then <code>openclaw devices approve &lt;requestId&gt;</code>. The next plugin poll will pull metrics. Co-located on the same host? Use <code>ws://127.0.0.1:&lt;port&gt;</code> and pairing is skipped automatically.
+        <strong>One-time pairing — pick the easiest path:</strong>
+        <ul style="margin: 4px 0 0 16px; padding: 0;">
+          <li><strong>Tailscale Serve gateway (loopback or .ts.net URL):</strong> Press the OpenClaw button on Stream Deck — it opens the gateway dashboard, your browser auto-pairs via Tailscale identity, approve the request from the Devices panel. No CLI.</li>
+          <li><strong>Same host as plugin:</strong> Use <code>ws://127.0.0.1:&lt;port&gt;</code>; loopback auto-pairs, pairing screen never appears.</li>
+          <li><strong>Remote gateway, no Tailscale:</strong> The PAIR error banner above gets a <em>Copy approve command</em> button — paste it into a terminal that has <code>openclaw</code> CLI on PATH (token must have <code>operator.admin</code>; check <code>gateway.auth.scopes</code> if the CLI rejects).</li>
+        </ul>
       </p>
     </div>
 

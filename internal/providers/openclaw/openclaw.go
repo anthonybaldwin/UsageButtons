@@ -959,15 +959,24 @@ func errorSnapshot(message string) providers.Snapshot {
 // pairingPendingSnapshot returns the snapshot we surface while the
 // gateway is waiting for the user to approve our device pairing
 // request. The Error message starts with "pairing required" so the
-// plugin's renderer routes it to the PAIR face and includes the
-// literal CLI command (verbatim, with requestId) so a user inspecting
-// the snapshot.Error sees exactly what to type at their gateway host.
+// plugin's renderer routes it to the PAIR face and so the PI's
+// Copy-approve-command extractor (stat.html) can pull the requestId
+// out via regex when it shows the prebuilt openclaw CLI command.
+//
+// Wording leads with the dashboard flow because that's the path that
+// works without an SSH session for the common Tailscale-Serve setup
+// (browser identity satisfies operator scope on the trusted-host
+// path, no CLI invocation needed). The CLI fallback stays in the
+// message for users running the gateway on a host they can shell
+// into but no Tailscale identity grant — they'll see the same string
+// in the PI plus the prebuilt copy-paste command from the Copy
+// button.
 func pairingPendingSnapshot(pp *pairingPendingError) providers.Snapshot {
 	var msg string
 	if pp.RequestID != "" {
-		msg = fmt.Sprintf("pairing required — on the OpenClaw gateway host, run: openclaw devices approve %s   (then the next plugin poll will succeed)", pp.RequestID)
+		msg = fmt.Sprintf("pairing required — press the OpenClaw button to open the gateway dashboard and approve this request, or run on the gateway host: openclaw devices approve %s   (next plugin poll picks up metrics)", pp.RequestID)
 	} else {
-		msg = "pairing required — on the OpenClaw gateway host, run: openclaw devices list   (then approve the request matching this Stream Deck plugin's deviceId)"
+		msg = "pairing required — press the OpenClaw button to open the gateway dashboard and approve there, or run on the gateway host: openclaw devices list"
 	}
 	return providers.Snapshot{
 		ProviderID:   providerID,

@@ -379,6 +379,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.openclaw",
+      "Name": "OpenClaw",
+      "Tooltip": "OpenClaw self-hosted gateway usage stats — input/output/cached/total tokens and cost across daily/weekly/monthly windows.",
+      "Icon": "assets/action-openclaw",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-openclaw-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.opencode",
       "Name": "OpenCode",
       "Tooltip": "OpenCode usage stats — five-hour and weekly usage.",

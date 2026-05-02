@@ -48,6 +48,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/mistral"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/nousresearch"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/ollama"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/openclaw"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/opencode"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/opencodego"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/openrouter"
@@ -1765,6 +1766,24 @@ var knownLabels = map[string]string{
 	"hermes-agent-total-tokens-monthly":  "MONTH",
 	"hermes-agent-cost-monthly":          "MONTH",
 	"hermes-agent-active-sessions":       "ACTIVE",
+	// OpenClaw: same shape as Hermes Agent — window in the label,
+	// metric type in the caption — so a row of OpenClaw + Hermes Agent
+	// tiles reads consistently across both self-hosted gateways.
+	"openclaw-input-tokens-daily":    "DAY",
+	"openclaw-output-tokens-daily":   "DAY",
+	"openclaw-cache-tokens-daily":    "DAY",
+	"openclaw-total-tokens-daily":    "DAY",
+	"openclaw-cost-daily":            "DAY",
+	"openclaw-input-tokens-weekly":   "WEEK",
+	"openclaw-output-tokens-weekly":  "WEEK",
+	"openclaw-cache-tokens-weekly":   "WEEK",
+	"openclaw-total-tokens-weekly":   "WEEK",
+	"openclaw-cost-weekly":           "WEEK",
+	"openclaw-input-tokens-monthly":  "MONTH",
+	"openclaw-output-tokens-monthly": "MONTH",
+	"openclaw-cache-tokens-monthly":  "MONTH",
+	"openclaw-total-tokens-monthly":  "MONTH",
+	"openclaw-cost-monthly":          "MONTH",
 	// Perplexity: per-feature daily quotas + Comet/API dollar metrics.
 	// Titles match the live-tile labels emitted from snapshotFromUsage
 	// so a placeholder Perplexity tile reads identically to the live
@@ -1856,6 +1875,22 @@ var knownCaptions = map[string]string{
 	"hermes-agent-total-tokens-monthly":  "Total",
 	"hermes-agent-cost-monthly":          "Cost",
 	"hermes-agent-active-sessions":       "Sessions",
+	// OpenClaw: caption disambiguates the metric type within a window.
+	"openclaw-input-tokens-daily":    "Input",
+	"openclaw-output-tokens-daily":   "Output",
+	"openclaw-cache-tokens-daily":    "Cache",
+	"openclaw-total-tokens-daily":    "Total",
+	"openclaw-cost-daily":            "Cost",
+	"openclaw-input-tokens-weekly":   "Input",
+	"openclaw-output-tokens-weekly":  "Output",
+	"openclaw-cache-tokens-weekly":   "Cache",
+	"openclaw-total-tokens-weekly":   "Total",
+	"openclaw-cost-weekly":           "Cost",
+	"openclaw-input-tokens-monthly":  "Input",
+	"openclaw-output-tokens-monthly": "Output",
+	"openclaw-cache-tokens-monthly":  "Cache",
+	"openclaw-total-tokens-monthly":  "Total",
+	"openclaw-cost-monthly":          "Cost",
 	// Perplexity placeholder captions mirror the live-tile subvalue —
 	// constant "Queries" for the per-feature counts, "Balance"/"Spend"
 	// for the dollar metrics so a row of Perplexity tiles reads as

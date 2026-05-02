@@ -140,6 +140,10 @@ type ProviderKeys struct {
 	// per-process X-Hermes-Session-Token from <base>/index.html on
 	// first use and only consults this value as a fallback.
 	HermesAgentToken string `json:"hermesAgentToken,omitempty"`
+	// OpenClawToken is the OpenClaw gateway operator token. The
+	// gateway protocol is WebSocket JSON-RPC; the token is sent in
+	// the connect frame's auth field.
+	OpenClawToken string `json:"openClawToken,omitempty"`
 
 	// Endpoint overrides
 	OpenRouterURL       string `json:"openRouterURL,omitempty"`
@@ -157,6 +161,10 @@ type ProviderKeys struct {
 	// node like https://hermes.tailnet-XXXX.ts.net). Empty falls back
 	// to the loopback default in the provider.
 	HermesAgentBaseURL string `json:"hermesAgentBaseURL,omitempty"`
+	// OpenClawBaseURL is the user's OpenClaw gateway URL. Accepts
+	// http(s) or ws(s) — the provider normalizes to ws/wss. Default
+	// ws://127.0.0.1:18789.
+	OpenClawBaseURL string `json:"openClawBaseURL,omitempty"`
 }
 
 // KeySettings are per-button settings stored by Stream Deck.
@@ -627,6 +635,10 @@ func ChangedProviderIDs(prev, next ProviderKeys) []string {
 	if prev.HermesAgentToken != next.HermesAgentToken ||
 		prev.HermesAgentBaseURL != next.HermesAgentBaseURL {
 		out = append(out, "hermes-agent")
+	}
+	if prev.OpenClawToken != next.OpenClawToken ||
+		prev.OpenClawBaseURL != next.OpenClawBaseURL {
+		out = append(out, "openclaw")
 	}
 	if prev.CodexChatGPTBaseURL != next.CodexChatGPTBaseURL {
 		out = append(out, "codex")

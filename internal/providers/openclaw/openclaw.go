@@ -80,12 +80,15 @@ func (Provider) ID() string { return providerID }
 // Name returns the human-readable provider name.
 func (Provider) Name() string { return providerName }
 
-// BrandColor returns the meter-fill accent — red-500, matching the
-// lobster mascot in OpenClaw's favicon (ui/public/favicon.svg).
-func (Provider) BrandColor() string { return "#ef4444" }
+// BrandColor returns the meter-fill accent. Matches the lobster's
+// brighter gradient stop in OpenClaw's favicon
+// (ui/public/favicon.svg, #ff4d4d) — vibrant brand red.
+func (Provider) BrandColor() string { return "#ff4d4d" }
 
-// BrandBg returns a deep-red complement for the button background.
-func (Provider) BrandBg() string { return "#1c0606" }
+// BrandBg returns a deep-red complement. Tuned warmer than the
+// previous near-black so the empty-meter state reads as "OpenClaw
+// red" instead of generic brown.
+func (Provider) BrandBg() string { return "#330a0a" }
 
 // MetricIDs enumerates every metric this provider can emit.
 //
@@ -299,9 +302,22 @@ func dialAndConnect(ctx context.Context, base, token string) (*websocket.Conn, e
 				Platform: "stream-deck",
 				Mode:     "probe",
 			},
-			Role:      "operator",
-			Scopes:    []string{"operator.read"},
-			Caps:      []string{},
+			Role: "operator",
+			// Full operator scope set, matching the dashboard SPA's
+			// CONTROL_UI_OPERATOR_SCOPES (ui/src/ui/gateway.ts:152).
+			// Asking for just operator.read is rejected by some
+			// gateway builds with a "missing scope" error during
+			// connect — the server validates the requested set
+			// against the role's full capabilities, not just the
+			// methods we'll subsequently call.
+			Scopes: []string{
+				"operator.admin",
+				"operator.read",
+				"operator.write",
+				"operator.approvals",
+				"operator.pairing",
+			},
+			Caps: []string{},
 			Auth:      connectAuthPayload{Token: token},
 			UserAgent: "UsageButtons/Stream-Deck",
 			Locale:    "en-US",

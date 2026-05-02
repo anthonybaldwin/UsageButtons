@@ -133,9 +133,13 @@
     <span id="providerErrorText" style="color: #fca5a5;"></span>
     <!-- Action row appears only when the plugin emits a recoverable
          error with a known recovery action (e.g. OpenClaw pairing-
-         required). Buttons are wired in setProviderError. -->
+         required). The command preview shows the full string with
+         the token masked, so the user can audit what we'll write to
+         the clipboard before clicking Copy. The unmasked token only
+         leaves the page on Copy click. -->
     <div id="providerErrorActions" style="display:none; margin-top: 8px;">
-      <button type="button" id="copyOpenClawApproveBtn" class="reveal-btn" style="font-size: 11px;">Copy approve command</button>
+      <pre id="openclawApproveCmdPreview" style="font-family: monospace; font-size: 11px; line-height: 1.4; padding: 6px 8px; margin: 0 0 6px; background: #0f172a; border: 1px solid #334155; border-radius: 3px; color: #e2e8f0; white-space: pre-wrap; word-break: break-all;"></pre>
+      <button type="button" id="copyOpenClawApproveBtn" class="reveal-btn" style="font-size: 11px;">Copy</button>
       <span id="copyOpenClawApproveStatus" style="margin-left: 8px; color: #86efac; font-size: 11px;"></span>
     </div>
   </div>
@@ -2120,27 +2124,28 @@
       text.textContent = payload.error;
       banner.style.display = "block";
 
-      // OpenClaw pairing-required → expose a one-click "Copy approve
-      // command" action. The plugin emits the requestId in the error
-      // string ("openclaw devices approve <uuid>"); we extract it
-      // here and assemble the full --url --token form using the
-      // values the user already pasted in the PI. The token never
-      // appears in the DOM — it only lands on the system clipboard
-      // when the user explicitly clicks Copy.
+      // OpenClaw pairing-required → render the full approve command
+      // with the token masked so the user can audit the exact string
+      // before copying. The unmasked token lands on the clipboard
+      // only when the user clicks Copy; it's never written to the DOM.
       if (actions && copyBtn && copyStatus) {
         const requestIdMatch = String(payload.error).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
         const isOpenClawPairing = /pairing required/i.test(payload.error) && requestIdMatch;
+        const preview = document.getElementById("openclawApproveCmdPreview");
         if (isOpenClawPairing) {
           actions.style.display = "block";
+          const requestId = requestIdMatch[0];
+          const baseURL = (document.getElementById("openclawBaseURL")?.value || "").trim();
+          const token = (document.getElementById("openclawToken")?.value || "").trim();
+          const wsURL = httpToWs(baseURL) || "ws://127.0.0.1:18789";
+          const buildCmd = (tokenStr) => ["openclaw", "devices", "approve", requestId,
+                                           "--url", quoteShell(wsURL),
+                                           "--token", quoteShell(tokenStr)].join(" ");
+          if (preview) preview.textContent = buildCmd(maskToken(token));
           copyBtn.onclick = () => {
-            const requestId = requestIdMatch[0];
-            const baseURL = (document.getElementById("openclawBaseURL")?.value || "").trim();
-            const token = (document.getElementById("openclawToken")?.value || "").trim();
-            const wsURL = httpToWs(baseURL) || "ws://127.0.0.1:18789";
-            const cmd = ["openclaw", "devices", "approve", requestId,
-                         "--url", quoteShell(wsURL),
-                         "--token", quoteShell(token)].join(" ");
+            const cmd = buildCmd(token);
             navigator.clipboard.writeText(cmd).then(() => {
+              copyStatus.style.color = "#86efac";
               copyStatus.textContent = "Copied — paste into any terminal with openclaw CLI.";
               setTimeout(() => { copyStatus.textContent = ""; }, 4000);
             }, (err) => {
@@ -2150,8 +2155,20 @@
           };
         } else {
           actions.style.display = "none";
+          if (preview) preview.textContent = "";
         }
       }
+    }
+
+    // maskToken collapses a secret to first/last 4 chars joined by
+    // asterisks. Preserves length signal so the user can confirm the
+    // field is populated, without leaking the actual value into the
+    // visible PI DOM. Short tokens (<= 8 chars) collapse to all *.
+    function maskToken(tok) {
+      if (!tok) return "";
+      const s = String(tok);
+      if (s.length <= 8) return "*".repeat(s.length);
+      return s.slice(0, 4) + "*".repeat(Math.max(4, s.length - 8)) + s.slice(-4);
     }
 
     // httpToWs converts http(s)://host:port to ws(s)://host:port for

@@ -81,14 +81,6 @@ type visibleKey struct {
 	showTitle     bool   // true when user has enabled the native SD title
 	customTitle   bool   // true when the user has overridden the native title text
 	lastAutoTitle string // last title value written by the plugin
-	// firstDataRendered is true once this button has rendered a real
-	// metric (or a cached real metric on cold-start). While false, every
-	// non-real-metric render is replaced with the provider splash so the
-	// user never sees an empty/dashed/error placeholder before any data
-	// has actually arrived. After it flips true, downstream state
-	// changes (snapshot turns blocked, metric disappears) render
-	// normally so the user can see what's happening.
-	firstDataRendered bool
 }
 
 var (
@@ -478,12 +470,14 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		return
 	}
 
-	// No cache — first fetch. Show the provider splash (loadingFaceFor)
-	// until real data arrives, instead of an empty title-only placeholder.
-	// The splash is the brand glyph on the brand background — much less
-	// jarring than a stray label that flashes while the request is in
-	// flight. The provider may not even be registered yet on early
-	// startup; loadingFaceFor handles both cases.
+	// No cache — first fetch. Don't send any image: Stream Deck is
+	// already showing the action's static "Image" from manifest.json
+	// (assets/action-<provider>-key.svg), which is itself a brand
+	// glyph on a brand-ish background. Rendering our own splash on
+	// top would cause a visible second-loading-screen flash with a
+	// different bg color and a smaller glyph. Just leave SD's icon
+	// visible until renderSnapshotForKey replaces it with real data
+	// (or with an error/no-metric face once a snapshot returns).
 	mu.Lock()
 	visibleKeys[ev.Context] = &visibleKey{
 		context:       ev.Context,
@@ -494,10 +488,8 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		lastAutoTitle: lastAutoTitle,
 	}
 	mu.Unlock()
-	_ = hideLabel // splash never shows a label; reserved for cache path.
+	_ = hideLabel // no setImage in this branch; reserved for cache path.
 
-	ksEff := settings.EffectiveSettings(ks, providerID)
-	conn.SetImage(ev.Context, loadingFaceFor(providerID, &ksEff))
 	setTitleForKey(conn, ev.Context, customTitle, title)
 	conn.Logf("key appeared, no cache (now tracking %d visible key(s))", countVisible())
 	if settingsLoaded {
@@ -890,6 +882,26 @@ func handleKeyDown(conn *streamdeck.Connection, ev streamdeck.Event) {
 		return
 	}
 	providerID := streamdeck.ProviderIDFromAction(ev.Action)
+	// Cookie-based providers can lock up when the host's bot-detection
+	// JS (DataDome on portal.nousresearch.com) only refreshes its
+	// fingerprint cookie on page load. Whenever the cached snapshot is
+	// not healthy we open the dashboard alongside the forced refresh
+	// so one press re-primes the cookie; a healthy press behaves as a
+	// plain refresh and does not steal focus.
+	{
+		snap, _ := providers.PeekSnapshotState(providerID)
+		status := "<nil>"
+		if snap != nil {
+			status = snap.Status
+		}
+		dash := providerDashboardURL(providerID)
+		needs := providerNeedsDashboardNudge(providerID)
+		conn.Logf("[keydown] action=%q providerID=%q snap.status=%q dashboardURL=%q needsNudge=%v", ev.Action, providerID, status, dash, needs)
+		if needs && dash != "" {
+			conn.Logf("[keydown] opening dashboard URL for %s", providerID)
+			conn.OpenURL(dash)
+		}
+	}
 	skipContext := ev.Context
 	go func() {
 		refreshKey(conn, skipContext, true)
@@ -903,6 +915,28 @@ func handleKeyDown(conn *streamdeck.Connection, ev streamdeck.Event) {
 			refreshProviderSiblings(conn, providerID, skipContext)
 		}
 	}()
+}
+
+// providerDashboardURL returns the user-facing dashboard URL for
+// providers whose stats endpoint is gated by browser-only bot detection.
+// Empty for providers that don't need a page-load nudge.
+func providerDashboardURL(providerID string) string {
+	switch providerID {
+	case "hermes":
+		return "https://portal.nousresearch.com/usage"
+	}
+	return ""
+}
+
+// providerNeedsDashboardNudge reports whether pressing a key for
+// providerID should also open the dashboard URL. True when the cached
+// snapshot is missing or not operational — covers both the 200+challenge
+// path (Status="blocked") and the 403/timeout/cookie-missing path
+// (Status="unknown"), since DataDome can serve the challenge either way
+// and both leave the user in a state that a page-load nudge can fix.
+func providerNeedsDashboardNudge(providerID string) bool {
+	snap, _ := providers.PeekSnapshotState(providerID)
+	return snap == nil || snap.Status != "operational"
 }
 
 // refreshProviderSiblings re-renders every visible key of providerID
@@ -1026,36 +1060,6 @@ func redrawKeyFromCache(conn *streamdeck.Connection, context string) {
 	renderSnapshotForKey(conn, keyCopy, prov, *snapshot, age)
 }
 
-// markFirstDataRendered flips the per-key firstDataRendered flag so
-// future non-real-metric renders stop being suppressed in favor of the
-// splash. Idempotent.
-func markFirstDataRendered(context string) {
-	mu.Lock()
-	defer mu.Unlock()
-	if k, ok := visibleKeys[context]; ok && !k.firstDataRendered {
-		k.firstDataRendered = true
-	}
-}
-
-// keyHasFirstData returns the per-key firstDataRendered flag. False if
-// the key has no entry (e.g. removed mid-render).
-func keyHasFirstData(context string) bool {
-	mu.Lock()
-	defer mu.Unlock()
-	k, ok := visibleKeys[context]
-	return ok && k.firstDataRendered
-}
-
-// renderInitialSplash paints the provider splash and returns true,
-// signalling the caller to skip the placeholder/error/no-metric path
-// it would otherwise have taken. Used while a button is still waiting
-// on its first real metric so the user never sees an intermediate
-// title-only or "—" face during the initial load window.
-func renderInitialSplash(conn *streamdeck.Connection, context, providerID string, ks settings.KeySettings) {
-	ksEff := settings.EffectiveSettings(ks, providerID)
-	conn.SetImage(context, loadingFaceFor(providerID, &ksEff))
-}
-
 func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov providers.Provider, snapshot providers.Snapshot, snapshotAge time.Duration) {
 	context := key.context
 	// Merge provider-tier overrides under the per-button settings so
@@ -1079,19 +1083,6 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 				k.nextPollAt = k.lastPollAt
 			}
 			mu.Unlock()
-		}
-
-		// While we've never rendered a real metric, suppress the error
-		// face in favor of the splash. notConfigured is the exception:
-		// it's the user's persistent "fix this in settings" signal and
-		// hiding it forever would leave a brand-new install looking
-		// permanently busy. Every other error transitions in once data
-		// has rendered at least once.
-		if !key.firstDataRendered && !notConfigured {
-			conn.Logf("render[%s/%s] holding splash (initial-load error: %q)",
-				prov.ID(), metricID, snapshot.Error)
-			renderInitialSplash(conn, context, prov.ID(), ks)
-			return
 		}
 
 		value := "ERR"
@@ -1125,6 +1116,9 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 		case isServerError(snapshot.Error):
 			value = "ERR"
 			subHint = "Server Error"
+		case isBotBlocked(snapshot.Error):
+			value = "AUTH"
+			subHint = "Press to Verify"
 		default:
 			subHint = "See Settings"
 		}
@@ -1166,22 +1160,9 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 					fake = metricWithSnapshotAge(fake, snapshotAge)
 					conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, fake, ks, hideLabel))
 					setTitleForKey(conn, context, customTitle, title)
-					markFirstDataRendered(context)
 					return
 				}
 			}
-		}
-
-		// While we've never rendered a real metric, the dashed-out
-		// placeholder reads as "still loading" — exactly the
-		// intermediate state we're trying to avoid. Hold the splash
-		// instead so the button only flips off splash when its actual
-		// metric is ready.
-		if !key.firstDataRendered {
-			conn.Logf("render[%s/%s] holding splash (initial-load no-metric, snapshot had %d metrics)",
-				prov.ID(), metricID, len(snapshot.Metrics))
-			renderInitialSplash(conn, context, prov.ID(), ks)
-			return
 		}
 
 		// Dashed-out placeholder — show metric caption as subtext
@@ -1209,7 +1190,6 @@ func renderSnapshotForKey(conn *streamdeck.Connection, key visibleKey, prov prov
 		prov.ID(), metricID, metricCopy.Value, metricCopy.Unit, metricCopy.Ratio, snapshot.Source)
 	conn.SetImage(context, renderMetric(prov, snapshot.ProviderName, metricCopy, ks, hideLabel))
 	setTitleForKey(conn, context, customTitle, metricLabel)
-	markFirstDataRendered(context)
 }
 
 // setTitleForKey pre-populates the native title with our label so
@@ -1902,6 +1882,11 @@ var (
 	extensionNeededRe = regexp.MustCompile(`(?i)Install the Usage Buttons|Paste a Cookie|Helper Chrome extension`)
 	networkRe         = regexp.MustCompile(`(?i)network error|dial tcp|connection refused|i/o timeout|context deadline exceeded|ETIMEDOUT`)
 	serverErrRe       = regexp.MustCompile(`(?i)server error|HTTP [5]\d\d`)
+	// botBlockedRe matches the snapshot.Error a provider sets when its
+	// host's anti-bot interstitial (DataDome / Cloudflare / similar)
+	// kept us from a real response. Routed to its own face so users
+	// see "press to verify" instead of the generic "See Settings".
+	botBlockedRe = regexp.MustCompile(`(?i)blocked by bot detection|datadome|are you human`)
 )
 
 func isRateLimit(msg string) bool        { return rateLimitRe.MatchString(msg) }
@@ -1913,6 +1898,7 @@ func isExtensionTimeout(msg string) bool { return extensionTimeoutRe.MatchString
 func isExtensionNeeded(msg string) bool  { return extensionNeededRe.MatchString(msg) }
 func isNetworkError(msg string) bool     { return networkRe.MatchString(msg) }
 func isServerError(msg string) bool      { return serverErrRe.MatchString(msg) }
+func isBotBlocked(msg string) bool       { return botBlockedRe.MatchString(msg) }
 
 func countVisible() int {
 	return len(visibleKeys)

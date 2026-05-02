@@ -152,6 +152,9 @@ async function handleMessage(msg) {
     case "fetch":
       await handleFetch(msg);
       return;
+    case "reprime":
+      await handleReprime(msg);
+      return;
     default:
       console.warn("[UsageButtons] unknown message kind:", msg.kind);
   }
@@ -211,6 +214,64 @@ async function handleFetch(msg) {
     });
   } catch (e) {
     safeSend({ ...base, kind: "error", error: String(e && e.message ? e.message : e) });
+  }
+}
+
+// Reprime: cookie-gated providers behind anti-bot (DataDome on
+// portal.nousresearch.com) need their fingerprint cookie refreshed by
+// a real page load. The plugin asks us to do that via this message.
+// Behavior: if a tab on the target host already exists, reload it in
+// place (cheapest, least disruptive); otherwise open a hidden
+// background tab, give DataDome's JS time to run, then close the tab.
+//
+// Rate limit: per-URL in-memory map. The plugin also rate-limits, but
+// SW suspension can wipe this map, so the plugin's limiter is the
+// authoritative one. Keeping a local floor here is belt-and-suspenders
+// for cases where the SW survives but the plugin restarts.
+const lastReprimeAt = new Map();
+const REPRIME_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const REPRIME_TAB_LINGER_MS = 8000; // give DataDome JS time to run + cookie set
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function handleReprime(msg) {
+  const base = { id: msg.id, kind: "reprimeResult" };
+  const url = msg.url;
+  if (!url || !originAllowed(url)) {
+    safeSend({ ...base, ok: false, error: "origin not allowed" });
+    return;
+  }
+  const now = Date.now();
+  const last = lastReprimeAt.get(url) || 0;
+  if (now - last < REPRIME_MIN_INTERVAL_MS) {
+    safeSend({ ...base, ok: true, skipped: true });
+    return;
+  }
+  lastReprimeAt.set(url, now);
+
+  try {
+    const u = new URL(url);
+    // Prefer reloading an existing tab on the same hostname — keeps the
+    // user's tab strip stable and doesn't flash a new tab in/out.
+    const matchPattern = `*://${u.hostname}/*`;
+    const existing = await chrome.tabs.query({ url: matchPattern });
+    if (existing.length > 0) {
+      await chrome.tabs.reload(existing[0].id, { bypassCache: true });
+      safeSend({ ...base, ok: true, mode: "reload" });
+      return;
+    }
+    const tab = await chrome.tabs.create({ url, active: false });
+    await sleep(REPRIME_TAB_LINGER_MS);
+    try {
+      await chrome.tabs.remove(tab.id);
+    } catch (_e) {
+      // User may have closed it already; ignore.
+    }
+    safeSend({ ...base, ok: true, mode: "create+close" });
+  } catch (e) {
+    safeSend({ ...base, ok: false, error: String(e && e.message ? e.message : e) });
   }
 }
 

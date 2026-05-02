@@ -21,12 +21,14 @@
 package hermes
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"math"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,8 +42,13 @@ import (
 const (
 	productsURL = "https://portal.nousresearch.com/products"
 	apiKeysURL  = "https://portal.nousresearch.com/api-keys"
-	provID      = "hermes"
-	provName    = "Hermes"
+	// dashboardURL is the URL the extension reloads or opens in a hidden
+	// background tab when DataDome blocks our headless fetches. Real
+	// browser page-load JS is the only way DataDome's fingerprint cookie
+	// rotates, so this is the recovery handle.
+	dashboardURL = "https://portal.nousresearch.com/usage"
+	provID       = "hermes"
+	provName     = "Hermes"
 )
 
 // Provider fetches Nous Research portal usage data.
@@ -107,6 +114,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if !cookies.HostAvailable(ctx) {
+		hermesLogf("fetch skipped: cookie host unavailable")
 		return errorSnapshot(cookieaux.MissingMessage("nousresearch.com")), nil
 	}
 	headers := map[string]string{
@@ -117,17 +125,45 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 
 	products, err := fetchHTML(ctx, productsURL, headers)
 	if err != nil {
+		block := smellsLikeBlock(err)
+		hermesLogf("products fetch err: %v (smellsLikeBlock=%v)", err, block)
+		if block {
+			triggerReprime()
+		}
 		return mapHTTPError(err), nil
 	}
+	if looksLikeChallenge(products) {
+		hermesLogf("products body looks like DataDome challenge (%d bytes); triggering reprime", len(products))
+		triggerReprime()
+		return blockedSnapshot(), nil
+	}
+	if looksUnauthenticated(products) {
+		hermesLogf("products body has no Log out link (%d bytes); treating as blocked, triggering reprime", len(products))
+		triggerReprime()
+		return blockedSnapshot(), nil
+	}
+	hermesLogf("products fetch ok: %d bytes", len(products))
 	usage := snapshotFromHTML(products, time.Now().UTC())
 
 	// /api-keys is best-effort: an account with zero API activity still
 	// renders the page, but if the request fails we still emit the
 	// subscription tile from /products. The api-* metrics simply omit.
 	if api, err := fetchHTML(ctx, apiKeysURL, headers); err == nil {
+		hermesLogf("api-keys fetch ok: %d bytes", len(api))
 		mergeAPIKeysHTML(api, &usage)
+	} else {
+		hermesLogf("api-keys fetch err (best-effort, ignored): %v", err)
 	}
-	return snapshotToProvider(usage), nil
+	snap := snapshotToProvider(usage)
+	hermesLogf("fetch complete: status=%q metrics=%d", snap.Status, len(snap.Metrics))
+	if len(snap.Metrics) == 0 {
+		// Parsed cleanly but extracted nothing — usually a new failure
+		// mode (auth shell variant, schema rename) the looksLikeChallenge
+		// detector didn't catch. Dump a body excerpt so the next person
+		// triaging this can see what was served.
+		hermesLogf("zero-metric snapshot, products body sniff: %q", sniffBody(products))
+	}
+	return snap, nil
 }
 
 // allowanceTotals captures the seven count fields the Nous portal
@@ -700,6 +736,143 @@ func errorSnapshot(message string) providers.Snapshot {
 		Metrics:      []providers.MetricValue{},
 		Status:       "unknown",
 		Error:        message,
+	}
+}
+
+// looksLikeChallenge reports whether body is the Nous portal stuck in
+// the pre-data state we can't parse out of. Two failure modes:
+//
+//   - DataDome interstitial: "geo.captcha-delivery.com" / "datadome" /
+//     "are you human" — the bot-detection page itself.
+//
+//   - Auth-handoff stall: the portal's Next.js shell renders an
+//     identical 76KB skeleton with "Refreshing authentication..."
+//     while it waits for DataDome to clear the user. Headless fetches
+//     never get past that gate, so the user-data scripts never inline.
+//
+// Both states render an unparseable body whose only honest treatment
+// is "blocked" — surfacing the distinct status lets the auto-reprime
+// fire and lets a button press open the dashboard so DataDome can
+// verify the user in a real browser.
+func looksLikeChallenge(body []byte) bool {
+	scan := body
+	if len(scan) > 32*1024 {
+		scan = scan[:32*1024]
+	}
+	s := strings.ToLower(string(scan))
+	for _, n := range []string{
+		"geo.captcha-delivery.com",
+		"datadome",
+		"are you human",
+		"refreshing authentication",
+	} {
+		if strings.Contains(s, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// looksUnauthenticated reports whether the body is the portal shell
+// without a logged-in user. The Nous Next.js nav renders a "Log out"
+// link only when the session is authenticated; the auth-handoff /
+// signed-out / pre-DataDome shell shows only "Log in". Headless
+// fetches that survive looksLikeChallenge but still see this shell
+// have no user data inlined to scrape — same recovery path as a
+// DataDome block (reprime → real browser → cookie refresh →
+// authenticated render).
+func looksUnauthenticated(body []byte) bool {
+	scan := body
+	if len(scan) > 64*1024 {
+		scan = scan[:64*1024]
+	}
+	// Case-sensitive on purpose: portal nav copy is "Log out" with
+	// that exact casing. Avoids matching unrelated "log out" copy
+	// in marketing or footer text.
+	return !bytes.Contains(scan, []byte("Log out"))
+}
+
+// smellsLikeBlock reports whether err looks like DataDome locked us
+// out (401 / 403). A reprime can recover from these because they are
+// often the cookie-rotation path, not real auth loss; if the user is
+// genuinely logged out, opening the dashboard in the background is
+// also harmless. 5xx and network errors are excluded — those don't
+// benefit from a page reload.
+func smellsLikeBlock(err error) bool {
+	var httpErr *httputil.Error
+	if !errors.As(err, &httpErr) {
+		return false
+	}
+	return httpErr.Status == 401 || httpErr.Status == 403
+}
+
+// triggerReprime asks the extension to reload the dashboard so
+// DataDome's JS rotates the fingerprint cookie. Best-effort and async:
+// the request runs on a fresh background context (the caller's Fetch
+// context is about to expire) and the result is logged but not
+// surfaced — providers don't have a feedback channel for it, and the
+// next fetch tick reveals whether it worked.
+func triggerReprime() {
+	hermesLogf("triggerReprime: dispatching cookies.Reprime(%s)", dashboardURL)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+		defer cancel()
+		if err := cookies.Reprime(ctx, dashboardURL); err != nil {
+			hermesLogf("reprime returned: %v", err)
+			return
+		}
+		hermesLogf("reprime returned ok")
+	}()
+}
+
+// hermesLogf emits a [hermes] tagged log line via providers.LogSink
+// when one is wired by the plugin. No-op in tests where the sink is
+// unset.
+func hermesLogf(format string, args ...any) {
+	if providers.LogSink == nil {
+		return
+	}
+	providers.LogSink(fmt.Sprintf("[hermes] "+format, args...))
+}
+
+// sniffBody returns a compact, log-safe excerpt of body for diagnosing
+// which page Nous (or DataDome) actually served. Strips angle-bracket
+// fences so the line stays one log entry, takes the <title> if present
+// plus the first 280 chars of body text, and trims runs of whitespace.
+func sniffBody(body []byte) string {
+	s := string(body)
+	titleRE := regexp.MustCompile(`(?is)<title[^>]*>([^<]+)</title>`)
+	title := ""
+	if m := titleRE.FindStringSubmatch(s); len(m) == 2 {
+		title = strings.TrimSpace(m[1])
+	}
+	scriptRE := regexp.MustCompile(`(?is)<(script|style)[^>]*>.*?</(script|style)>`)
+	cleaned := scriptRE.ReplaceAllString(s, " ")
+	tagRE := regexp.MustCompile(`(?s)<[^>]+>`)
+	cleaned = tagRE.ReplaceAllString(cleaned, " ")
+	wsRE := regexp.MustCompile(`\s+`)
+	cleaned = strings.TrimSpace(wsRE.ReplaceAllString(cleaned, " "))
+	if len(cleaned) > 280 {
+		cleaned = cleaned[:280] + "…"
+	}
+	if title != "" {
+		return "<title>" + title + "</title> | " + cleaned
+	}
+	return cleaned
+}
+
+// blockedSnapshot reports that the portal served a bot-detection
+// interstitial. Status="blocked" is the wire signal the plugin's key
+// handler reads to decide whether a press should also open the
+// dashboard URL alongside the normal refresh.
+func blockedSnapshot() providers.Snapshot {
+	return providers.Snapshot{
+		ProviderID:   provID,
+		ProviderName: provName,
+		Source:       "cookie",
+		Metrics:      []providers.MetricValue{},
+		Status:       "blocked",
+		Error:        "Nous portal blocked by bot detection — open the portal in your browser to refresh.",
 	}
 }
 

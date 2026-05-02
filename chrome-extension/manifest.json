@@ -18,7 +18,8 @@
   },
   "permissions": [
     "nativeMessaging",
-    "alarms"
+    "alarms",
+    "tabs"
   ],
   "host_permissions": [
     "*://*.abacus.ai/*",

@@ -51,7 +51,7 @@ func (b *Bridge) Handle(ctx context.Context, m Message, send func(Message) error
 		b.allowedHosts = append([]string(nil), m.AllowedHosts...)
 		b.mu.Unlock()
 		logf("extension ready version=%q allowedHosts=%d [%s]", m.Version, len(m.AllowedHosts), strings.Join(m.AllowedHosts, ","))
-	case "fetchResult", "error", "pong":
+	case "fetchResult", "reprimeResult", "error", "pong":
 		b.deliverInflight(m)
 	}
 	return nil
@@ -139,16 +139,18 @@ func (b *Bridge) HandlePluginConn(ctx context.Context, conn net.Conn) {
 		}
 		b.mu.Unlock()
 		_ = writeMsg(conn, resp)
-	case "fetch":
-		b.relayFetch(ctx, conn, req)
+	case "fetch", "reprime":
+		b.relayThroughExtension(ctx, conn, req)
 	default:
 		_ = writeMsg(conn, Message{ID: req.ID, Kind: "error", Error: "unknown request kind: " + req.Kind})
 	}
 }
 
-// relayFetch forwards a plugin fetch request to the extension and writes
-// the extension's reply (or a timeout/error) back on conn.
-func (b *Bridge) relayFetch(ctx context.Context, conn net.Conn, req Message) {
+// relayThroughExtension forwards a plugin request to the extension over
+// the connectNative port and writes the correlated reply (or a
+// timeout/error) back on conn. Used for any request kind that needs an
+// extension round trip — currently "fetch" and "reprime".
+func (b *Bridge) relayThroughExtension(ctx context.Context, conn net.Conn, req Message) {
 	b.mu.Lock()
 	if !b.ready || b.toExt == nil {
 		b.mu.Unlock()

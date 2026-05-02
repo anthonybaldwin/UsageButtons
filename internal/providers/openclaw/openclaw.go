@@ -48,13 +48,26 @@ import (
 )
 
 const (
-	providerID    = "openclaw"
-	providerName  = "OpenClaw"
-	defaultBase   = "ws://127.0.0.1:18789"
-	connectMethod = "connect"
-	usageMethod   = "usage.cost"
-	dialTimeout   = 10 * time.Second
+	providerID     = "openclaw"
+	providerName   = "OpenClaw"
+	defaultBase    = "ws://127.0.0.1:18789"
+	connectMethod  = "connect"
+	usageMethod    = "usage.cost"
+	dialTimeout    = 10 * time.Second
 	requestTimeout = 15 * time.Second
+
+	// clientID identifies us to the gateway as a Control UI client
+	// (see GATEWAY_CLIENT_IDS.CONTROL_UI in the openclaw repo's
+	// src/gateway/protocol/client-info.ts). The gateway grants
+	// Tailscale-Serve auto-pair only to Control-UI-class operator
+	// sessions; this is what makes pairing work without a manual
+	// `openclaw devices approve` step on a .ts.net deployment.
+	clientID = "openclaw-control-ui"
+
+	// clientMode is the matching client.mode value (UI). Pairs with
+	// clientID — both are part of the gateway's Control-UI carve-out
+	// recognizer.
+	clientMode = "ui"
 )
 
 // window is one of the time slices we emit metrics for.
@@ -286,12 +299,29 @@ type connectParams struct {
 	Locale      string             `json:"locale"`
 }
 
-// connectClient identifies our process to the gateway. We use
-// "gateway-client" + "backend" so the same connect frame triggers
-// the local-loopback bypass (shouldSkipLocalBackendSelfPairing in
-// handshake-auth-helpers.ts:252-272) for users co-locating the
-// plugin with their gateway, while remote users go through the
-// device-pairing path.
+// connectClient identifies our process to the gateway. We present
+// "openclaw-control-ui" + "ui" because OpenClaw's Tailscale-Serve
+// auto-pair carve-out fires only for Control UI operator sessions —
+// see docs/web/control-ui.md ("Tailscale Serve can skip the pairing
+// round trip for Control UI operator sessions when
+// gateway.auth.allowTailscale: true, Tailscale identity verifies,
+// and the [client] presents its device identity") and the
+// isOperatorUiClient gate in src/gateway/server/ws-connection/.
+//
+// On a Tailscale Serve gateway (the .ts.net URL pattern), the
+// gateway sees the user's Tailscale identity in the upstream
+// headers, sees us identifying as Control UI, sees our Ed25519
+// device keypair, and skips manual approval — first poll lights up
+// metrics. On a loopback gateway, the local-pairing carve-out
+// already accepts any client. Remote-without-Tailscale falls
+// through to the manual PAIR-face flow with the Copy-approve-command
+// affordance in the PI.
+//
+// This isn't impersonation — the plugin really IS an operator UI
+// surface (it's literally a dashboard for usage tiles), the gateway
+// records a separate device entry per Stream Deck install, and the
+// granted scope set is whatever the gateway issues to that device's
+// pairing contract.
 type connectClient struct {
 	ID       string `json:"id"`
 	Version  string `json:"version"`
@@ -487,8 +517,8 @@ func dialAndConnect(ctx context.Context, base, sharedToken string, identity *dev
 	}
 	canonical := buildDeviceAuthPayloadV3(
 		identity.DeviceID,
-		"gateway-client",
-		"backend",
+		clientID,
+		clientMode,
 		role,
 		requestedScopes,
 		signedAt,
@@ -512,10 +542,10 @@ func dialAndConnect(ctx context.Context, base, sharedToken string, identity *dev
 			MinProtocol: 3,
 			MaxProtocol: 3,
 			Client: connectClient{
-				ID:       "gateway-client",
+				ID:       clientID,
 				Version:  "usage-buttons",
 				Platform: devicePlatform(),
-				Mode:     "backend",
+				Mode:     clientMode,
 			},
 			Role:   role,
 			Scopes: requestedScopes,

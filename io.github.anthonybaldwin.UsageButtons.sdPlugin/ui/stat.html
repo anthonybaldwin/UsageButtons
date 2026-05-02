@@ -131,6 +131,13 @@
   <div id="providerErrorBanner" style="display:none; margin: 0 12px 10px; padding: 8px; border-radius: 4px; background: #1f2937; border: 1px solid #7f1d1d; font-size: 12px; line-height: 1.4;">
     <span id="providerErrorDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; background:#ef4444;"></span>
     <span id="providerErrorText" style="color: #fca5a5;"></span>
+    <!-- Action row appears only when the plugin emits a recoverable
+         error with a known recovery action (e.g. OpenClaw pairing-
+         required). Buttons are wired in setProviderError. -->
+    <div id="providerErrorActions" style="display:none; margin-top: 8px;">
+      <button type="button" id="copyOpenClawApproveBtn" class="reveal-btn" style="font-size: 11px;">Copy approve command</button>
+      <span id="copyOpenClawApproveStatus" style="margin-left: 8px; color: #86efac; font-size: 11px;"></span>
+    </div>
   </div>
 
   <!-- ================== Button tab (per-key) ================== -->
@@ -2102,12 +2109,74 @@
     function setProviderError(payload) {
       const banner = document.getElementById("providerErrorBanner");
       const text = document.getElementById("providerErrorText");
-      if (payload.error) {
-        text.textContent = payload.error;
-        banner.style.display = "block";
-      } else {
+      const actions = document.getElementById("providerErrorActions");
+      const copyBtn = document.getElementById("copyOpenClawApproveBtn");
+      const copyStatus = document.getElementById("copyOpenClawApproveStatus");
+      if (!payload.error) {
         banner.style.display = "none";
+        if (actions) actions.style.display = "none";
+        return;
       }
+      text.textContent = payload.error;
+      banner.style.display = "block";
+
+      // OpenClaw pairing-required → expose a one-click "Copy approve
+      // command" action. The plugin emits the requestId in the error
+      // string ("openclaw devices approve <uuid>"); we extract it
+      // here and assemble the full --url --token form using the
+      // values the user already pasted in the PI. The token never
+      // appears in the DOM — it only lands on the system clipboard
+      // when the user explicitly clicks Copy.
+      if (actions && copyBtn && copyStatus) {
+        const requestIdMatch = String(payload.error).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+        const isOpenClawPairing = /pairing required/i.test(payload.error) && requestIdMatch;
+        if (isOpenClawPairing) {
+          actions.style.display = "block";
+          copyBtn.onclick = () => {
+            const requestId = requestIdMatch[0];
+            const baseURL = (document.getElementById("openclawBaseURL")?.value || "").trim();
+            const token = (document.getElementById("openclawToken")?.value || "").trim();
+            const wsURL = httpToWs(baseURL) || "ws://127.0.0.1:18789";
+            const cmd = ["openclaw", "devices", "approve", requestId,
+                         "--url", quoteShell(wsURL),
+                         "--token", quoteShell(token)].join(" ");
+            navigator.clipboard.writeText(cmd).then(() => {
+              copyStatus.textContent = "Copied — paste into any terminal with openclaw CLI.";
+              setTimeout(() => { copyStatus.textContent = ""; }, 4000);
+            }, (err) => {
+              copyStatus.style.color = "#fca5a5";
+              copyStatus.textContent = "Copy failed: " + (err && err.message ? err.message : err);
+            });
+          };
+        } else {
+          actions.style.display = "none";
+        }
+      }
+    }
+
+    // httpToWs converts http(s)://host:port to ws(s)://host:port for
+    // the openclaw CLI's --url. Pass-through for ws(s) inputs and
+    // anything we can't parse.
+    function httpToWs(raw) {
+      if (!raw) return "";
+      try {
+        const u = new URL(raw);
+        if (u.protocol === "http:") u.protocol = "ws:";
+        else if (u.protocol === "https:") u.protocol = "wss:";
+        return u.toString().replace(/\/$/, "");
+      } catch {
+        return raw;
+      }
+    }
+
+    // quoteShell wraps a value in single quotes for safe paste into
+    // bash/zsh, escaping any embedded single quotes with the
+    // standard '\'' close-and-rejoin trick. Tokens with special
+    // characters (which the operator gateway token can contain) stay
+    // intact across paste.
+    function quoteShell(s) {
+      if (s === "") return "''";
+      return "'" + String(s).replace(/'/g, "'\\''") + "'";
     }
 
     // ---------- Cookie host status + register UI ----------

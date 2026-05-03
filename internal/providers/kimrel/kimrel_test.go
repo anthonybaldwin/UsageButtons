@@ -1,4 +1,4 @@
-package kimik2
+package kimrel
 
 import (
 	"encoding/json"

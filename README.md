@@ -79,7 +79,7 @@ UsageButtons/
 │   │   ├── jetbrains/                    # JetBrains AI
 │   │   ├── kilo/                         # Kilo
 │   │   ├── kimi/                         # Kimi (browser, OAuth fallback)
-│   │   ├── kimik2/                       # Kimi K2 (API key)
+│   │   ├── kimrel/                       # Kimrel — third-party Kimi K2 reseller (API key)
 │   │   ├── kiro/                         # Kiro
 │   │   ├── minimax/                      # MiniMax (browser/API key)
 │   │   ├── mistral/                      # Mistral (browser)
@@ -176,7 +176,7 @@ through your real browser session; cookies never leave Chrome.
   `chrome://extensions`, done.
 - **Providers that don't need it keep working unchanged** — Gemini,
   Vertex AI, Copilot, OpenRouter, DeepSeek, Moonshot, Warp, z.ai,
-  Kimi K2, Synthetic, Kilo, Kiro, JetBrains AI, Anthropic, OpenAI,
+  Kimrel, Synthetic, Kilo, Kiro, JetBrains AI, Anthropic, OpenAI,
   and Antigravity never require the extension.
 - **Waits patiently on cold start.** Cookie-gated buttons stay in a
   quiet "needs browser extension" state until the extension

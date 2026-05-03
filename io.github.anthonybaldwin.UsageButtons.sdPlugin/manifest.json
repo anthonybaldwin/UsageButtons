@@ -316,8 +316,8 @@
     },
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.kimi-k2",
-      "Name": "Kimi K2",
-      "Tooltip": "Kimi K2 usage stats — credits remaining.",
+      "Name": "Kimrel",
+      "Tooltip": "Kimrel credits — third-party reseller of Kimi K2 (kimrel.com), not affiliated with Moonshot AI. For the official Moonshot dev API balance, use the Moonshot action instead.",
       "Icon": "assets/action-kimi-k2",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,

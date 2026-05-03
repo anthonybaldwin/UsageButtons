@@ -36,6 +36,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/codex"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/copilot"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/cursor"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/deepseek"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/factory"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/gemini"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/grok"

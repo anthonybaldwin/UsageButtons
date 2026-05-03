@@ -97,6 +97,11 @@ var (
 	globalSettingsSeen bool
 
 	autoRegisterOnce sync.Once
+	// metricMigrationLogOnce gates the first-run summary log emitted
+	// when a saved button's metric ID is rewritten by metricIDAliases.
+	// One log per plugin launch is enough — subsequent migrations are
+	// silent.
+	metricMigrationLogOnce sync.Once
 )
 
 func globalSettingsLoaded() bool {
@@ -406,6 +411,24 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 		if dirty {
 			raw, _ := json.Marshal(ks)
 			conn.SetSettings(ev.Context, raw)
+		}
+	}
+
+	// Stale metricID migration. Rewrites pinned KeySettings.MetricID
+	// when an alias maps it to a new ID — keeps reads consistent (the
+	// alias map handles read-side lookups too) but persists the new
+	// value so PI dropdowns and downstream tooling see the canonical
+	// name. Logs one summary on the first migration per plugin
+	// launch; subsequent rebinds stay silent.
+	if ks.MetricID != "" {
+		if migrated := migrateMetricID(providerID, ks.MetricID); migrated != ks.MetricID {
+			old := ks.MetricID
+			ks.MetricID = migrated
+			raw, _ := json.Marshal(ks)
+			conn.SetSettings(ev.Context, raw)
+			metricMigrationLogOnce.Do(func() {
+				conn.Logf("metricID migration: %s/%s → %s (rebinding stale buttons silently)", providerID, old, migrated)
+			})
 		}
 	}
 
@@ -1700,6 +1723,14 @@ var metricIDAliases = map[string]map[string]string{
 	},
 	"alibaba": {
 		"opus-percent": "monthly-percent",
+	},
+	// Mistral renamed "session-percent" → "monthly-cost" when it grew
+	// from a single MTD-cost metric to a 13-metric inventory in v0.9.
+	// The legacy ID was Claude-flavored and misled users into thinking
+	// it was a quota percent — the surfaced number was always raw EUR
+	// spend. See plans/mistral-tier-coverage.md.
+	"mistral": {
+		"session-percent": "monthly-cost",
 	},
 }
 

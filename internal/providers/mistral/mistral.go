@@ -3,6 +3,12 @@
 // Auth: Usage Buttons Helper extension with the user's admin.mistral.ai
 // browser session. Endpoint:
 // https://admin.mistral.ai/api/billing/v2/usage?month=...&year=....
+//
+// One Stream Deck action emits a namespaced metric inventory derived
+// from the single billing endpoint. The response already breaks spend
+// down by category (completion / OCR / audio / connectors / libraries
+// / fine-tuning / Vibe), so each category surfaces as its own metric
+// alongside aggregate cost, token, and model-count metrics.
 package mistral
 
 import (
@@ -23,6 +29,25 @@ import (
 )
 
 const adminBaseURL = "https://admin.mistral.ai"
+
+// Metric IDs surfaced by this provider. The set is namespaced under
+// "monthly-" so a future "tier-progress" / "spend-limit-percent" can
+// land alongside without colliding.
+const (
+	metricMonthlyCost            = "monthly-cost"
+	metricMonthlyCostCompletion  = "monthly-cost-completion"
+	metricMonthlyCostOCR         = "monthly-cost-ocr"
+	metricMonthlyCostAudio       = "monthly-cost-audio"
+	metricMonthlyCostConnectors  = "monthly-cost-connectors"
+	metricMonthlyCostLibraries   = "monthly-cost-libraries"
+	metricMonthlyCostFineTuning  = "monthly-cost-fine-tuning"
+	metricMonthlyCostVibe        = "monthly-cost-vibe"
+	metricMonthlyInputTokens     = "monthly-input-tokens"
+	metricMonthlyOutputTokens    = "monthly-output-tokens"
+	metricMonthlyCachedTokens    = "monthly-cached-tokens"
+	metricModelCount             = "model-count"
+	metricPeriodEnd              = "period-end"
+)
 
 // billingResponse mirrors Mistral's billing usage response.
 type billingResponse struct {
@@ -79,16 +104,33 @@ type priceEntry struct {
 	Price         string `json:"price"`
 }
 
+// categorySpend captures per-category spend in the response currency.
+// Each field maps 1:1 to a "monthly-cost-<category>" metric.
+type categorySpend struct {
+	Completion float64
+	OCR        float64
+	Audio      float64
+	Connectors float64
+	Libraries  float64
+	FineTuning float64
+	Vibe       float64
+}
+
+// Total returns the sum across all categories — the same number the
+// previous single-metric implementation surfaced as "monthly-cost".
+func (c categorySpend) Total() float64 {
+	return c.Completion + c.OCR + c.Audio + c.Connectors + c.Libraries + c.FineTuning + c.Vibe
+}
+
 // usageSnapshot is the parsed Mistral monthly billing state.
 type usageSnapshot struct {
-	TotalCost      float64
+	Spend          categorySpend
 	Currency       string
 	CurrencySymbol string
 	InputTokens    int
 	OutputTokens   int
 	CachedTokens   int
 	ModelCount     int
-	VibeUsage      float64
 	PeriodEnd      *time.Time
 	UpdatedAt      time.Time
 }
@@ -108,9 +150,27 @@ func (Provider) BrandColor() string { return "#ff500f" }
 // BrandBg returns the background color used on button faces.
 func (Provider) BrandBg() string { return "#111214" }
 
-// MetricIDs enumerates the metrics this provider can emit.
+// MetricIDs enumerates the metrics this provider can emit. Order is
+// the PI's preferred display order: aggregate spend first, then per-
+// category, then token totals, then account-shape metrics. Used as the
+// dropdown's default ordering and as the "first metric" fallback when
+// a freshly-dropped key has no saved metric ID yet.
 func (Provider) MetricIDs() []string {
-	return []string{"session-percent"}
+	return []string{
+		metricMonthlyCost,
+		metricMonthlyCostCompletion,
+		metricMonthlyCostOCR,
+		metricMonthlyCostAudio,
+		metricMonthlyCostConnectors,
+		metricMonthlyCostLibraries,
+		metricMonthlyCostFineTuning,
+		metricMonthlyCostVibe,
+		metricMonthlyInputTokens,
+		metricMonthlyOutputTokens,
+		metricMonthlyCachedTokens,
+		metricModelCount,
+		metricPeriodEnd,
+	}
 }
 
 // Fetch returns the latest Mistral usage snapshot.
@@ -175,41 +235,52 @@ func usageURL(now time.Time) string {
 // parseUsage aggregates Mistral usage categories into one monthly snapshot.
 func parseUsage(body billingResponse, now time.Time) usageSnapshot {
 	prices := priceIndex(body.Prices)
-	var totalCost float64
+
 	var inputTokens, outputTokens, cachedTokens, modelCount int
+	var spend categorySpend
 	if body.Completion != nil {
 		input, output, cached, cost, models := aggregateModelMap(body.Completion.Models, prices)
 		inputTokens += input
 		outputTokens += output
 		cachedTokens += cached
-		totalCost += cost
+		spend.Completion = cost
 		modelCount += models
 	}
-	for _, category := range []*modelCategory{body.OCR, body.Connectors, body.Audio} {
-		if category == nil {
-			continue
-		}
-		_, _, _, cost, _ := aggregateModelMap(category.Models, prices)
-		totalCost += cost
+	if body.OCR != nil {
+		_, _, _, cost, _ := aggregateModelMap(body.OCR.Models, prices)
+		spend.OCR = cost
+	}
+	if body.Audio != nil {
+		_, _, _, cost, _ := aggregateModelMap(body.Audio.Models, prices)
+		spend.Audio = cost
+	}
+	if body.Connectors != nil {
+		_, _, _, cost, _ := aggregateModelMap(body.Connectors.Models, prices)
+		spend.Connectors = cost
 	}
 	if body.LibrariesAPI != nil {
+		var librariesCost float64
 		for _, category := range []*modelCategory{body.LibrariesAPI.Pages, body.LibrariesAPI.Tokens} {
 			if category == nil {
 				continue
 			}
 			_, _, _, cost, _ := aggregateModelMap(category.Models, prices)
-			totalCost += cost
+			librariesCost += cost
 		}
+		spend.Libraries = librariesCost
 	}
 	if body.FineTuning != nil {
+		var ftCost float64
 		for _, models := range []map[string]modelUsage{body.FineTuning.Training, body.FineTuning.Storage} {
 			_, _, _, cost, _ := aggregateModelMap(models, prices)
-			totalCost += cost
+			ftCost += cost
 		}
+		spend.FineTuning = ftCost
 	}
 	if body.VibeUsage != nil {
-		totalCost += *body.VibeUsage
+		spend.Vibe = *body.VibeUsage
 	}
+
 	currency := body.Currency
 	if currency == "" {
 		currency = "EUR"
@@ -224,7 +295,7 @@ func parseUsage(body billingResponse, now time.Time) usageSnapshot {
 		periodEnd = &t
 	}
 	return usageSnapshot{
-		TotalCost:      totalCost,
+		Spend:          spend,
 		Currency:       currency,
 		CurrencySymbol: symbol,
 		InputTokens:    inputTokens,
@@ -297,34 +368,149 @@ func entryValue(entry usageEntry) float64 {
 }
 
 // snapshotFromUsage maps Mistral usage into Stream Deck metrics.
+//
+// Mistral is pay-as-you-go with no quota limit, so cost metrics are
+// raw amounts (NumericGoodWhen=low) — there's no remaining-percent
+// concept. The total-cost metric carries the period reset countdown so
+// pinning "MONTHLY" gives users both the current spend and how long
+// until the cycle resets.
 func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	now := usage.UpdatedAt.UTC().Format(time.RFC3339)
-	value := fmt.Sprintf("%s%.4f", usage.CurrencySymbol, usage.TotalCost)
-	caption := "No usage this month"
-	if usage.TotalCost > 0 {
-		caption = fmt.Sprintf("%d models", usage.ModelCount)
+	resetSecs := periodResetSeconds(usage)
+
+	var metrics []providers.MetricValue
+
+	// Total monthly cost (was "session-percent" pre-rename).
+	total := usage.Spend.Total()
+	totalMetric := costMetric(metricMonthlyCost, "MONTHLY", "Mistral monthly usage cost", total, usage, now)
+	if totalMetric.Caption == "" && total > 0 {
+		totalMetric.Caption = fmt.Sprintf("%d models", usage.ModelCount)
+	} else if total == 0 {
+		totalMetric.Caption = "No usage this month"
 	}
-	metric := providers.MetricValue{
-		ID:              "session-percent",
-		Label:           "MONTHLY",
-		Name:            "Mistral monthly usage cost",
-		Value:           value,
-		NumericValue:    &usage.TotalCost,
-		NumericUnit:     "dollars",
-		NumericGoodWhen: "low",
-		Caption:         caption,
-		UpdatedAt:       now,
+	if resetSecs != nil {
+		totalMetric.ResetInSeconds = resetSecs
 	}
-	if usage.PeriodEnd != nil {
-		metric.ResetInSeconds = providerutil.ResetSeconds(*usage.PeriodEnd)
+	metrics = append(metrics, totalMetric)
+
+	// Per-category cost. Emitted unconditionally so the PI dropdown
+	// items always work — a zero spend renders as "€0.0000" with the
+	// "No usage this month" caption when no categories saw activity.
+	categories := []struct {
+		id, label, name string
+		amount          float64
+	}{
+		{metricMonthlyCostCompletion, "COMPLETION", "Completion model spend", usage.Spend.Completion},
+		{metricMonthlyCostOCR, "OCR", "OCR pages spend", usage.Spend.OCR},
+		{metricMonthlyCostAudio, "AUDIO", "Audio (Voxtral / TTS / STT) spend", usage.Spend.Audio},
+		{metricMonthlyCostConnectors, "CONNECT", "Agent / connector spend", usage.Spend.Connectors},
+		{metricMonthlyCostLibraries, "LIBS", "RAG library spend", usage.Spend.Libraries},
+		{metricMonthlyCostFineTuning, "FT", "Fine-tuning training + storage spend", usage.Spend.FineTuning},
+		{metricMonthlyCostVibe, "VIBE", "Mistral Vibe flat charge", usage.Spend.Vibe},
 	}
+	for _, c := range categories {
+		m := costMetric(c.id, c.label, c.name, c.amount, usage, now)
+		metrics = append(metrics, m)
+	}
+
+	// Token totals. Cached-on-input ratio surfaces in the input-tokens
+	// caption so users can see cache-hit health without pinning a
+	// separate metric — same data, friendlier presentation.
+	inputCaption := ""
+	if usage.InputTokens > 0 && usage.CachedTokens > 0 {
+		ratio := float64(usage.CachedTokens) / float64(usage.InputTokens) * 100
+		inputCaption = fmt.Sprintf("%.0f%% cached", ratio)
+	}
+	metrics = append(metrics, tokenMetric(metricMonthlyInputTokens, "INPUT", "Total input tokens MTD", usage.InputTokens, inputCaption, now))
+	metrics = append(metrics, tokenMetric(metricMonthlyOutputTokens, "OUTPUT", "Total output tokens MTD", usage.OutputTokens, "", now))
+	metrics = append(metrics, tokenMetric(metricMonthlyCachedTokens, "CACHED", "Cached input tokens MTD", usage.CachedTokens, "", now))
+
+	// Distinct completion models used MTD.
+	modelCountValue := float64(usage.ModelCount)
+	modelMetric := providers.MetricValue{
+		ID:           metricModelCount,
+		Label:        "MODELS",
+		Name:         "Distinct completion models used",
+		Value:        usage.ModelCount,
+		NumericValue: &modelCountValue,
+		NumericUnit:  "count",
+		Caption:      "this month",
+		UpdatedAt:    now,
+	}
+	metrics = append(metrics, modelMetric)
+
+	// Days until billing reset. Surfaces as a countdown on the button
+	// face via ResetInSeconds; the value is the human-readable day
+	// count for the rare provider that bypasses ResetInSeconds.
+	periodMetric := providers.MetricValue{
+		ID:        metricPeriodEnd,
+		Label:     "RESET",
+		Name:      "Days until billing reset",
+		Value:     "—",
+		Caption:   "monthly cycle",
+		UpdatedAt: now,
+	}
+	if resetSecs != nil {
+		days := math.Ceil(*resetSecs / 86400)
+		daysVal := days
+		periodMetric.Value = fmt.Sprintf("%.0fd", days)
+		periodMetric.NumericValue = &daysVal
+		periodMetric.NumericUnit = "count"
+		periodMetric.ResetInSeconds = resetSecs
+	}
+	metrics = append(metrics, periodMetric)
+
 	return providers.Snapshot{
 		ProviderID:   "mistral",
 		ProviderName: "Mistral",
 		Source:       "cookie",
-		Metrics:      []providers.MetricValue{metric},
+		Metrics:      metrics,
 		Status:       "operational",
 	}
+}
+
+// costMetric builds a numeric-currency metric. Mistral's currency
+// symbol is used verbatim — no synthetic conversion to USD even if
+// the user expects dollars. Four decimals because per-token spend on
+// the smaller models often rounds to <€0.01 over a month, and a "€0"
+// face would be misleading after a real but tiny session.
+func costMetric(id, label, name string, amount float64, usage usageSnapshot, now string) providers.MetricValue {
+	value := fmt.Sprintf("%s%.4f", usage.CurrencySymbol, amount)
+	amt := amount
+	return providers.MetricValue{
+		ID:              id,
+		Label:           label,
+		Name:            name,
+		Value:           value,
+		NumericValue:    &amt,
+		NumericUnit:     "dollars",
+		NumericGoodWhen: "low",
+		UpdatedAt:       now,
+	}
+}
+
+// tokenMetric builds an integer count metric.
+func tokenMetric(id, label, name string, count int, caption, now string) providers.MetricValue {
+	v := float64(count)
+	return providers.MetricValue{
+		ID:           id,
+		Label:        label,
+		Name:         name,
+		Value:        count,
+		NumericValue: &v,
+		NumericUnit:  "count",
+		Caption:      caption,
+		UpdatedAt:    now,
+	}
+}
+
+// periodResetSeconds returns seconds until the billing-period end as a
+// pointer suitable for MetricValue.ResetInSeconds.
+func periodResetSeconds(usage usageSnapshot) *float64 {
+	if usage.PeriodEnd == nil {
+		return nil
+	}
+	return providerutil.ResetSeconds(*usage.PeriodEnd)
 }
 
 // errorSnapshot returns a Mistral setup or auth failure snapshot.

@@ -420,6 +420,16 @@
       <p class="hint">Extension when connected, else OAuth from <code>~/.codex/auth.json</code>.</p>
     </div>
 
+    <!-- DeepSeek auth -->
+    <div id="authConfig-deepseek" class="auth-config" style="display:none">
+      <label for="deepseekKey">DeepSeek API key</label>
+      <div class="key-row">
+        <input id="deepseekKey" type="password" autocomplete="off" placeholder="sk-…" data-provider-key="deepSeekKey">
+        <button type="button" class="reveal-btn" data-reveal-target="deepseekKey">Show</button>
+      </div>
+      <p class="hint">Fallback: <code>DEEPSEEK_API_KEY</code>.</p>
+    </div>
+
     <!-- OpenRouter auth -->
     <div id="authConfig-openrouter" class="auth-config" style="display:none">
       <label for="openrouterKey">OpenRouter API key</label>
@@ -1043,6 +1053,11 @@
         ["key-percent",     "Per-key quota remaining %", "pct"],
         ["rate-limit",      "Rate limit (requests / interval)", "ref"],
       ],
+      deepseek: [
+        ["balance",   "Total balance ($)",  "ref-dollar"],
+        ["topped-up", "Paid balance ($)",   "ref-dollar"],
+        ["granted",   "Granted balance ($)","ref-dollar"],
+      ],
       perplexity: [
         ["pro-queries-remaining",       "Pro queries remaining today (count)",       "ref"],
         ["deep-research-remaining",     "Deep Research remaining today (count)",     "ref"],
@@ -1199,6 +1214,7 @@
       opencode:   "#3b82f6",
       opencodego: "#3b82f6",
       openrouter: "#6467f2",
+      deepseek:   "#4d6bfe",
       perplexity: "#20b2aa",
       grok:       "#ffffff",
       nousresearch: "#2563eb",
@@ -1236,6 +1252,7 @@
       opencode:   "#081a33",
       opencodego: "#081a33",
       openrouter: "#101028",
+      deepseek:   "#0a1330",
       perplexity: "#082423",
       grok:       "#000000",
       nousresearch: "#0c1a33",
@@ -1254,7 +1271,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "hermes-agent", "ollama", "openclaw", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "deepseek", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "hermes-agent", "ollama", "openclaw", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -1274,6 +1291,7 @@
       opencode:   "OpenCode",
       opencodego: "OpenCode Go",
       openrouter: "OpenRouter",
+      deepseek:   "DeepSeek",
       perplexity: "Perplexity",
       grok:       "Grok",
       nousresearch: "Nous Research",

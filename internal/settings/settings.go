@@ -126,6 +126,7 @@ var providerDefaultSmartContrast = map[string]bool{
 type ProviderKeys struct {
 	// API keys / tokens
 	OpenRouterKey string `json:"openRouterKey,omitempty"`
+	DeepSeekKey   string `json:"deepSeekKey,omitempty"`
 	WarpKey       string `json:"warpKey,omitempty"`
 	ZaiKey        string `json:"zaiKey,omitempty"`
 	KimiK2Key     string `json:"kimiK2Key,omitempty"`
@@ -596,6 +597,9 @@ func ChangedProviderIDs(prev, next ProviderKeys) []string {
 	if prev.OpenRouterKey != next.OpenRouterKey ||
 		prev.OpenRouterURL != next.OpenRouterURL {
 		out = append(out, "openrouter")
+	}
+	if prev.DeepSeekKey != next.DeepSeekKey {
+		out = append(out, "deepseek")
 	}
 	if prev.WarpKey != next.WarpKey {
 		out = append(out, "warp")

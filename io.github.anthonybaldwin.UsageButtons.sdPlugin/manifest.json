@@ -427,6 +427,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.deepseek",
+      "Name": "DeepSeek",
+      "Tooltip": "DeepSeek balance — total balance with paid/granted breakdown.",
+      "Icon": "assets/action-deepseek",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-deepseek-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.openrouter",
       "Name": "OpenRouter",
       "Tooltip": "OpenRouter usage stats — credit balance, total usage.",

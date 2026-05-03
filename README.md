@@ -69,6 +69,7 @@ UsageButtons/
 │   │   ├── cookieaux/                    # cookie-gated provider messaging helpers
 │   │   ├── copilot/                      # GitHub Copilot
 │   │   ├── cursor/                       # Cursor (browser)
+│   │   ├── deepseek/                     # DeepSeek (API key)
 │   │   ├── factory/                      # Droid / Factory (browser/token)
 │   │   ├── gemini/                       # Gemini CLI OAuth
 │   │   ├── grok/                         # Grok / xAI (browser)
@@ -171,8 +172,9 @@ through your real browser session; cookies never leave Chrome.
   launch — download the release zip, Load Unpacked in
   `chrome://extensions`, done.
 - **Providers that don't need it keep working unchanged** — Gemini,
-  Vertex AI, Copilot, OpenRouter, Warp, z.ai, Kimi K2, Synthetic,
-  Kilo, Kiro, JetBrains AI, and Antigravity never require the extension.
+  Vertex AI, Copilot, OpenRouter, DeepSeek, Warp, z.ai, Kimi K2,
+  Synthetic, Kilo, Kiro, JetBrains AI, and Antigravity never require
+  the extension.
 - **Waits patiently on cold start.** Cookie-gated buttons stay in a
   quiet "needs browser extension" state until the extension
   handshakes — so launching Stream Deck before Chrome doesn't

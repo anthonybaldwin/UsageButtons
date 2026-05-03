@@ -6,7 +6,7 @@ per-model quotas, and more. Each button renders a dynamic icon whose
 background fills (or de-fills) in proportion to the current value, so
 you can tell at a glance how much runway you have left.
 
-![Usage Buttons in Stream Deck](docs/main.png)
+![Usage Buttons in Stream Deck — folder home opening into per-provider mini-dashboards (Claude, OpenAI Codex, OpenClaw, Nous Research / Hermes, Perplexity, Ollama, Grok, Gemini, and 23 more)](docs/hero.gif)
 
 Inspired by [CodexBar](https://github.com/steipete/CodexBar) for macOS.
 Endpoint mappings for the Perplexity provider follow

@@ -220,6 +220,15 @@ Adding a cookie-gated provider requires three coordinated changes:
 …plus cut a new plugin release so the Helper zip on GitHub Releases
 matches.
 
+## Button spec
+
+Before adding a provider, changing the renderer, or touching any
+button visual (colors, glyph, loading state, subvalue text, fill
+direction, contrast), read [docs/button-spec.md](docs/button-spec.md).
+It's the canonical spec — three-color contract, SmartContrast rule,
+loading-state continuity, subvalue priority chain, per-provider
+checklist, and known debt. Don't fork conventions per provider.
+
 ## CodexBar reference
 
 - `tmp/CodexBar/` is a git clone of

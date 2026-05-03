@@ -14,12 +14,16 @@ The following are adapted from CodexBar's
 `Sources/CodexBar/Resources/ProviderIcon-*.svg` assets, which are
 distributed under the MIT license:
 
-- `internal/icons/icons.go` — the `d` attribute of each provider's
-  SVG is embedded into a Go map for compile-time inlining. The path
-  data is unmodified from upstream; only the surrounding Go map
-  structure is ours. A few entries (codex, grok, hermes-agent,
-  nousresearch) come from lobehub/lobe-icons instead and are flagged
-  inline; see the lobehub/lobe-icons section below.
+- `internal/icons/<name>.go` and the literal in `internal/icons/icons.go`
+  — the `d` attribute of each provider's SVG is embedded into a Go
+  map for compile-time inlining. The path data is unmodified from
+  upstream; only the surrounding Go map structure is ours. CodexBar
+  is the source for the small set of providers that lobehub/lobe-icons
+  does not ship a glyph for (warp, factory, abacus, augment, jetbrains,
+  kiro, opencodego, synthetic). The remaining ~27 provider glyphs come
+  from lobehub/lobe-icons via `scripts/sync-lobe-icons.go` and are
+  emitted into `internal/icons/lobe_generated.go`; see the
+  lobehub/lobe-icons section below.
 
 - The `BrandColor()` / `BrandBg()` constants on each Go provider
   under `internal/providers/<name>/` mirror the RGB values from
@@ -72,26 +76,23 @@ kind.
 
 <https://github.com/lobehub/lobe-icons>
 
-The `"codex"` and `"grok"` entries in `internal/icons/icons.go` embed
-the `d` attribute of those providers' monochrome glyphs from
-lobe-icons, distributed under the MIT license. The same path data is
-also embedded in `io.github.anthonybaldwin.UsageButtons.sdPlugin/assets/action-grok.svg`
-and `action-grok-key.svg` for the Stream Deck action thumbnail / key
-preview. The path data is unmodified from upstream; only the
-surrounding Go map structure / SVG wrapper is ours.
+`internal/icons/lobe_generated.go` is produced by
+`scripts/sync-lobe-icons.go`, which fetches monochrome SVGs from
+lobehub/lobe-icons (MIT) and embeds each `d` attribute into a Go map
+for compile-time inlining. The mapping table inside that script lists
+the lobe icon name and variant chosen for each provider ID. Path data
+is unmodified from upstream; only the surrounding Go map structure
+and (for wordmark variants) the vertical-stretch `<g>` wrapper are
+ours.
 
-The same lobe-icons `hermes-agent` SVG path data is embedded in
-`io.github.anthonybaldwin.UsageButtons.sdPlugin/assets/action-hermes-agent.svg`
-and `action-hermes-agent-key.svg` for the Stream Deck action thumbnail
-/ key preview, plus the `"hermes-agent"` entry in
-`internal/icons/icons.go` for the button-face watermark. The lobe-icons
-`nousresearch-text` SVG path data is embedded in the `"nousresearch"`
-entry in `internal/icons/icons.go` and in
-`io.github.anthonybaldwin.UsageButtons.sdPlugin/assets/action-nousresearch.svg`
-(plus the `-key.svg` companion) — the same wordmark path, wrapped in
-a square viewBox we sized for the Stream Deck action thumbnail.
-Path data is unmodified from upstream; only the surrounding SVG / Go
-map wrapper is ours.
+The same lobe-icons path data is also embedded in the Stream Deck
+action thumbnails / key previews under
+`io.github.anthonybaldwin.UsageButtons.sdPlugin/assets/action-<name>.svg`
+(and the `-key.svg` companions) for providers whose action art was
+sourced from lobe-icons (e.g. grok, hermes-agent, nousresearch).
+
+Re-run `go run scripts/sync-lobe-icons.go` after upstream icon
+updates or after editing the mapping table.
 
 Authoritative license text:
 <https://github.com/lobehub/lobe-icons/blob/master/LICENSE>

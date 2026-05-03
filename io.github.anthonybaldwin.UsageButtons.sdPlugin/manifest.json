@@ -75,6 +75,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.anthropic",
+      "Name": "Anthropic",
+      "Tooltip": "Anthropic org-level cost (admin API key required) — today, MTD, 30 days.",
+      "Icon": "assets/action-anthropic",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-anthropic-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.antigravity",
       "Name": "Antigravity",
       "Tooltip": "Antigravity usage stats — Claude, Gemini Pro, and Gemini Flash quota remaining.",
@@ -108,7 +124,7 @@
     },
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.claude",
-      "Name": "Claude",
+      "Name": "Claude Code",
       "Tooltip": "Claude usage stats — session %, weekly %, Sonnet %, Opus %, Design, Routines, extras, costs.",
       "Icon": "assets/action-claude",
       "PropertyInspectorPath": "ui/stat.html",
@@ -165,6 +181,22 @@
       "States": [
         {
           "Image": "assets/action-cursor-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.deepseek",
+      "Name": "DeepSeek",
+      "Tooltip": "DeepSeek balance — total balance with paid/granted breakdown.",
+      "Icon": "assets/action-deepseek",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-deepseek-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }
@@ -229,22 +261,6 @@
       "States": [
         {
           "Image": "assets/action-hermes-agent-key",
-          "ShowTitle": false,
-          "TitleAlignment": "top"
-        }
-      ]
-    },
-    {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.nousresearch",
-      "Name": "Nous Research",
-      "Tooltip": "Nous Research portal usage stats — Hermes Agent / Nous Chat subscription credits, API credits, API spend.",
-      "Icon": "assets/action-nousresearch",
-      "PropertyInspectorPath": "ui/stat.html",
-      "SupportedInMultiActions": false,
-      "UserTitleEnabled": true,
-      "States": [
-        {
-          "Image": "assets/action-nousresearch-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }
@@ -363,6 +379,38 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.moonshot",
+      "Name": "Moonshot",
+      "Tooltip": "Moonshot (Kimi platform) balance — available, voucher, cash.",
+      "Icon": "assets/action-moonshot",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-moonshot-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.nousresearch",
+      "Name": "Nous Research",
+      "Tooltip": "Nous Research portal usage stats — Hermes Agent / Nous Chat subscription credits, API credits, API spend.",
+      "Icon": "assets/action-nousresearch",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-nousresearch-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.ollama",
       "Name": "Ollama",
       "Tooltip": "Ollama usage stats — session %, weekly %.",
@@ -373,6 +421,22 @@
       "States": [
         {
           "Image": "assets/action-ollama-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.openai",
+      "Name": "OpenAI",
+      "Tooltip": "OpenAI org-level cost (admin API key required) — today, MTD, 30 days.",
+      "Icon": "assets/action-openai",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-openai-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }

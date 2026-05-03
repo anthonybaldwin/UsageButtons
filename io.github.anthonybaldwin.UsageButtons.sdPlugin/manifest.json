@@ -427,6 +427,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.openai-admin",
+      "Name": "OpenAI Admin",
+      "Tooltip": "OpenAI org-level cost (admin API key required) — today, MTD, 30 days.",
+      "Icon": "assets/action-openai-admin",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-openai-admin-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.anthropic-admin",
       "Name": "Anthropic Admin",
       "Tooltip": "Anthropic org-level cost (admin API key required) — today, MTD, 30 days.",

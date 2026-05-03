@@ -52,6 +52,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/moonshot"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/nousresearch"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/ollama"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/openaiadmin"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/openclaw"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/opencode"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/opencodego"

@@ -108,6 +108,14 @@ var ProviderIcons = map[string]*render.ProviderGlyph{
 		ViewBox: "0 0 24 24",
 		D:       "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
 	},
+	"openai-admin": {
+		// Same shield mark as anthropic-admin — both providers are
+		// org-level admin-only views, so we deliberately use the same
+		// shape to convey "admin tile" at a glance. The brand color
+		// (OpenAI green vs Anthropic terracotta) is the differentiator.
+		ViewBox: "0 0 24 24",
+		D:       "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+	},
 	"deepseek": {
 		// DeepSeek whale mark, ported from CodexBar's
 		// ProviderIcon-deepseek.svg (MIT). 30x30 viewBox; the renderer's

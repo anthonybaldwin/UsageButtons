@@ -66,7 +66,7 @@ func TestParseOAuthUsageMapsEnvelope(t *testing.T) {
 
 // TestParseOAuthUsageEmptyResponseErrors guards against a 200 with
 // neither a usage block nor a limits[] array — happens when the
-// account hasn't been provisioned for Kimi for Coding.
+// account hasn't been provisioned for Kimi.
 func TestParseOAuthUsageEmptyResponseErrors(t *testing.T) {
 	_, err := parseOAuthUsage(oauthUsageEnvelope{}, time.Now())
 	if err == nil {
@@ -253,8 +253,8 @@ func TestSnapshotFromUsageReportsKimiForCoding(t *testing.T) {
 		Weekly:    usageDetail{Limit: "100", Used: "10"},
 		UpdatedAt: time.Now().UTC(),
 	})
-	if snap.ProviderName != "Kimi for Coding" {
-		t.Fatalf("ProviderName = %q, want %q", snap.ProviderName, "Kimi for Coding")
+	if snap.ProviderName != "Kimi" {
+		t.Fatalf("ProviderName = %q, want %q", snap.ProviderName, "Kimi")
 	}
 }
 

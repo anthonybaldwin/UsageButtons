@@ -78,7 +78,7 @@ UsageButtons/
 │   │   ├── nousresearch/                 # Nous Research portal (Hermes / Nous Chat, browser)
 │   │   ├── jetbrains/                    # JetBrains AI
 │   │   ├── kilo/                         # Kilo
-│   │   ├── kimi/                         # Kimi for Coding (browser, OAuth fallback)
+│   │   ├── kimi/                         # Kimi (browser, OAuth fallback)
 │   │   ├── kimik2/                       # Kimi K2 (API key)
 │   │   ├── kiro/                         # Kiro
 │   │   ├── minimax/                      # MiniMax (browser/API key)

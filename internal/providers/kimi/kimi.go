@@ -1,4 +1,4 @@
-// Package kimi implements the Kimi for Coding usage provider.
+// Package kimi implements the Kimi usage provider.
 //
 // Auth (extension-first): primary path is the Usage Buttons Helper with
 // the user's kimi.com browser session, hitting
@@ -78,7 +78,7 @@ type Provider struct{}
 func (Provider) ID() string { return "kimi" }
 
 // Name returns the human-readable provider name.
-func (Provider) Name() string { return "Kimi for Coding" }
+func (Provider) Name() string { return "Kimi" }
 
 // BrandColor returns the accent color used on button faces.
 func (Provider) BrandColor() string { return "#fe603c" }
@@ -91,7 +91,7 @@ func (Provider) MetricIDs() []string {
 	return []string{"session-percent", "weekly-percent"}
 }
 
-// Fetch returns the latest Kimi for Coding usage snapshot. The Helper
+// Fetch returns the latest Kimi usage snapshot. The Helper
 // extension is the preferred path; if it's unavailable, or returns
 // 401/403 because the kimi.com session has lapsed, the OAuth credential
 // blob written by `kimi login` is used as a fallback.
@@ -202,7 +202,7 @@ func snapshotFromUsage(usage usageSnapshot) providers.Snapshot {
 	}
 	return providers.Snapshot{
 		ProviderID:   "kimi",
-		ProviderName: "Kimi for Coding",
+		ProviderName: "Kimi",
 		Source:       "cookie",
 		Metrics:      metrics,
 		Status:       "operational",
@@ -262,7 +262,7 @@ func numericString(raw string) *float64 {
 func errorSnapshot(message string) providers.Snapshot {
 	return providers.Snapshot{
 		ProviderID:   "kimi",
-		ProviderName: "Kimi for Coding",
+		ProviderName: "Kimi",
 		Source:       "auth",
 		Metrics:      []providers.MetricValue{},
 		Status:       "unknown",

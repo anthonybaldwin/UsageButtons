@@ -1,4 +1,4 @@
-// Auth fallback for Kimi for Coding when the Helper extension is
+// Auth fallback for Kimi when the Helper extension is
 // unavailable. Uses an OAuth token grant that the `kimi login` CLI
 // places at ~/.kimi/credentials/kimi-code.json, refreshes it against
 // auth.kimi.com when within 5 minutes of expiry (or on a 401/403),
@@ -34,7 +34,7 @@ const (
 	oauthClientID = "17e5f671-d194-4dfb-9706-5516cb48c098"
 	// defaultOAuthRefreshURL is the form-encoded refresh-token endpoint.
 	defaultOAuthRefreshURL = "https://auth.kimi.com/api/oauth/token"
-	// oauthUsageURL returns Kimi for Coding session/weekly windows.
+	// oauthUsageURL returns Kimi session/weekly windows.
 	oauthUsageURL = "https://api.kimi.com/coding/v1/usages"
 	// oauthRefreshBuffer is how far ahead of expiry we proactively refresh.
 	oauthRefreshBuffer = 5 * time.Minute

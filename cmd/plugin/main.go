@@ -965,7 +965,13 @@ func openClawControlUIURL() string {
 	default:
 		return ""
 	}
-	u.Path = "/"
+	// Land on /nodes — that's the tab that hosts the Devices /
+	// pair-approval panel in the Control UI (see ui/src/ui/navigation.ts
+	// and views/nodes.ts in openclaw/openclaw). The default landing
+	// page is /chat which doesn't expose pairing controls, so a user
+	// pressing PAIR ended up hunting through tabs to find the approve
+	// button. Going straight to /nodes makes the recovery one click.
+	u.Path = "/nodes"
 	u.RawQuery = ""
 	u.Fragment = ""
 	return u.String()

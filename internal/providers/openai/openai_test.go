@@ -21,48 +21,78 @@ func TestSumResultsUSD_DollarsNotCents(t *testing.T) {
 
 func TestSumWindows_SlicesByUnixTime(t *testing.T) {
 	now := time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC)
-	todayStart := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
-	monthStart := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+
+	mkBucket := func(d time.Time, dollars float64) costBucket {
+		return costBucket{
+			StartTime: d.Unix(),
+			EndTime:   d.Add(24 * time.Hour).Unix(),
+			Results:   []costResult{{Amount: &costAmount{Value: dollars, Currency: "usd"}}},
+		}
+	}
+	day := func(month, dayOfMonth int) time.Time {
+		return time.Date(2026, time.Month(month), dayOfMonth, 0, 0, 0, 0, time.UTC)
+	}
 
 	buckets := []costBucket{
-		{
-			StartTime: todayStart.Unix(),
-			EndTime:   now.Unix(),
-			Results:   []costResult{{Amount: &costAmount{Value: 5.00, Currency: "usd"}}},
-		},
-		{
-			StartTime: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC).Unix(),
-			EndTime:   time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC).Unix(),
-			Results:   []costResult{{Amount: &costAmount{Value: 10.00, Currency: "usd"}}},
-		},
-		{
-			StartTime: time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC).Unix(),
-			EndTime:   time.Date(2026, 4, 29, 0, 0, 0, 0, time.UTC).Unix(),
-			Results:   []costResult{{Amount: &costAmount{Value: 7.00, Currency: "usd"}}},
-		},
+		mkBucket(day(5, 15), 5.00),  // Today
+		mkBucket(day(5, 14), 2.00),  // Yesterday
+		mkBucket(day(5, 10), 3.00),  // 5 days ago (in 7d, mtd, 30d)
+		mkBucket(day(5, 8), 10.00),  // Earlier this month, outside 7d
+		mkBucket(day(4, 28), 7.00),  // Previous month, in 30d
 	}
 
-	today, mtd, last30 := sumWindows(buckets, todayStart, monthStart)
-	if !floatNear(today, 5.0, 1e-9) {
-		t.Errorf("today = %v, want $5.00", today)
+	w := sumWindows(buckets, now)
+	if !floatNear(w.today, 5.0, 1e-9) {
+		t.Errorf("today = %v, want $5.00", w.today)
 	}
-	if !floatNear(mtd, 15.0, 1e-9) {
-		t.Errorf("mtd = %v, want $15.00", mtd)
+	if !floatNear(w.yesterday, 2.0, 1e-9) {
+		t.Errorf("yesterday = %v, want $2.00", w.yesterday)
 	}
-	if !floatNear(last30, 22.0, 1e-9) {
-		t.Errorf("last30 = %v, want $22.00", last30)
+	if !floatNear(w.last7d, 10.0, 1e-9) {
+		t.Errorf("last7d = %v, want $10.00", w.last7d)
+	}
+	if !floatNear(w.mtd, 20.0, 1e-9) {
+		t.Errorf("mtd = %v, want $20.00", w.mtd)
+	}
+	if !floatNear(w.last30d, 27.0, 1e-9) {
+		t.Errorf("last30d = %v, want $27.00", w.last30d)
+	}
+	if w.daysElapsed != 15 {
+		t.Errorf("daysElapsed = %d, want 15", w.daysElapsed)
+	}
+	if w.daysInMonth != 31 {
+		t.Errorf("daysInMonth = %d, want 31", w.daysInMonth)
 	}
 }
 
-func TestBuildMetrics_AllThreeWindows(t *testing.T) {
-	got := buildMetrics(5.0, 15.0, 22.0, "now")
-	if len(got) != 3 {
-		t.Fatalf("metric count = %d, want 3", len(got))
+func TestBuildMetrics_SevenWindows(t *testing.T) {
+	w := costWindows{
+		today: 5.0, yesterday: 2.0,
+		last7d: 14.0, mtd: 30.0, last30d: 60.0,
+		daysElapsed: 15, daysInMonth: 31,
 	}
-	if got[0].ID != "cost-today" || got[0].Value != "$5.00" {
-		t.Errorf("today metric = %+v", got[0])
+	got := buildMetrics(w, "now")
+	if len(got) != 7 {
+		t.Fatalf("metric count = %d, want 7", len(got))
+	}
+	wantValues := map[string]string{
+		"cost-today":           "$5.00",
+		"cost-yesterday":       "$2.00",
+		"cost-7d":              "$14.00",
+		"cost-mtd":             "$30.00",
+		"cost-30d":             "$60.00",
+		"cost-burn-7d":         "$2.00",
+		"cost-projected-month": "$62.00",
 	}
 	for _, m := range got {
+		want, ok := wantValues[m.ID]
+		if !ok {
+			t.Errorf("unexpected metric ID %q", m.ID)
+			continue
+		}
+		if m.Value != want {
+			t.Errorf("metric %s value = %q, want %q", m.ID, m.Value, want)
+		}
 		if m.NumericGoodWhen != "low" {
 			t.Errorf("metric %s should rank low-is-good, got %q", m.ID, m.NumericGoodWhen)
 		}

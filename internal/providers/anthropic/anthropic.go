@@ -97,9 +97,19 @@ func (Provider) BrandColor() string { return "#cc7c5e" }
 // as distinct from the per-user clawd tile in the same deck.
 func (Provider) BrandBg() string { return "#0a0807" }
 
-// MetricIDs enumerates the metrics this provider can emit.
+// MetricIDs enumerates the metrics this provider can emit. All seven
+// derive from a single 30-day cost_report fetch — adding more windows
+// is free once we have the daily buckets.
 func (Provider) MetricIDs() []string {
-	return []string{"cost-today", "cost-mtd", "cost-30d"}
+	return []string{
+		"cost-today",
+		"cost-yesterday",
+		"cost-7d",
+		"cost-mtd",
+		"cost-30d",
+		"cost-burn-7d",
+		"cost-projected-month",
+	}
 }
 
 // Fetch returns the latest org cost snapshot.
@@ -115,16 +125,14 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 
 	now := time.Now().UTC()
 	thirtyDaysAgo := now.Add(-30 * 24 * time.Hour)
-	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 
 	buckets, err := fetchAllBuckets(apiKey, thirtyDaysAgo)
 	if err != nil {
 		return providers.Snapshot{}, err
 	}
 
-	today, mtd, last30 := sumWindows(buckets, todayStart, monthStart)
-	metrics := buildMetrics(today, mtd, last30, providerutil.NowString())
+	w := sumWindows(buckets, now)
+	metrics := buildMetrics(w, providerutil.NowString())
 
 	return providers.Snapshot{
 		ProviderID:   "anthropic",
@@ -166,25 +174,54 @@ func fetchAllBuckets(apiKey string, startingAt time.Time) ([]costBucket, error) 
 	return all, errors.New("Anthropic admin cost_report exceeded pagination cap; check for an upstream loop")
 }
 
-// sumWindows walks the bucket list and accumulates total spend in
-// USD across the three windows we care about. Amounts are decimal
-// strings in cents per the API contract.
-func sumWindows(buckets []costBucket, todayStart, monthStart time.Time) (today, mtd, last30 float64) {
+// costWindows holds the per-window aggregates we care about plus the
+// ratio inputs needed to derive burn-rate / month-projection in
+// buildMetrics.
+type costWindows struct {
+	today        float64 // UTC today only
+	yesterday    float64 // UTC yesterday only (24h slice ending at today's start)
+	last7d       float64 // last 7 calendar days incl. today
+	mtd          float64 // month-to-date (UTC)
+	last30d      float64 // last 30 calendar days incl. today
+	daysElapsed  int     // 1..N, where N = today's day-of-month, used for projection
+	daysInMonth  int     // total days in the current UTC calendar month
+}
+
+// sumWindows walks the bucket list and accumulates spend across each
+// window. Amounts are decimal strings in cents per the API contract.
+// All time math is UTC-aligned to match the cost_report bucket boundaries.
+func sumWindows(buckets []costBucket, now time.Time) costWindows {
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	yesterdayStart := todayStart.Add(-24 * time.Hour)
+	sevenDaysAgo := todayStart.Add(-6 * 24 * time.Hour) // last 7 days inclusive of today
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	nextMonth := monthStart.AddDate(0, 1, 0)
+
+	w := costWindows{
+		daysElapsed: now.Day(),
+		daysInMonth: int(nextMonth.Sub(monthStart).Hours() / 24),
+	}
 	for _, b := range buckets {
 		bucketStart, err := time.Parse(time.RFC3339, b.StartingAt)
 		if err != nil {
 			continue
 		}
-		bucketUSD := sumResultsUSD(b.Results)
-		last30 += bucketUSD
+		usd := sumResultsUSD(b.Results)
+		w.last30d += usd
 		if !bucketStart.Before(monthStart) {
-			mtd += bucketUSD
+			w.mtd += usd
+		}
+		if !bucketStart.Before(sevenDaysAgo) {
+			w.last7d += usd
+		}
+		if !bucketStart.Before(yesterdayStart) && bucketStart.Before(todayStart) {
+			w.yesterday += usd
 		}
 		if !bucketStart.Before(todayStart) {
-			today += bucketUSD
+			w.today += usd
 		}
 	}
-	return today, mtd, last30
+	return w
 }
 
 // sumResultsUSD totals the per-result amounts inside a bucket and
@@ -203,12 +240,28 @@ func sumResultsUSD(results []costResult) float64 {
 	return cents / 100.0
 }
 
-// buildMetrics packages the three cost windows as MetricValues with
-// dollar formatting, matching the shape Claude's cost-today /
-// cost-30d tiles use.
-func buildMetrics(today, mtd, last30 float64, now string) []providers.MetricValue {
+// buildMetrics packages the cost windows as MetricValues. Burn rate
+// is the trailing-7-day average ($/day); projected-month grosses the
+// MTD up by (daysInMonth / daysElapsed) and is only meaningful after
+// at least one full day has elapsed in the month.
+func buildMetrics(w costWindows, now string) []providers.MetricValue {
 	round := func(v float64) float64 { return math.Round(v*100) / 100 }
-	t, m, l := round(today), round(mtd), round(last30)
+	t := round(w.today)
+	y := round(w.yesterday)
+	w7 := round(w.last7d)
+	m := round(w.mtd)
+	l30 := round(w.last30d)
+	burn := round(w.last7d / 7.0)
+
+	// Projection only makes sense once we have at least one full day's
+	// data; on day 1 of the month it would just echo today's spend
+	// scaled by the month length, which over-promises.
+	projected := m
+	if w.daysElapsed >= 1 && w.daysInMonth > 0 {
+		projected = round(w.mtd * float64(w.daysInMonth) / float64(w.daysElapsed))
+	}
+
+	caption := "Org cost (admin API)"
 	return []providers.MetricValue{
 		{
 			ID:              "cost-today",
@@ -218,7 +271,29 @@ func buildMetrics(today, mtd, last30 float64, now string) []providers.MetricValu
 			NumericValue:    &t,
 			NumericUnit:     "dollars",
 			NumericGoodWhen: "low",
-			Caption:         "Org cost (admin API)",
+			Caption:         caption,
+			UpdatedAt:       now,
+		},
+		{
+			ID:              "cost-yesterday",
+			Label:           "YESTERDAY",
+			Name:            "Org spend yesterday (UTC)",
+			Value:           fmt.Sprintf("$%.2f", y),
+			NumericValue:    &y,
+			NumericUnit:     "dollars",
+			NumericGoodWhen: "low",
+			Caption:         caption,
+			UpdatedAt:       now,
+		},
+		{
+			ID:              "cost-7d",
+			Label:           "7 DAYS",
+			Name:            "Org spend last 7 days",
+			Value:           fmt.Sprintf("$%.2f", w7),
+			NumericValue:    &w7,
+			NumericUnit:     "dollars",
+			NumericGoodWhen: "low",
+			Caption:         caption,
 			UpdatedAt:       now,
 		},
 		{
@@ -229,18 +304,40 @@ func buildMetrics(today, mtd, last30 float64, now string) []providers.MetricValu
 			NumericValue:    &m,
 			NumericUnit:     "dollars",
 			NumericGoodWhen: "low",
-			Caption:         "Org cost (admin API)",
+			Caption:         caption,
 			UpdatedAt:       now,
 		},
 		{
 			ID:              "cost-30d",
 			Label:           "30 DAYS",
 			Name:            "Org spend last 30 days",
-			Value:           fmt.Sprintf("$%.2f", l),
-			NumericValue:    &l,
+			Value:           fmt.Sprintf("$%.2f", l30),
+			NumericValue:    &l30,
 			NumericUnit:     "dollars",
 			NumericGoodWhen: "low",
-			Caption:         "Org cost (admin API)",
+			Caption:         caption,
+			UpdatedAt:       now,
+		},
+		{
+			ID:              "cost-burn-7d",
+			Label:           "BURN 7D",
+			Name:            "Burn rate (7-day avg, $/day)",
+			Value:           fmt.Sprintf("$%.2f", burn),
+			NumericValue:    &burn,
+			NumericUnit:     "dollars",
+			NumericGoodWhen: "low",
+			Caption:         "Avg daily org spend (last 7d)",
+			UpdatedAt:       now,
+		},
+		{
+			ID:              "cost-projected-month",
+			Label:           "PROJECTED",
+			Name:            "Projected month total (MTD × daysInMonth/daysElapsed)",
+			Value:           fmt.Sprintf("$%.2f", projected),
+			NumericValue:    &projected,
+			NumericUnit:     "dollars",
+			NumericGoodWhen: "low",
+			Caption:         fmt.Sprintf("MTD pace through day %d/%d", w.daysElapsed, w.daysInMonth),
 			UpdatedAt:       now,
 		},
 	}

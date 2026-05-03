@@ -1249,7 +1249,25 @@
         ["weekly-percent",  "Bonus credits remaining %",   "pct"],
       ],
       mistral: [
-        ["session-percent", "Monthly billing usage", "ref-dollar", "browser"],
+        // Costs (verbatim currency from the response — typically EUR).
+        ["__group__:Costs"],
+        ["monthly-cost",             "Monthly billing usage (total)",      "ref-dollar", "browser"],
+        ["monthly-cost-completion",  "Completion model spend",             "ref-dollar", "browser"],
+        ["monthly-cost-ocr",         "OCR pages spend",                    "ref-dollar", "browser"],
+        ["monthly-cost-audio",       "Audio (Voxtral / TTS / STT) spend",  "ref-dollar", "browser"],
+        ["monthly-cost-connectors",  "Agent / connector spend",            "ref-dollar", "browser"],
+        ["monthly-cost-libraries",   "RAG library spend",                  "ref-dollar", "browser"],
+        ["monthly-cost-fine-tuning", "Fine-tuning training + storage spend","ref-dollar","browser"],
+        ["monthly-cost-vibe",        "Mistral Vibe flat charge",           "ref-dollar", "browser"],
+        // Tokens (completion category — totals MTD).
+        ["__group__:Tokens"],
+        ["monthly-input-tokens",     "Input tokens MTD",                   "ref",        "browser"],
+        ["monthly-output-tokens",    "Output tokens MTD",                  "ref",        "browser"],
+        ["monthly-cached-tokens",    "Cached input tokens MTD",            "ref",        "browser"],
+        // Account-shape metrics.
+        ["__group__:Account"],
+        ["model-count",              "Distinct completion models used",    "ref",        "browser"],
+        ["period-end",               "Days until billing reset",           "ref",        "browser"],
       ],
       synthetic: [
         ["session-percent", "Five-hour quota remaining %", "pct"],
@@ -1442,10 +1460,29 @@
       alibaba: {
         "opus-percent": "monthly-percent",
       },
+      mistral: {
+        "session-percent": "monthly-cost",
+      },
     };
     function migrateMetricId(providerId, metricId) {
       const aliases = METRIC_ID_ALIASES[providerId];
       return (aliases && aliases[metricId]) || metricId;
+    }
+
+    // ---------- Metric row helpers ----------
+    // METRICS[provider] entries come in two shapes:
+    //   ["__group__:<label>"]                          — optgroup separator
+    //   [id, label, kind, auth?]                       — real metric row
+    // Group rows let providers like Mistral cluster ~13 metrics into
+    // labeled sections in the dropdown without forking the data shape.
+    // These helpers strip group rows so callers downstream (browser
+    // gate, default-metric resolver, feature-visibility) can keep
+    // doing simple `.find` on real entries.
+    function isGroupRow(row) {
+      return Array.isArray(row) && typeof row[0] === "string" && row[0].startsWith("__group__:");
+    }
+    function metricRows(providerId) {
+      return (METRICS[providerId] || []).filter((row) => !isGroupRow(row));
     }
 
     // ---------- Browser-gated metric helpers ----------
@@ -1454,8 +1491,7 @@
     // API key and need no extension. Keeps every provider on the same
     // labeling mechanism.
     function needsBrowser(providerId, metricId) {
-      const list = METRICS[providerId] || [];
-      const entry = list.find(([id]) => id === metricId);
+      const entry = metricRows(providerId).find(([id]) => id === metricId);
       return !!(entry && entry[3] === "browser");
     }
 
@@ -1470,10 +1506,24 @@
     let extensionStatusKnown = false;
 
     // ---------- Metric dropdown ----------
+    // Renders the metric <select>. Group rows (entries starting with
+    // "__group__:") are emitted as <optgroup> separators. Currently
+    // exercised by Mistral (Costs / Tokens / Account); other providers
+    // continue to render as a flat option list.
     function populateMetrics(providerId, selectedMetric) {
       const metric = document.getElementById("metric");
       const list = METRICS[providerId] || [];
-      const options = list.map(([value, label]) => {
+      const nodes = [];
+      let currentGroup = null;
+      for (const row of list) {
+        if (isGroupRow(row)) {
+          const label = row[0].slice("__group__:".length);
+          currentGroup = document.createElement("optgroup");
+          currentGroup.label = label;
+          nodes.push(currentGroup);
+          continue;
+        }
+        const [value, label] = row;
         const opt = document.createElement("option");
         opt.value = value;
         const gated = needsBrowser(providerId, value);
@@ -1486,9 +1536,13 @@
           opt.textContent = label;
         }
         if (value === selectedMetric) opt.selected = true;
-        return opt;
-      });
-      metric.replaceChildren(...options);
+        if (currentGroup) {
+          currentGroup.appendChild(opt);
+        } else {
+          nodes.push(opt);
+        }
+      }
+      metric.replaceChildren(...nodes);
       updateFeatureVisibility(providerId, metric.value);
       updateBrowserGateNotice(providerId, metric.value);
     }
@@ -1543,8 +1597,7 @@
 
     // Returns the appropriate default fill color for a given metric.
     function defaultFillColor(providerId, metricId) {
-      const list = METRICS[providerId] || [];
-      const entry = list.find(([id]) => id === metricId);
+      const entry = metricRows(providerId).find(([id]) => id === metricId);
       const flagKey = entry ? entry[2] : undefined;
       const flags = (flagKey && METRIC_FLAGS[flagKey]) || {};
       return flags.meter ? (BRAND_COLORS[providerId] || "#3b82f6") : REFERENCE_CARD_COLOR;
@@ -1552,8 +1605,7 @@
 
     // Show/hide PI settings groups based on the selected metric's type
     function updateFeatureVisibility(providerId, metricId) {
-      const list = METRICS[providerId] || [];
-      const entry = list.find(([id]) => id === metricId);
+      const entry = metricRows(providerId).find(([id]) => id === metricId);
       const flagKey = entry ? entry[2] : undefined;
       const flags = (flagKey && METRIC_FLAGS[flagKey]) || {};
       const show = (cls, visible) => {
@@ -1637,7 +1689,8 @@
     }
 
     function applyKeySettings(settings) {
-      const rawMetricId = settings.metricId || (METRICS[currentProviderId] ? METRICS[currentProviderId][0][0] : "session-percent");
+      const firstReal = metricRows(currentProviderId)[0];
+      const rawMetricId = settings.metricId || (firstReal ? firstReal[0] : "session-percent");
       // Pre-rename buttons may have Claude-flavored metric IDs that no
       // longer appear in the dropdown for their provider; map them to
       // the new names so the right option is selected. The plugin

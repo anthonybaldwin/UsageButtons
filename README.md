@@ -1,6 +1,6 @@
 # UsageButtons
 
-Stream Deck plugin that turns every AI-coding-assistant usage stat into a
+[Stream Deck](https://www.elgato.com/us/en/s/explore-stream-deck) plugin that turns every AI-coding-assistant usage stat into a
 live button — session % remaining, weekly %, credits, reset countdowns,
 per-model quotas, and more. Each button renders a dynamic icon whose
 background fills (or de-fills) in proportion to the current value, so

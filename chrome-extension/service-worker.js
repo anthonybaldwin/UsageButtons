@@ -232,6 +232,46 @@ async function readDeepSeekPlatformToken() {
   return null;
 }
 
+// readKimiAccessToken reads localStorage["access_token"] from any open
+// kimi.com tab. Kimi migrated off cookie-based auth — the kimi-auth
+// JWT cookie is no longer set, and apiv2 endpoints reject cookie-only
+// requests with `REASON_INVALID_AUTH_TOKEN`. The session bearer token
+// now lives in localStorage and the page's own client passes it via
+// `Authorization: Bearer <tok>` on every API call.
+//
+// Returns null when no kimi.com tab is open or the user is signed out;
+// the Go side then falls back to OAuth credentials placed by the
+// `kimi login` CLI.
+async function readKimiAccessToken() {
+  let tabs;
+  try {
+    tabs = await chrome.tabs.query({ url: "*://*.kimi.com/*" });
+  } catch (_e) {
+    return null;
+  }
+  if (!tabs || tabs.length === 0) return null;
+  for (const t of tabs) {
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: t.id },
+        // MAIN world reaches the page's own localStorage rather than
+        // the isolated-world copy a content script would see.
+        world: "MAIN",
+        func: () => localStorage.getItem("access_token") || "",
+      });
+      const raw = results && results[0] && results[0].result;
+      if (raw && typeof raw === "string" && raw.length > 0) {
+        return raw;
+      }
+    } catch (_e) {
+      // executeScript can fail if the tab is loading or in a special state;
+      // try the next one.
+      continue;
+    }
+  }
+  return null;
+}
+
 // augmentHeadersForOrigin attaches site-specific auth/version headers
 // for hosts whose internal APIs require explicit non-cookie auth.
 // Returns the final headers object to pass to fetch(). For everything
@@ -252,6 +292,16 @@ async function augmentHeadersForOrigin(url, callerHeaders) {
       headers["x-app-version"] = DEEPSEEK_PLATFORM_APP_VERSION;
     }
   }
+
+  if (host === "kimi.com" || host === "www.kimi.com" || host.endsWith(".kimi.com")) {
+    if (!hasHeader(headers, "authorization")) {
+      const tok = await readKimiAccessToken();
+      if (tok) {
+        headers["Authorization"] = "Bearer " + tok;
+      }
+    }
+  }
+
   return headers;
 }
 

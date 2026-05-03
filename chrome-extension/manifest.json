@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Usage Buttons Helper",
   "short_name": "UsageButtons",
-  "version": "0.8.1",
+  "version": "0.8.0",
   "description": "Companion extension for the Usage Buttons Stream Deck plugin. Proxies a narrow allowlist of AI usage APIs (abacus.ai, alibabacloud.com, aliyun.com, claude.ai, cursor.com, factory.ai, ollama.com, chatgpt.com, augmentcode.com, ampcode.com, perplexity.ai, grok.com, nousresearch.com, opencode.ai, kimi.com, minimax.io, minimaxi.com, mistral.ai, deepseek.com) using your logged-in browser session — credentials stay in Chrome.",
   "author": "Anthony Baldwin",
   "minimum_chrome_version": "127",

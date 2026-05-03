@@ -1,9 +1,16 @@
 // Package kimi implements the Kimi usage provider.
 //
-// Auth: Usage Buttons Helper extension with the user's kimi.com browser
-// session. There is no manual cookie/JWT paste — the extension is the
-// only path so credentials never leave Chrome.
-// Endpoint: POST https://www.kimi.com/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages.
+// Auth (extension-first): primary path is the Usage Buttons Helper with
+// the user's kimi.com browser session, hitting
+// POST https://www.kimi.com/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages
+// for FEATURE_CODING quota and rate limits.
+//
+// Fallback: when the Helper isn't connected (or the cookie session
+// returns 401/403), credentials placed by the `kimi login` CLI at
+// ~/.kimi/credentials/kimi-code.json are used to call
+// GET https://api.kimi.com/coding/v1/usages directly. Tokens are
+// refreshed against https://auth.kimi.com/api/oauth/token within
+// 5 minutes of expiry. See oauth.go.
 package kimi
 
 import (
@@ -84,20 +91,34 @@ func (Provider) MetricIDs() []string {
 	return []string{"session-percent", "weekly-percent"}
 }
 
-// Fetch returns the latest Kimi usage snapshot.
+// Fetch returns the latest Kimi usage snapshot. The Helper
+// extension is the preferred path; if it's unavailable, or returns
+// 401/403 because the kimi.com session has lapsed, the OAuth credential
+// blob written by `kimi login` is used as a fallback.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
-	if !cookies.HostAvailable(ctx) {
-		return errorSnapshot(cookieaux.MissingMessage("kimi.com")), nil
-	}
-	usage, err := fetchWithBrowser(ctx)
-	if err != nil {
+
+	if cookies.HostAvailable(ctx) {
+		usage, err := fetchWithBrowser(ctx)
+		if err == nil {
+			return snapshotFromUsage(usage), nil
+		}
 		var httpErr *httputil.Error
 		if errors.As(err, &httpErr) && (httpErr.Status == 401 || httpErr.Status == 403) {
+			// Cookie session stale — try OAuth before surfacing the
+			// extension-prompt message.
+			if usage, oauthErr := fetchWithOAuth(ctx); oauthErr == nil {
+				return snapshotFromUsage(usage), nil
+			}
 			return errorSnapshot(cookieaux.StaleMessage("kimi.com")), nil
 		}
 		return errorSnapshot(err.Error()), nil
+	}
+
+	usage, err := fetchWithOAuth(ctx)
+	if err != nil {
+		return errorSnapshot("Install the Usage Buttons Helper to pull kimi.com usage, or run `kimi login` to use the OAuth fallback."), nil
 	}
 	return snapshotFromUsage(usage), nil
 }

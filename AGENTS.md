@@ -162,13 +162,18 @@ exhaustive provider coverage. Restore a dropped topic via
   Stream Deck UI. The SVG owns the value, glyph, and ratio fill; the
   title bar owns the label text. Send labels in UPPERCASE
   (`SESSION`, `WEEKLY`, …) to match the title font's expected look.
-- Provider button glyphs live in `internal/icons/`. Most come from
-  lobehub/lobe-icons (MIT) — `internal/icons/lobe_generated.go` is
-  produced by `go run scripts/sync-lobe-icons.go`. Edit the mapping
-  table in that script and re-run to add a provider, change a variant
-  (`mono` vs wordmark `text`), or refresh after upstream changes. The
-  remaining hand-drawn marks (warp, factory, abacus, augment,
-  jetbrains, kiro, opencodego, synthetic) live in their own
+- Provider button glyphs live in `internal/icons/`. **Source of truth
+  for new provider glyphs is lobehub/lobe-icons (MIT).** Add the entry
+  to `scripts/sync-lobe-icons.go` and re-run `go run
+  scripts/sync-lobe-icons.go` to regenerate `internal/icons/lobe_generated.go`.
+  Do not hand-draw a new mark when a Lobe icon exists for that brand,
+  and do not borrow another provider's mark when one doesn't (instead
+  use a neutral letterform — see `internal/icons/kimrel.go`). Action-
+  picker SVGs in `io.github.anthonybaldwin.UsageButtons.sdPlugin/assets/`
+  must use the same path data as the in-Go glyph so the SD store icon
+  matches what the button renders. The remaining hand-drawn marks
+  (warp, factory, abacus, augment, jetbrains, kiro, opencodego,
+  synthetic) predate the lobe-icons sync and stay in their own
   `<provider>.go` files alongside the trimmed `icons.go` literal.
 
 ## Browser fetch bridge (Usage Buttons Helper extension)

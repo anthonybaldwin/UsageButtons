@@ -124,7 +124,7 @@
     },
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.claude",
-      "Name": "Claude Code",
+      "Name": "Claude",
       "Tooltip": "Claude usage stats — session %, weekly %, Sonnet %, Opus %, Design, Routines, extras, costs.",
       "Icon": "assets/action-claude",
       "PropertyInspectorPath": "ui/stat.html",
@@ -301,7 +301,7 @@
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.kimi",
       "Name": "Kimi",
-      "Tooltip": "Kimi usage stats — weekly coding quota and five-hour rate limit.",
+      "Tooltip": "Kimi usage — weekly coding quota and 5-hour rate limit. Helper extension preferred; OAuth from `kimi login` is the fallback.",
       "Icon": "assets/action-kimi",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
@@ -316,8 +316,8 @@
     },
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.kimi-k2",
-      "Name": "Kimi K2",
-      "Tooltip": "Kimi K2 usage stats — credits remaining.",
+      "Name": "Kimrel",
+      "Tooltip": "Kimrel credits — third-party reseller of Kimi K2 (kimrel.com), not affiliated with Moonshot AI. For the official Moonshot dev API balance, use the Moonshot action instead.",
       "Icon": "assets/action-kimi-k2",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,

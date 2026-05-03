@@ -428,7 +428,7 @@
         <button type="button" class="reveal-btn" data-reveal-target="anthropicKey">Show</button>
       </div>
       <p class="hint">Admin keys only. Personal <code>sk-ant-</code> won't work. Fallback: <code>ANTHROPIC_ADMIN_API_KEY</code>.</p>
-    </div>    </div>
+    </div>
 
     <!-- OpenAI auth -->
     <div id="authConfig-openai" class="auth-config" style="display:none">
@@ -438,6 +438,7 @@
         <button type="button" class="reveal-btn" data-reveal-target="openaiKey">Show</button>
       </div>
       <p class="hint">Admin keys only. Personal <code>sk-</code> won't work. Fallback: <code>OPENAI_ADMIN_API_KEY</code>.</p>
+    </div>
 
     <!-- DeepSeek auth -->
     <div id="authConfig-deepseek" class="auth-config" style="display:none">
@@ -549,7 +550,7 @@
 
     <!-- Kimi auth -->
     <div id="authConfig-kimi" class="auth-config" style="display:none">
-      <p class="hint">Via extension from <code>kimi.com</code>.</p>
+      <p class="hint">Extension from <code>kimi.com</code>; falls back to <code>kimi login</code> OAuth.</p>
     </div>
 
     <!-- MiniMax auth -->
@@ -568,14 +569,14 @@
       <p class="hint">Fallbacks: extension from <code>minimax.io</code>, <code>MINIMAX_API_KEY</code>, <code>MINIMAX_REGION</code>.</p>
     </div>
 
-    <!-- Kimi K2 auth -->
+    <!-- Kimrel auth -->
     <div id="authConfig-kimi-k2" class="auth-config" style="display:none">
-      <label for="kimik2Key">Kimi K2 API key</label>
+      <label for="kimik2Key">Kimrel API key</label>
       <div class="key-row">
         <input id="kimik2Key" type="password" autocomplete="off" placeholder="sk-…" data-provider-key="kimiK2Key">
         <button type="button" class="reveal-btn" data-reveal-target="kimik2Key">Show</button>
       </div>
-      <p class="hint">Fallback: <code>KIMI_K2_API_KEY</code>.</p>
+      <p class="hint">Third-party reseller of Kimi K2 — not Moonshot. Fallback env: <code>KIMREL_API_KEY</code>.</p>
     </div>
 
     <!-- JetBrains AI auth -->
@@ -1289,7 +1290,7 @@
       zai:        "#e85a6a",
       kimi:       "#fe603c",
       minimax:    "#fe603c",
-      "kimi-k2":  "#4c00ff",
+      "kimi-k2":  "#64748b",
       jetbrains:  "#ff3399",
       kilo:       "#f27027",
       kiro:       "#ff9900",
@@ -1330,7 +1331,7 @@
       zai:        "#211012",
       kimi:       "#260d08",
       minimax:    "#260d08",
-      "kimi-k2":  "#0c0324",
+      "kimi-k2":  "#1e293b",
       jetbrains:  "#25051a",
       kilo:       "#21130a",
       kiro:       "#241405",
@@ -1343,7 +1344,7 @@
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
-      claude:     "Claude Code",
+      claude:     "Claude",
       anthropic: "Anthropic",
       openai:    "OpenAI",
       codex:      "Codex",
@@ -1372,7 +1373,7 @@
       zai:        "z.ai",
       kimi:       "Kimi",
       minimax:    "MiniMax",
-      "kimi-k2":  "Kimi K2",
+      "kimi-k2":  "Kimrel",
       jetbrains:  "JetBrains AI",
       kilo:       "Kilo",
       kiro:       "Kiro",
@@ -2073,6 +2074,11 @@
       setInterval(requestCookieStatus, 2500);
       requestProviderStatus();
       setInterval(requestProviderStatus, 5000);
+      // One-shot: ask the plugin which WSL distros are running so the
+      // metric dropdown can offer per-distro local-cost entries
+      // (Windows-only feature; non-Windows builds reply with [] and
+      // the PI looks identical to today).
+      requestWSLDistros();
     }
 
     function pushSettings() {
@@ -2191,6 +2197,56 @@
         context: uuid,
         payload,
       }));
+    }
+
+    // ---------- WSL distros ----------
+    // Augments METRICS[claude]/METRICS[codex] with one extra
+    // "Cost today (WSL: …)" / "Cost last 30 days (WSL: …)" entry per
+    // running distro. Empty on non-Windows or when no distros are up,
+    // so the dropdown stays identical to before this feature shipped.
+    let wslDistrosKnown = false;
+    let wslDistrosCache = [];
+
+    function requestWSLDistros() {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      websocket.send(JSON.stringify({
+        event: "sendToPlugin",
+        context: uuid,
+        payload: { action: "getWSLDistros" },
+      }));
+    }
+
+    function applyWSLDistros(distros) {
+      const list = Array.isArray(distros) ? distros : [];
+      // Idempotent: every PI session this is called exactly once on
+      // reply, so we don't need to strip prior wsl- entries. But guard
+      // against a future re-fetch by filtering them out first.
+      for (const provider of ["claude", "codex"]) {
+        const base = (METRICS[provider] || []).filter(([id]) => !/-wsl-/.test(id));
+        const augmented = [];
+        for (const row of base) {
+          augmented.push(row);
+          const [id, label, kind] = row;
+          if (id === "cost-today" || id === "cost-30d") {
+            for (const d of list) {
+              const friendly = d.label || d.key;
+              const wslLabel = (id === "cost-today" ? "Cost today" : "Cost last 30 days")
+                + " (WSL: " + friendly + ")";
+              augmented.push([id + "-wsl-" + d.key, wslLabel, kind]);
+            }
+          }
+        }
+        METRICS[provider] = augmented;
+      }
+      wslDistrosCache = list;
+      wslDistrosKnown = true;
+      // Repopulate the dropdown if the PI is currently looking at a
+      // provider we just augmented; the new options need to appear
+      // without requiring the user to reopen the inspector.
+      if (currentProviderId === "claude" || currentProviderId === "codex") {
+        const selected = document.getElementById("metric").value;
+        populateMetrics(currentProviderId, selected);
+      }
     }
 
     // ---------- Provider error banner ----------
@@ -2436,6 +2492,9 @@
           break;
         case "providerStatus":
           setProviderError(payload);
+          break;
+        case "wslDistros":
+          applyWSLDistros(payload.distros);
           break;
       }
     }

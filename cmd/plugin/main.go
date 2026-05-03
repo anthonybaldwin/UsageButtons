@@ -26,6 +26,7 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 	"github.com/anthonybaldwin/UsageButtons/internal/streamdeck"
 	"github.com/anthonybaldwin/UsageButtons/internal/update"
+	"github.com/anthonybaldwin/UsageButtons/internal/wsl"
 
 	// Register all providers via init().
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/abacus"
@@ -45,7 +46,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/jetbrains"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kilo"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimi"
-	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimik2"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kimrel"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kiro"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/minimax"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/mistral"
@@ -741,7 +742,30 @@ func handleSendToPlugin(conn *streamdeck.Connection, ev streamdeck.Event) {
 		go replyUnregisterCookieHost(conn, ev.Context, ev.Action)
 	case "getProviderStatus":
 		go replyProviderStatus(conn, ev.Context, ev.Action)
+	case "getWSLDistros":
+		go replyWSLDistros(conn, ev.Context, ev.Action)
 	}
+}
+
+// replyWSLDistros tells the PI which WSL distributions are currently
+// running. The PI uses the response to inject extra "WSL: <distro>"
+// entries into the metric dropdown for cost-tile-bearing providers.
+//
+// On non-Windows builds wsl.Sources() returns nil and the PI sees an
+// empty list, so nothing changes in the UI.
+func replyWSLDistros(conn *streamdeck.Connection, ctxStr, action string) {
+	sources := wsl.Sources()
+	distros := make([]map[string]string, 0, len(sources))
+	for _, s := range sources {
+		distros = append(distros, map[string]string{
+			"key":   s.Key,
+			"label": s.Label,
+		})
+	}
+	conn.SendToPropertyInspector(ctxStr, action, map[string]any{
+		"action":  "wslDistros",
+		"distros": distros,
+	})
 }
 
 // cookieHostPayload is the PI → plugin shape for registerCookieHost.

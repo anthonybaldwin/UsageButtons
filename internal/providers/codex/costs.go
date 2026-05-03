@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/wsl"
 )
 
 // Codex CLI writes one JSONL file per session under
@@ -32,11 +33,12 @@ import (
 var (
 	// codexCostMu guards the cost cache against concurrent scanners.
 	codexCostMu sync.Mutex
-	// codexCostCache is the most recent scan result.
-	codexCostCache *codexCostResult
+	// codexCostCache is the most recent scan result, including any
+	// running WSL distros on Windows.
+	codexCostCache *allCodexCostResults
 	// codexCostCacheT is the time of the most recent scan.
 	codexCostCacheT time.Time
-	// codexCostCacheErr is the error from the most recent scan, if any.
+	// codexCostCacheErr is the error from the most recent native scan.
 	codexCostCacheErr error
 )
 
@@ -188,8 +190,12 @@ func codexCostLog(format string, args ...any) {
 	}
 }
 
-// sessionsRoot returns the filesystem root under which Codex writes
-// session JSONL files, honoring CODEX_HOME when set.
+// sessionsRoot returns the Windows-native filesystem root under which
+// Codex writes session JSONL files, honoring CODEX_HOME when set.
+//
+// WSL distros are scanned via scanCodexCosts using their own home paths;
+// CODEX_HOME is intentionally NOT propagated into WSL scopes since each
+// distro is treated as a separate machine with its own environment.
 func sessionsRoot() string {
 	if ch := os.Getenv("CODEX_HOME"); ch != "" {
 		return filepath.Join(ch, "sessions")
@@ -201,32 +207,73 @@ func sessionsRoot() string {
 	return filepath.Join(home, ".codex", "sessions")
 }
 
-// scanCodexCosts walks the session tree and returns aggregated token cost
-// estimates for today and the last 30 days, memoized for codexCostCacheTTL.
-func scanCodexCosts() (*codexCostResult, error) {
+// allCodexCostResults holds the codexCostResult for the Windows-native
+// session tree plus, on Windows builds with WSL distros running, one
+// codexCostResult per running distro keyed by wsl.Source.Key. Each WSL
+// scope is treated as a separate machine — never aggregated with native.
+type allCodexCostResults struct {
+	Native codexCostResult
+	// WSL is keyed by wsl.Source.Key. Empty/nil when WSL is unavailable
+	// or no distros are running.
+	WSL map[string]codexCostResult
+	// WSLLabels maps Source.Key → friendly distro name for UI use.
+	WSLLabels map[string]string
+}
+
+// scanCodexCosts walks the Windows-native session tree plus the
+// equivalent path inside every running WSL distro, returning per-scope
+// aggregates memoized for codexCostCacheTTL. The returned error reflects
+// only the native scan; failed WSL scopes are silently skipped so a
+// flaky distro can't poison the Windows tile.
+func scanCodexCosts() (*allCodexCostResults, error) {
 	codexCostMu.Lock()
 	defer codexCostMu.Unlock()
 	if codexCostCache != nil && time.Since(codexCostCacheT) < codexCostCacheTTL {
 		return codexCostCache, codexCostCacheErr
 	}
 
-	root := sessionsRoot()
-	if root == "" {
-		codexCostCacheErr = nil
-		codexCostCache = &codexCostResult{}
-		codexCostCacheT = time.Now()
-		return codexCostCache, nil
-	}
-	if _, err := os.Stat(root); os.IsNotExist(err) {
-		codexCostCacheErr = nil
-		codexCostCache = &codexCostResult{}
-		codexCostCacheT = time.Now()
-		return codexCostCache, nil
-	}
-
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	thirtyDaysAgo := now.AddDate(0, 0, -30)
+
+	out := &allCodexCostResults{}
+	native, nativeErr := scanCodexSessionsTree(sessionsRoot(), todayStart, thirtyDaysAgo)
+	out.Native = native
+
+	if sources := wsl.Sources(); len(sources) > 0 {
+		out.WSL = make(map[string]codexCostResult, len(sources))
+		out.WSLLabels = make(map[string]string, len(sources))
+		for _, src := range sources {
+			r, err := scanCodexSessionsTree(filepath.Join(src.Home, ".codex", "sessions"), todayStart, thirtyDaysAgo)
+			if err != nil {
+				codexCostLog("WSL %s scan failed: %v", src.Label, err)
+				continue
+			}
+			out.WSL[src.Key] = r
+			out.WSLLabels[src.Key] = src.Label
+		}
+	}
+
+	codexCostCacheErr = nativeErr
+	codexCostCache = out
+	codexCostCacheT = time.Now()
+	return codexCostCache, codexCostCacheErr
+}
+
+// scanCodexSessionsTree walks one Codex sessions root (native or
+// \\wsl.localhost\...) and returns the aggregated token-cost estimate.
+// A missing root returns a zero result without error so callers can
+// scan optional scopes safely.
+func scanCodexSessionsTree(root string, todayStart, thirtyDaysAgo time.Time) (codexCostResult, error) {
+	var result codexCostResult
+	if root == "" {
+		return result, nil
+	}
+	if _, err := os.Stat(root); os.IsNotExist(err) {
+		return result, nil
+	} else if err != nil {
+		return result, err
+	}
 
 	state := &codexScanState{
 		byID:        make(map[string]string),
@@ -240,7 +287,7 @@ func scanCodexCosts() (*codexCostResult, error) {
 	}
 	var toScan []fileEntry
 
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+	walkErr := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			codexCostLog("skipping %s: %v", path, err)
 			return nil
@@ -272,17 +319,13 @@ func scanCodexCosts() (*codexCostResult, error) {
 		return nil
 	})
 
-	var result codexCostResult
 	for _, fe := range toScan {
 		if scanErr := scanCodexSessionFile(state, fe.path, fe.meta, todayStart, thirtyDaysAgo, &result); scanErr != nil {
 			codexCostLog("skipping %s: %v", fe.path, scanErr)
 		}
 	}
 
-	codexCostCacheErr = err
-	codexCostCache = &result
-	codexCostCacheT = time.Now()
-	return codexCostCache, codexCostCacheErr
+	return result, walkErr
 }
 
 // readCodexSessionMeta reads the first handful of lines of a JSONL file
@@ -748,41 +791,63 @@ func ptrFloat(v float64) *float64 {
 }
 
 // codexCostMetrics returns cost-today + cost-30d metrics built from the
-// local session-log scan. Returns nil if no session data was found for
-// the last 30 days so the renderer draws a dash instead of a fake $0.00.
+// local session-log scan. The Windows-native scope produces the stable
+// "cost-today" / "cost-30d" IDs; each running WSL distro produces a
+// parallel pair suffixed with the distro key, treated as a separate
+// machine. Scopes with no priced rows are silently dropped so empty
+// distros don't render a fake $0.00.
 func codexCostMetrics() []providers.MetricValue {
 	result, err := scanCodexCosts()
 	if err != nil || result == nil {
 		return nil
 	}
-	if !result.Seen {
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	var out []providers.MetricValue
+
+	emit := func(scopeSuffix, captionSuffix string, r codexCostResult) {
+		if !r.Seen {
+			return
+		}
+		today := math.Round(r.Today*100) / 100
+		last30 := math.Round(r.Last30d*100) / 100
+		out = append(out,
+			providers.MetricValue{
+				ID:              "cost-today" + scopeSuffix,
+				Label:           "TODAY",
+				Name:            "Estimated Codex spend today (local logs)" + captionSuffix,
+				Value:           fmt.Sprintf("$%.2f", today),
+				NumericValue:    &today,
+				NumericUnit:     "dollars",
+				NumericGoodWhen: "low",
+				Caption:         "Cost (local)" + captionSuffix,
+				UpdatedAt:       now,
+			},
+			providers.MetricValue{
+				ID:              "cost-30d" + scopeSuffix,
+				Label:           "30 DAYS",
+				Name:            "Estimated Codex spend last 30 days (local logs)" + captionSuffix,
+				Value:           fmt.Sprintf("$%.2f", last30),
+				NumericValue:    &last30,
+				NumericUnit:     "dollars",
+				NumericGoodWhen: "low",
+				Caption:         "Cost (local)" + captionSuffix,
+				UpdatedAt:       now,
+			},
+		)
+	}
+
+	emit("", "", result.Native)
+	for key, r := range result.WSL {
+		label := result.WSLLabels[key]
+		if label == "" {
+			label = key
+		}
+		emit("-wsl-"+key, " (WSL: "+label+")", r)
+	}
+
+	if len(out) == 0 {
 		return nil
 	}
-	now := time.Now().UTC().Format(time.RFC3339)
-	today := math.Round(result.Today*100) / 100
-	last30 := math.Round(result.Last30d*100) / 100
-	return []providers.MetricValue{
-		{
-			ID:              "cost-today",
-			Label:           "TODAY",
-			Name:            "Estimated Codex spend today (local logs)",
-			Value:           fmt.Sprintf("$%.2f", today),
-			NumericValue:    &today,
-			NumericUnit:     "dollars",
-			NumericGoodWhen: "low",
-			Caption:         "Cost (local)",
-			UpdatedAt:       now,
-		},
-		{
-			ID:              "cost-30d",
-			Label:           "30 DAYS",
-			Name:            "Estimated Codex spend last 30 days (local logs)",
-			Value:           fmt.Sprintf("$%.2f", last30),
-			NumericValue:    &last30,
-			NumericUnit:     "dollars",
-			NumericGoodWhen: "low",
-			Caption:         "Cost (local)",
-			UpdatedAt:       now,
-		},
-	}
+	return out
 }

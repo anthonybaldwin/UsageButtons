@@ -1,9 +1,24 @@
-// Package kimik2 implements the Kimi K2 credits provider.
+// Package kimrel implements the Kimrel credits provider.
 //
-// Auth: Property Inspector settings field or KIMI_K2_API_KEY /
-// KIMI_API_KEY / KIMI_KEY environment variable.
-// Endpoint: GET https://kimi-k2.ai/api/user/credits
-package kimik2
+// Kimrel (kimrel.com, formerly kimi-k2.ai) is an INDEPENDENT THIRD-PARTY
+// reseller of Kimi K2 model access. It is NOT affiliated with, endorsed
+// by, or sponsored by Moonshot AI — Kimrel's own footer states this.
+// Users only see data here if they hold a kimrel.com account; Moonshot
+// API keys won't authenticate against this endpoint.
+//
+// For the official Moonshot dev platform (api.moonshot.ai/cn) use the
+// `moonshot` provider instead. For the kimi.com membership (Moderato,
+// Allegretto, etc.) use the `kimi` provider.
+//
+// Auth: Property Inspector settings field or KIMREL_API_KEY (preferred)
+// / KIMI_K2_API_KEY / KIMI_API_KEY / KIMI_KEY environment variable.
+// Endpoint: GET https://kimi-k2.ai/api/user/credits (308-redirects to
+// the kimrel.com production host).
+//
+// Provider ID stays "kimi-k2" so existing user button settings keep
+// working across the rename — only the user-visible label and package
+// name moved to "Kimrel."
+package kimrel
 
 import (
 	"encoding/json"
@@ -18,14 +33,19 @@ import (
 	"github.com/anthonybaldwin/UsageButtons/internal/settings"
 )
 
-// creditsURL is the Kimi K2 credits lookup endpoint.
+// creditsURL is the Kimrel credits lookup endpoint. The kimi-k2.ai
+// host 308-redirects to kimrel.com today; we point at the original
+// host so server-side renames remain transparent.
 const creditsURL = "https://kimi-k2.ai/api/user/credits"
 
-// getAPIKey resolves a Kimi K2 API key from user settings or env vars.
+// getAPIKey resolves a Kimrel API key from user settings or env vars.
+// KIMREL_API_KEY is the preferred name; the older KIMI_K2_API_KEY /
+// KIMI_API_KEY / KIMI_KEY names still resolve so existing setups keep
+// working after the rename.
 func getAPIKey() string {
 	return settings.ResolveAPIKey(
 		settings.ProviderKeysGet().KimiK2Key,
-		"KIMI_K2_API_KEY", "KIMI_API_KEY", "KIMI_KEY",
+		"KIMREL_API_KEY", "KIMI_K2_API_KEY", "KIMI_API_KEY", "KIMI_KEY",
 	)
 }
 
@@ -241,37 +261,41 @@ func dateFromNumeric(v float64) (time.Time, bool) {
 	return time.Unix(int64(v), 0), true
 }
 
-// Provider fetches Kimi K2 usage data.
+// Provider fetches Kimrel usage data.
 type Provider struct{}
 
-// ID returns the provider identifier used by the registry.
+// ID returns the provider identifier used by the registry. Kept as
+// "kimi-k2" so existing user button settings keep working after the
+// rename to Kimrel.
 func (Provider) ID() string { return "kimi-k2" }
 
 // Name returns the human-readable provider name.
-func (Provider) Name() string { return "Kimi K2" }
+func (Provider) Name() string { return "Kimrel" }
 
-// BrandColor returns the accent color used on button faces.
-func (Provider) BrandColor() string { return "#4c00ff" }
+// BrandColor returns the accent color used on button faces. Slate gray
+// is intentional — Kimrel is third-party and shouldn't borrow Kimi's
+// orange or Moonshot's blue, which would imply official affiliation.
+func (Provider) BrandColor() string { return "#64748b" }
 
 // BrandBg returns the background color used on button faces.
-func (Provider) BrandBg() string { return "#0c0324" }
+func (Provider) BrandBg() string { return "#1e293b" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {
 	return []string{"credits-balance"}
 }
 
-// Fetch returns the latest Kimi K2 credits snapshot.
+// Fetch returns the latest Kimrel credits snapshot.
 func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	apiKey := getAPIKey()
 	if apiKey == "" {
 		return providers.Snapshot{
 			ProviderID:   "kimi-k2",
-			ProviderName: "Kimi K2",
+			ProviderName: "Kimrel",
 			Source:       "none",
 			Metrics:      []providers.MetricValue{},
 			Status:       "unknown",
-			Error:        "Enter a Kimi K2 API key in the Kimi K2 tab, or set KIMI_K2_API_KEY.",
+			Error:        "Enter a Kimrel API key in the Kimrel tab, or set KIMREL_API_KEY. Kimrel (kimrel.com) is an independent third-party reseller of Kimi K2 — not affiliated with Moonshot AI. For the official Moonshot platform, use the Moonshot provider instead.",
 		}, nil
 	}
 
@@ -285,11 +309,11 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 		if errors.As(err, &httpErr) && (httpErr.Status == 401 || httpErr.Status == 403) {
 			return providers.Snapshot{
 				ProviderID:   "kimi-k2",
-				ProviderName: "Kimi K2",
+				ProviderName: "Kimrel",
 				Source:       "api-key",
 				Metrics:      []providers.MetricValue{},
 				Status:       "unknown",
-				Error:        "Kimi K2 API key unauthorized. Check KIMI_K2_API_KEY.",
+				Error:        "Kimrel API key unauthorized. Check KIMREL_API_KEY.",
 			}, nil
 		}
 		return providers.Snapshot{}, err
@@ -323,7 +347,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			metrics = append(metrics, providers.MetricValue{
 				ID:           "credits-balance",
 				Label:        "CREDITS",
-				Name:         "Kimi K2 credits remaining",
+				Name:         "Kimrel credits remaining",
 				Value:        math.Round(remainPct),
 				NumericValue: &remainPct,
 				NumericUnit:  "percent",
@@ -341,7 +365,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 			metrics = append(metrics, providers.MetricValue{
 				ID:              "credits-balance",
 				Label:           "CREDITS",
-				Name:            "Kimi K2 credits",
+				Name:            "Kimrel credits",
 				Value:           fmt.Sprintf("%d", int(math.Round(r))),
 				NumericValue:    &r,
 				NumericUnit:     "count",
@@ -357,7 +381,7 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 
 	return providers.Snapshot{
 		ProviderID:   "kimi-k2",
-		ProviderName: "Kimi K2",
+		ProviderName: "Kimrel",
 		Source:       "api-key",
 		Metrics:      metrics,
 		Status:       "operational",
@@ -374,7 +398,7 @@ func firstInContexts(body map[string]any, paths [][]string) (float64, bool) {
 	return 0, false
 }
 
-// init registers the Kimi K2 provider with the package registry.
+// init registers the Kimrel provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

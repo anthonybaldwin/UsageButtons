@@ -277,7 +277,7 @@ func TestScanCodexCostsSkipsMalformedSessionFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected malformed session to be skipped, got %v", err)
 	}
-	if result == nil || !result.Seen || result.Last30d <= 0 {
+	if result == nil || !result.Native.Seen || result.Native.Last30d <= 0 {
 		t.Fatalf("expected valid session to remain priced, got %+v", result)
 	}
 }

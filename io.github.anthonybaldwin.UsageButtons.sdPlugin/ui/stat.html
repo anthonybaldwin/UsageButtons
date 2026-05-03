@@ -2073,6 +2073,11 @@
       setInterval(requestCookieStatus, 2500);
       requestProviderStatus();
       setInterval(requestProviderStatus, 5000);
+      // One-shot: ask the plugin which WSL distros are running so the
+      // metric dropdown can offer per-distro local-cost entries
+      // (Windows-only feature; non-Windows builds reply with [] and
+      // the PI looks identical to today).
+      requestWSLDistros();
     }
 
     function pushSettings() {
@@ -2191,6 +2196,56 @@
         context: uuid,
         payload,
       }));
+    }
+
+    // ---------- WSL distros ----------
+    // Augments METRICS[claude]/METRICS[codex] with one extra
+    // "Cost today (WSL: …)" / "Cost last 30 days (WSL: …)" entry per
+    // running distro. Empty on non-Windows or when no distros are up,
+    // so the dropdown stays identical to before this feature shipped.
+    let wslDistrosKnown = false;
+    let wslDistrosCache = [];
+
+    function requestWSLDistros() {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+      websocket.send(JSON.stringify({
+        event: "sendToPlugin",
+        context: uuid,
+        payload: { action: "getWSLDistros" },
+      }));
+    }
+
+    function applyWSLDistros(distros) {
+      const list = Array.isArray(distros) ? distros : [];
+      // Idempotent: every PI session this is called exactly once on
+      // reply, so we don't need to strip prior wsl- entries. But guard
+      // against a future re-fetch by filtering them out first.
+      for (const provider of ["claude", "codex"]) {
+        const base = (METRICS[provider] || []).filter(([id]) => !/-wsl-/.test(id));
+        const augmented = [];
+        for (const row of base) {
+          augmented.push(row);
+          const [id, label, kind] = row;
+          if (id === "cost-today" || id === "cost-30d") {
+            for (const d of list) {
+              const friendly = d.label || d.key;
+              const wslLabel = (id === "cost-today" ? "Cost today" : "Cost last 30 days")
+                + " (WSL: " + friendly + ")";
+              augmented.push([id + "-wsl-" + d.key, wslLabel, kind]);
+            }
+          }
+        }
+        METRICS[provider] = augmented;
+      }
+      wslDistrosCache = list;
+      wslDistrosKnown = true;
+      // Repopulate the dropdown if the PI is currently looking at a
+      // provider we just augmented; the new options need to appear
+      // without requiring the user to reopen the inspector.
+      if (currentProviderId === "claude" || currentProviderId === "codex") {
+        const selected = document.getElementById("metric").value;
+        populateMetrics(currentProviderId, selected);
+      }
     }
 
     // ---------- Provider error banner ----------
@@ -2436,6 +2491,9 @@
           break;
         case "providerStatus":
           setProviderError(payload);
+          break;
+        case "wslDistros":
+          applyWSLDistros(payload.distros);
           break;
       }
     }

@@ -12,14 +12,16 @@ import (
 	"time"
 
 	"github.com/anthonybaldwin/UsageButtons/internal/providers"
+	"github.com/anthonybaldwin/UsageButtons/internal/wsl"
 )
 
 // Cost scan cache — rescan at most once per 5 minutes.
 var (
 	// costMu guards costCache and costCacheT.
 	costMu sync.Mutex
-	// costCache holds the most recent result from scanCosts.
-	costCache *costResult
+	// costCache holds the most recent result from scanCosts (covering
+	// both the Windows-native projects dir and any running WSL distros).
+	costCache *allCostResults
 	// costCacheT is the wall-clock time of the last successful scan.
 	costCacheT time.Time
 	// unpricedModelMu guards unpricedModelCounts.
@@ -115,9 +117,28 @@ type costResult struct {
 	Last30d float64
 }
 
-// scanCosts walks ~/.claude/projects and returns aggregated today/30-day
-// spend estimates, memoized for costCacheTTL.
-func scanCosts() (*costResult, error) {
+// allCostResults holds the costResult for the Windows-native projects
+// dir plus, on Windows builds with WSL installed and distros running,
+// one costResult per running distro keyed by Source.Key.
+//
+// Each distro is treated as its own "machine" — no aggregation with
+// the native scope, since the user explicitly wants them visible
+// separately rather than silently summed.
+type allCostResults struct {
+	Native costResult
+	// WSL is keyed by wsl.Source.Key. Empty/nil when WSL is unavailable
+	// or no distros are running.
+	WSL map[string]costResult
+	// WSLLabels maps Source.Key → friendly distro name (e.g.
+	// "Ubuntu-22.04") so the metric Caption can identify each scope
+	// without re-running discovery.
+	WSLLabels map[string]string
+}
+
+// scanCosts walks ~/.claude/projects on the Windows host plus the
+// equivalent path inside every running WSL distro, returning the
+// per-scope aggregates memoized for costCacheTTL.
+func scanCosts() (*allCostResults, error) {
 	costMu.Lock()
 	defer costMu.Unlock()
 	if costCache != nil && time.Since(costCacheT) < costCacheTTL {
@@ -125,25 +146,58 @@ func scanCosts() (*costResult, error) {
 	}
 	resetUnpricedModels()
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	projectsDir := filepath.Join(home, ".claude", "projects")
-
-	entries, err := os.ReadDir(projectsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &costResult{}, nil
-		}
-		return nil, err
-	}
-
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	thirtyDaysAgo := now.AddDate(0, 0, -30)
 
+	out := &allCostResults{}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	native, err := scanProjectsDir(filepath.Join(home, ".claude", "projects"), todayStart, thirtyDaysAgo)
+	if err != nil {
+		return nil, err
+	}
+	out.Native = native
+
+	// wsl.Sources() is a no-op on non-Windows builds and returns nil
+	// when WSL isn't installed or no distros are running, so this loop
+	// degrades cleanly to zero extra work in the common case.
+	if sources := wsl.Sources(); len(sources) > 0 {
+		out.WSL = make(map[string]costResult, len(sources))
+		out.WSLLabels = make(map[string]string, len(sources))
+		for _, src := range sources {
+			r, err := scanProjectsDir(filepath.Join(src.Home, ".claude", "projects"), todayStart, thirtyDaysAgo)
+			if err != nil {
+				// One unreachable distro shouldn't poison the whole
+				// scan; just skip it and keep going.
+				continue
+			}
+			out.WSL[src.Key] = r
+			out.WSLLabels[src.Key] = src.Label
+		}
+	}
+
+	costCache = out
+	costCacheT = time.Now()
+	return out, nil
+}
+
+// scanProjectsDir walks one Claude projects directory (on any
+// filesystem — native or \\wsl.localhost\...) and returns the
+// today/30d cost aggregate. Missing directories return a zero result
+// without error so callers can scan optional scopes safely.
+func scanProjectsDir(projectsDir string, todayStart, thirtyDaysAgo time.Time) (costResult, error) {
 	var result costResult
+	entries, err := os.ReadDir(projectsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return result, nil
+		}
+		return result, err
+	}
 
 	for _, project := range entries {
 		if !project.IsDir() {
@@ -158,7 +212,7 @@ func scanCosts() (*costResult, error) {
 			if f.IsDir() || !strings.HasSuffix(f.Name(), ".jsonl") {
 				continue
 			}
-			// Quick filter: skip files older than 30 days by mod time
+			// Quick filter: skip files older than 30 days by mod time.
 			info, err := f.Info()
 			if err != nil || info.ModTime().Before(thirtyDaysAgo) {
 				continue
@@ -166,10 +220,7 @@ func scanCosts() (*costResult, error) {
 			scanFile(filepath.Join(projPath, f.Name()), todayStart, thirtyDaysAgo, &result)
 		}
 	}
-
-	costCache = &result
-	costCacheT = time.Now()
-	return &result, nil
+	return result, nil
 }
 
 // scanFile parses one session .jsonl file and accumulates token costs
@@ -339,8 +390,11 @@ func ptrFloat(v float64) *float64 {
 	return &v
 }
 
-// costMetrics renders the scanned spend into MetricValue tiles for today
-// and the trailing 30 days.
+// costMetrics renders the scanned spend into MetricValue tiles for the
+// trailing day and 30 days. The Windows-native scope produces the
+// stable "cost-today" / "cost-30d" IDs; each running WSL distro
+// produces a parallel pair suffixed with the distro key
+// (e.g. "cost-today-wsl-Debian"), treated as a separate machine.
 func costMetrics() []providers.MetricValue {
 	result, err := scanCosts()
 	if err != nil || result == nil {
@@ -350,32 +404,47 @@ func costMetrics() []providers.MetricValue {
 	now := time.Now().UTC().Format(time.RFC3339)
 	var out []providers.MetricValue
 
-	if result.Today > 0 || result.Last30d > 0 {
-		today := math.Round(result.Today*100) / 100
-		out = append(out, providers.MetricValue{
-			ID:              "cost-today",
-			Label:           "TODAY",
-			Name:            "Estimated spend today",
-			Value:           fmt.Sprintf("$%.2f", today),
-			NumericValue:    &today,
-			NumericUnit:     "dollars",
-			NumericGoodWhen: "low",
-			Caption:         "Cost (local)",
-			UpdatedAt:       now,
-		})
+	emit := func(scopeSuffix, captionSuffix string, r costResult) {
+		// Skip empty scopes so a fresh WSL distro with no sessions
+		// doesn't render a fake $0.00 tile.
+		if r.Today == 0 && r.Last30d == 0 {
+			return
+		}
+		today := math.Round(r.Today*100) / 100
+		last30 := math.Round(r.Last30d*100) / 100
+		out = append(out,
+			providers.MetricValue{
+				ID:              "cost-today" + scopeSuffix,
+				Label:           "TODAY",
+				Name:            "Estimated spend today" + captionSuffix,
+				Value:           fmt.Sprintf("$%.2f", today),
+				NumericValue:    &today,
+				NumericUnit:     "dollars",
+				NumericGoodWhen: "low",
+				Caption:         "Cost (local)" + captionSuffix,
+				UpdatedAt:       now,
+			},
+			providers.MetricValue{
+				ID:              "cost-30d" + scopeSuffix,
+				Label:           "30 DAYS",
+				Name:            "Estimated spend last 30 days" + captionSuffix,
+				Value:           fmt.Sprintf("$%.2f", last30),
+				NumericValue:    &last30,
+				NumericUnit:     "dollars",
+				NumericGoodWhen: "low",
+				Caption:         "Cost (local)" + captionSuffix,
+				UpdatedAt:       now,
+			},
+		)
+	}
 
-		last30 := math.Round(result.Last30d*100) / 100
-		out = append(out, providers.MetricValue{
-			ID:              "cost-30d",
-			Label:           "30 DAYS",
-			Name:            "Estimated spend last 30 days",
-			Value:           fmt.Sprintf("$%.2f", last30),
-			NumericValue:    &last30,
-			NumericUnit:     "dollars",
-			NumericGoodWhen: "low",
-			Caption:         "Cost (local)",
-			UpdatedAt:       now,
-		})
+	emit("", "", result.Native)
+	for key, r := range result.WSL {
+		label := result.WSLLabels[key]
+		if label == "" {
+			label = key
+		}
+		emit("-wsl-"+key, " (WSL: "+label+")", r)
 	}
 
 	return out

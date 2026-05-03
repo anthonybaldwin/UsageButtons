@@ -266,7 +266,7 @@ func buildMetrics(w costWindows, now string) []providers.MetricValue {
 		projected = round(w.mtd * float64(w.daysInMonth) / float64(w.daysElapsed))
 	}
 
-	caption := "Org cost (admin API)"
+	caption := "Cost (admin)"
 	return []providers.MetricValue{
 		{
 			ID:              "cost-today",
@@ -331,7 +331,7 @@ func buildMetrics(w costWindows, now string) []providers.MetricValue {
 			NumericValue:    &burn,
 			NumericUnit:     "dollars",
 			NumericGoodWhen: "low",
-			Caption:         "Avg daily org spend (last 7d)",
+			Caption:         "$/day (7d avg)",
 			UpdatedAt:       now,
 		},
 		{
@@ -342,7 +342,7 @@ func buildMetrics(w costWindows, now string) []providers.MetricValue {
 			NumericValue:    &projected,
 			NumericUnit:     "dollars",
 			NumericGoodWhen: "low",
-			Caption:         fmt.Sprintf("MTD pace through day %d/%d", w.daysElapsed, w.daysInMonth),
+			Caption:         "MTD pace",
 			UpdatedAt:       now,
 		},
 	}

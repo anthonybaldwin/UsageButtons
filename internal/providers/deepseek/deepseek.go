@@ -520,13 +520,20 @@ func buildPlatformMetrics(b parsedBalance, w costWindows, tokensMTD float64, cur
 	gr := round(b.granted)
 	tokens := round(tokensMTD)
 
-	costCaption := fmt.Sprintf("Org cost (platform.deepseek.com, %s)", currency)
+	// Captions follow the Button Spec §7 convention: short,
+	// source-tagged ("Cost (API)" mirrors Claude/Codex's "Cost
+	// (local)"). The "API" tag also disambiguates this provider — the
+	// data describes platform.deepseek.com / api.deepseek.com spend, NOT
+	// chat.deepseek.com (the consumer chat product, which has no
+	// public usage signal).
+	const costCaption = "Cost (API)"
+	_ = currency // currency is implicit in the symbol; reserved for future CNY/USD subtitle when symbol alone is insufficient
 
 	return []providers.MetricValue{
 		{
 			ID:              "balance",
 			Label:           "BALANCE",
-			Name:            "DeepSeek balance",
+			Name:            "DeepSeek API balance",
 			Value:           fmt.Sprintf("%s%.2f", b.symbol, bal),
 			NumericValue:    &bal,
 			NumericUnit:     "dollars",
@@ -537,29 +544,29 @@ func buildPlatformMetrics(b parsedBalance, w costWindows, tokensMTD float64, cur
 		{
 			ID:              "topped-up",
 			Label:           "PAID",
-			Name:            "DeepSeek paid balance",
+			Name:            "DeepSeek API paid balance",
 			Value:           fmt.Sprintf("%s%.2f", b.symbol, paid),
 			NumericValue:    &paid,
 			NumericUnit:     "dollars",
 			NumericGoodWhen: "high",
-			Caption:         "Top-up balance",
+			Caption:         "Paid (API)",
 			UpdatedAt:       now,
 		},
 		{
 			ID:              "granted",
 			Label:           "GRANTED",
-			Name:            "DeepSeek granted balance",
+			Name:            "DeepSeek API granted balance",
 			Value:           fmt.Sprintf("%s%.2f", b.symbol, gr),
 			NumericValue:    &gr,
 			NumericUnit:     "dollars",
 			NumericGoodWhen: "high",
-			Caption:         "Free grant",
+			Caption:         "Granted (API)",
 			UpdatedAt:       now,
 		},
 		{
 			ID:              "cost-today",
 			Label:           "TODAY",
-			Name:            "DeepSeek spend today (UTC)",
+			Name:            "DeepSeek API spend today (UTC)",
 			Value:           fmt.Sprintf("%s%.2f", b.symbol, t),
 			NumericValue:    &t,
 			NumericUnit:     "dollars",
@@ -570,7 +577,7 @@ func buildPlatformMetrics(b parsedBalance, w costWindows, tokensMTD float64, cur
 		{
 			ID:              "cost-yesterday",
 			Label:           "YESTERDAY",
-			Name:            "DeepSeek spend yesterday (UTC)",
+			Name:            "DeepSeek API spend yesterday (UTC)",
 			Value:           fmt.Sprintf("%s%.2f", b.symbol, y),
 			NumericValue:    &y,
 			NumericUnit:     "dollars",
@@ -581,7 +588,7 @@ func buildPlatformMetrics(b parsedBalance, w costWindows, tokensMTD float64, cur
 		{
 			ID:              "cost-7d",
 			Label:           "7 DAYS",
-			Name:            "DeepSeek spend last 7 days",
+			Name:            "DeepSeek API spend last 7 days",
 			Value:           fmt.Sprintf("%s%.2f", b.symbol, w7),
 			NumericValue:    &w7,
 			NumericUnit:     "dollars",
@@ -592,7 +599,7 @@ func buildPlatformMetrics(b parsedBalance, w costWindows, tokensMTD float64, cur
 		{
 			ID:              "cost-mtd",
 			Label:           "MTD",
-			Name:            "DeepSeek spend month-to-date (UTC)",
+			Name:            "DeepSeek API spend month-to-date (UTC)",
 			Value:           fmt.Sprintf("%s%.2f", b.symbol, m),
 			NumericValue:    &m,
 			NumericUnit:     "dollars",
@@ -603,7 +610,7 @@ func buildPlatformMetrics(b parsedBalance, w costWindows, tokensMTD float64, cur
 		{
 			ID:              "cost-30d",
 			Label:           "30 DAYS",
-			Name:            "DeepSeek spend last 30 days",
+			Name:            "DeepSeek API spend last 30 days",
 			Value:           fmt.Sprintf("%s%.2f", b.symbol, l30),
 			NumericValue:    &l30,
 			NumericUnit:     "dollars",
@@ -619,7 +626,7 @@ func buildPlatformMetrics(b parsedBalance, w costWindows, tokensMTD float64, cur
 			NumericValue:    &burn,
 			NumericUnit:     "dollars",
 			NumericGoodWhen: "low",
-			Caption:         "Avg daily DeepSeek spend (last 7d)",
+			Caption:         "$/day (7d avg)",
 			UpdatedAt:       now,
 		},
 		{
@@ -630,27 +637,27 @@ func buildPlatformMetrics(b parsedBalance, w costWindows, tokensMTD float64, cur
 			NumericValue:    &projected,
 			NumericUnit:     "dollars",
 			NumericGoodWhen: "low",
-			Caption:         fmt.Sprintf("MTD pace through day %d/%d", w.daysElapsed, w.daysInMonth),
+			Caption:         "MTD pace",
 			UpdatedAt:       now,
 		},
 		{
 			ID:              "tokens-mtd",
 			Label:           "TOKENS MTD",
-			Name:            "DeepSeek tokens used month-to-date",
+			Name:            "DeepSeek API tokens used month-to-date",
 			Value:           formatTokens(tokens),
 			NumericValue:    &tokens,
 			NumericUnit:     "tokens",
 			NumericGoodWhen: "low",
-			Caption:         "Total tokens (input + output) this month",
+			Caption:         "Tokens (API)",
 			UpdatedAt:       now,
 		},
 	}
 }
 
-// buildAPIMetrics is the legacy-shape metric set surfaced when only
-// the public /user/balance endpoint is available. The cost-window
-// metric IDs are also emitted (so the picker stays stable) but with
-// a "needs Helper extension" caption and zero values.
+// buildAPIMetrics is the metric set surfaced when only the public
+// /user/balance endpoint is available (no Helper extension). The
+// cost-window metric IDs are also emitted (so the picker stays
+// stable) but with a "Needs Helper" caption and zero values.
 func buildAPIMetrics(p parsedBalance, isAvailable bool, now string) []providers.MetricValue {
 	balance := math.Round(p.total*100) / 100
 	caption := fmt.Sprintf("Paid %s%.2f / Granted %s%.2f", p.symbol, p.toppedUp, p.symbol, p.granted)
@@ -658,14 +665,14 @@ func buildAPIMetrics(p parsedBalance, isAvailable bool, now string) []providers.
 	case p.total <= 0:
 		caption = "Add credits at platform.deepseek.com"
 	case !isAvailable:
-		caption = "Balance unavailable for API calls"
+		caption = "Balance unavailable"
 	}
 
 	out := []providers.MetricValue{
 		{
 			ID:              "balance",
 			Label:           "BALANCE",
-			Name:            "DeepSeek balance",
+			Name:            "DeepSeek API balance",
 			Value:           fmt.Sprintf("%s%.2f", p.symbol, balance),
 			NumericValue:    &balance,
 			NumericUnit:     "dollars",
@@ -679,12 +686,12 @@ func buildAPIMetrics(p parsedBalance, isAvailable bool, now string) []providers.
 	out = append(out, providers.MetricValue{
 		ID:              "topped-up",
 		Label:           "PAID",
-		Name:            "DeepSeek paid balance",
+		Name:            "DeepSeek API paid balance",
 		Value:           fmt.Sprintf("%s%.2f", p.symbol, paid),
 		NumericValue:    &paid,
 		NumericUnit:     "dollars",
 		NumericGoodWhen: "high",
-		Caption:         "Top-up balance",
+		Caption:         "Paid (API)",
 		UpdatedAt:       now,
 	})
 
@@ -692,25 +699,25 @@ func buildAPIMetrics(p parsedBalance, isAvailable bool, now string) []providers.
 	out = append(out, providers.MetricValue{
 		ID:              "granted",
 		Label:           "GRANTED",
-		Name:            "DeepSeek granted balance",
+		Name:            "DeepSeek API granted balance",
 		Value:           fmt.Sprintf("%s%.2f", p.symbol, gr),
 		NumericValue:    &gr,
 		NumericUnit:     "dollars",
 		NumericGoodWhen: "low",
-		Caption:         "Free grant",
+		Caption:         "Granted (API)",
 		UpdatedAt:       now,
 	})
 
-	// Stub the cost-window + token metrics with a "needs Helper" caption
-	// so users see where the richer data would come from.
-	stubCaption := "Connect Usage Buttons Helper to platform.deepseek.com for cost windows"
+	// Stub the cost-window + token metrics with a short "Needs Helper"
+	// caption — long-form explanation belongs in the tooltip and docs.
+	const stubCaption = "Needs Helper"
 	zero := 0.0
 	for _, id := range []string{"cost-today", "cost-yesterday", "cost-7d", "cost-mtd", "cost-30d", "cost-burn-7d", "cost-projected-month"} {
 		v := zero
 		out = append(out, providers.MetricValue{
 			ID:              id,
 			Label:           costStubLabel(id),
-			Name:            "DeepSeek " + costStubName(id) + " (Helper extension required)",
+			Name:            "DeepSeek API " + costStubName(id) + " (Helper extension required)",
 			Value:           fmt.Sprintf("%s%.2f", p.symbol, v),
 			NumericValue:    &v,
 			NumericUnit:     "dollars",
@@ -723,7 +730,7 @@ func buildAPIMetrics(p parsedBalance, isAvailable bool, now string) []providers.
 	out = append(out, providers.MetricValue{
 		ID:              "tokens-mtd",
 		Label:           "TOKENS MTD",
-		Name:            "DeepSeek tokens used month-to-date (Helper extension required)",
+		Name:            "DeepSeek API tokens used month-to-date (Helper extension required)",
 		Value:           formatTokens(tokens),
 		NumericValue:    &tokens,
 		NumericUnit:     "tokens",
@@ -736,16 +743,15 @@ func buildAPIMetrics(p parsedBalance, isAvailable bool, now string) []providers.
 }
 
 // platformErrorSnapshot wraps a platform-bridge error into a snapshot
-// with a clear caption so users see what went wrong (e.g., "no
-// platform tab open" vs "token expired").
+// with a short caption per Button Spec §7. The full error string lives
+// in Snapshot.Error for the Property Inspector and logs; on the tile
+// itself we just say "Bridge error" so the subvalue stays one line.
 func platformErrorSnapshot(err error) providers.Snapshot {
 	now := providerutil.NowString()
 	zero := 0.0
-	caption := "Sign in to platform.deepseek.com (extension reads userToken from the open tab)"
+	caption := "Sign in to platform.deepseek.com"
 	if err != nil {
-		// Surface the real error in the caption — useful for diagnosing
-		// "token expired" vs "no tab open" without requiring logs.
-		caption = "DeepSeek platform: " + err.Error()
+		caption = "Bridge error"
 	}
 	out := []providers.MetricValue{
 		{

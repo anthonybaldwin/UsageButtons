@@ -189,7 +189,7 @@
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.deepseek",
       "Name": "DeepSeek",
-      "Tooltip": "DeepSeek balance — total balance with paid/granted breakdown.",
+      "Tooltip": "DeepSeek usage — balance + paid/granted; with the Helper extension on platform.deepseek.com adds today/yesterday/7d/MTD/30d/burn/projected and tokens MTD.",
       "Icon": "assets/action-deepseek",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
@@ -493,7 +493,7 @@
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.deepseek",
       "Name": "DeepSeek",
-      "Tooltip": "DeepSeek balance — total balance with paid/granted breakdown.",
+      "Tooltip": "DeepSeek usage — balance + paid/granted; with the Helper extension on platform.deepseek.com adds today/yesterday/7d/MTD/30d/burn/projected and tokens MTD.",
       "Icon": "assets/action-deepseek",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,

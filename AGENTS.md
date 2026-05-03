@@ -141,12 +141,12 @@ users and search engines.
 
 Current topics (GitHub caps this list at 20): `stream-deck`,
 `stream-deck-plugin`, `claude`, `openai-codex`, `cursor`, `gemini`,
-`vertex-ai`, `openrouter`, `abacus`, `alibaba`, `kilo`, `kiro`,
-`antigravity`, `augment`, `amp`, `mistral`, `minimax`, `kimi`,
-`perplexity`, `grok`. (`opencode` was dropped to make room for
-`grok` at the 20-topic cap; restore it via `gh repo edit
---add-topic opencode --remove-topic <other>` if you'd rather
-trade a different one.)
+`openrouter`, `antigravity`, `mistral`, `perplexity`, `copilot`,
+`deepseek`, `grok`, `hermes-agent`, `jetbrains`, `moonshot`, `ollama`,
+`openclaw`, `warp`, `zai`. The list is curated for eye-draw —
+recognizable trending names and intriguing/playful ones — over
+exhaustive provider coverage. Restore a dropped topic via
+`gh repo edit --add-topic <name> --remove-topic <other>`.
 
 ## Stream Deck plugin notes
 
@@ -162,6 +162,14 @@ trade a different one.)
   Stream Deck UI. The SVG owns the value, glyph, and ratio fill; the
   title bar owns the label text. Send labels in UPPERCASE
   (`SESSION`, `WEEKLY`, …) to match the title font's expected look.
+- Provider button glyphs live in `internal/icons/`. Most come from
+  lobehub/lobe-icons (MIT) — `internal/icons/lobe_generated.go` is
+  produced by `go run scripts/sync-lobe-icons.go`. Edit the mapping
+  table in that script and re-run to add a provider, change a variant
+  (`mono` vs wordmark `text`), or refresh after upstream changes. The
+  remaining hand-drawn marks (warp, factory, abacus, augment,
+  jetbrains, kiro, opencodego, synthetic) live in their own
+  `<provider>.go` files alongside the trimmed `icons.go` literal.
 
 ## Browser fetch bridge (Usage Buttons Helper extension)
 

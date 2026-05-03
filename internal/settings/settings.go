@@ -127,6 +127,7 @@ type ProviderKeys struct {
 	// API keys / tokens
 	OpenRouterKey string `json:"openRouterKey,omitempty"`
 	DeepSeekKey   string `json:"deepSeekKey,omitempty"`
+	MoonshotKey   string `json:"moonshotKey,omitempty"`
 	WarpKey       string `json:"warpKey,omitempty"`
 	ZaiKey        string `json:"zaiKey,omitempty"`
 	KimiK2Key     string `json:"kimiK2Key,omitempty"`
@@ -148,6 +149,7 @@ type ProviderKeys struct {
 
 	// Endpoint overrides
 	OpenRouterURL       string `json:"openRouterURL,omitempty"`
+	MoonshotAPIHost     string `json:"moonshotAPIHost,omitempty"`
 	ZaiHost             string `json:"zaiHost,omitempty"`
 	ZaiQuotaURL         string `json:"zaiQuotaURL,omitempty"`
 	ZaiRegion           string `json:"zaiRegion,omitempty"` // "global" | "bigmodel-cn"
@@ -600,6 +602,10 @@ func ChangedProviderIDs(prev, next ProviderKeys) []string {
 	}
 	if prev.DeepSeekKey != next.DeepSeekKey {
 		out = append(out, "deepseek")
+	}
+	if prev.MoonshotKey != next.MoonshotKey ||
+		prev.MoonshotAPIHost != next.MoonshotAPIHost {
+		out = append(out, "moonshot")
 	}
 	if prev.WarpKey != next.WarpKey {
 		out = append(out, "warp")

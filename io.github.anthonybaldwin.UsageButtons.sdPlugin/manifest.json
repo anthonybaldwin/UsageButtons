@@ -443,6 +443,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.moonshot",
+      "Name": "Moonshot",
+      "Tooltip": "Moonshot (Kimi platform) balance — available, voucher, cash.",
+      "Icon": "assets/action-moonshot",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-moonshot-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.openrouter",
       "Name": "OpenRouter",
       "Tooltip": "OpenRouter usage stats — credit balance, total usage.",

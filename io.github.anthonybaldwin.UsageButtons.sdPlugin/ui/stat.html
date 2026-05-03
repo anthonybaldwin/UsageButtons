@@ -430,6 +430,18 @@
       <p class="hint">Fallback: <code>DEEPSEEK_API_KEY</code>.</p>
     </div>
 
+    <!-- Moonshot auth -->
+    <div id="authConfig-moonshot" class="auth-config" style="display:none">
+      <label for="moonshotKey">Moonshot API key</label>
+      <div class="key-row">
+        <input id="moonshotKey" type="password" autocomplete="off" placeholder="sk-…" data-provider-key="moonshotKey">
+        <button type="button" class="reveal-btn" data-reveal-target="moonshotKey">Show</button>
+      </div>
+      <label for="moonshotAPIHost">API host</label>
+      <input id="moonshotAPIHost" type="text" placeholder="https://api.moonshot.ai" data-provider-key="moonshotAPIHost">
+      <p class="hint">Use <code>api.moonshot.cn</code> for the China region. Fallback: <code>MOONSHOT_API_KEY</code>.</p>
+    </div>
+
     <!-- OpenRouter auth -->
     <div id="authConfig-openrouter" class="auth-config" style="display:none">
       <label for="openrouterKey">OpenRouter API key</label>
@@ -1058,6 +1070,11 @@
         ["topped-up", "Paid balance ($)",   "ref-dollar"],
         ["granted",   "Granted balance ($)","ref-dollar"],
       ],
+      moonshot: [
+        ["balance", "Available balance ($)", "ref-dollar"],
+        ["voucher", "Voucher balance ($)",   "ref-dollar"],
+        ["cash",    "Cash balance ($)",      "ref-dollar"],
+      ],
       perplexity: [
         ["pro-queries-remaining",       "Pro queries remaining today (count)",       "ref"],
         ["deep-research-remaining",     "Deep Research remaining today (count)",     "ref"],
@@ -1215,6 +1232,7 @@
       opencodego: "#3b82f6",
       openrouter: "#6467f2",
       deepseek:   "#4d6bfe",
+      moonshot:   "#0a84ff",
       perplexity: "#20b2aa",
       grok:       "#ffffff",
       nousresearch: "#2563eb",
@@ -1253,6 +1271,7 @@
       opencodego: "#081a33",
       openrouter: "#101028",
       deepseek:   "#0a1330",
+      moonshot:   "#0c0d20",
       perplexity: "#082423",
       grok:       "#000000",
       nousresearch: "#0c1a33",
@@ -1271,7 +1290,7 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "deepseek", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "hermes-agent", "ollama", "openclaw", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "deepseek", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "hermes-agent", "ollama", "openclaw", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "moonshot", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
@@ -1292,6 +1311,7 @@
       opencodego: "OpenCode Go",
       openrouter: "OpenRouter",
       deepseek:   "DeepSeek",
+      moonshot:   "Moonshot",
       perplexity: "Perplexity",
       grok:       "Grok",
       nousresearch: "Nous Research",

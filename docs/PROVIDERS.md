@@ -36,6 +36,7 @@ account or API response includes that quota lane.
 | Kiro | `kiro-cli`; run `kiro-cli login` first. | Monthly credits remaining %, bonus credits remaining %. |
 | MiniMax | MiniMax API key from the Provider tab / `MINIMAX_API_KEY`, or Usage Buttons Helper from `minimax.io`. Optional region override: `MINIMAX_REGION`. | Coding prompts remaining %. |
 | Mistral | Usage Buttons Helper from `admin.mistral.ai`. | Monthly billing usage. |
+| Moonshot (Kimi platform) | Moonshot API key from the Provider tab or `MOONSHOT_API_KEY` / `KIMI_PLATFORM_API_KEY`. Optional China-region host override: `MOONSHOT_API_HOST=https://api.moonshot.cn`. | Available balance ($), voucher balance ($), cash balance ($). Distinct from the Kimi (chat) provider — Moonshot is the paid developer API platform. |
 | Ollama | Usage Buttons Helper from the signed-in Ollama web session. | Session usage remaining %, session pace (burn rate), weekly usage remaining %, weekly pace (burn rate). |
 | OpenCode | Usage Buttons Helper from `opencode.ai`. Optional workspace override: `CODEXBAR_OPENCODE_WORKSPACE_ID`. | 5-hour usage remaining %, weekly usage remaining %. |
 | OpenCode Go | Usage Buttons Helper from `opencode.ai`. Optional workspace override: `CODEXBAR_OPENCODEGO_WORKSPACE_ID`. | 5-hour usage remaining %, weekly usage remaining %, monthly usage remaining %. |

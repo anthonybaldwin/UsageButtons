@@ -48,6 +48,7 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/kiro"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/minimax"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/mistral"
+	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/moonshot"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/nousresearch"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/ollama"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/openclaw"

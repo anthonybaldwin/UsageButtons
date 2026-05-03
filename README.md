@@ -6,7 +6,7 @@ per-model quotas, and more. Each button renders a dynamic icon whose
 background fills (or de-fills) in proportion to the current value, so
 you can tell at a glance how much runway you have left.
 
-![Usage Buttons in Stream Deck](docs/main.png)
+![Usage Buttons in Stream Deck — folder home opening into per-provider mini-dashboards (Claude, OpenAI Codex, OpenClaw, Nous Research / Hermes, Perplexity, Ollama, Grok, Gemini, and 23 more)](docs/hero.gif)
 
 Inspired by [CodexBar](https://github.com/steipete/CodexBar) for macOS.
 Endpoint mappings for the Perplexity provider follow
@@ -24,9 +24,11 @@ thresholds from the Property Inspector.
 Provider auth methods and selectable metrics are listed in
 [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
-| Per-button settings | Plugin-wide defaults |
-|---|---|
-| ![Button settings](docs/button-settings.png) | ![Plugin settings](docs/plugin-settings.png) |
+| Per-button | Per-provider defaults | Plugin-wide defaults |
+|---|---|---|
+| ![Button settings — metric picker, per-button overrides](docs/button-settings.png) | ![Provider settings — defaults that cascade to every button of one provider](docs/provider-settings.png) | ![Plugin settings — extension status, refresh interval, global display options, thresholds, text sizes](docs/plugin-settings.png) |
+
+Settings cascade: per-button overrides per-provider overrides plugin-wide.
 
 ## Runtime
 

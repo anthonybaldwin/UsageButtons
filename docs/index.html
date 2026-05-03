@@ -192,11 +192,14 @@
     /* Settings showcase */
     .settings-showcase {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 24px;
-      max-width: 820px;
+      max-width: 1240px;
       margin: 0 auto;
       align-items: start;
+    }
+    @media (max-width: 960px) {
+      .settings-showcase { grid-template-columns: 1fr 1fr; max-width: 820px; }
     }
     @media (max-width: 640px) {
       .settings-showcase { grid-template-columns: 1fr; max-width: 420px; }
@@ -425,7 +428,7 @@
 
   <section class="hero-screenshot" aria-label="Screenshot">
     <div class="frame">
-      <img src="main.png" alt="Usage Buttons in Stream Deck — Claude session, weekly, and sonnet percentages with provider list" width="847" height="548" loading="eager" fetchpriority="high">
+      <img src="hero.gif" alt="Usage Buttons in Stream Deck — folder home opening into per-provider mini-dashboards across Claude, OpenAI Codex, OpenClaw, Nous Research, Perplexity, Ollama, Grok, Gemini, and more" width="542" height="364" loading="eager" fetchpriority="high">
     </div>
   </section>
 
@@ -476,7 +479,7 @@
     </div>
 
     <h2 style="margin-top: 56px">Supported providers</h2>
-    <p class="sub">27 providers are live, matching CodexBar's provider list with Stream Deck-native actions.</p>
+    <p class="sub">31 providers are live, spanning hosted AI assistants (Claude, Codex, Cursor, Copilot, Gemini, Grok), self-hosted gateways (OpenClaw, Hermes Agent, Ollama), portal accounts (Nous Research, Perplexity, Mistral, Kimi, MiniMax, Abacus, Alibaba, Augment, Amp, Droid, OpenCode, JetBrains AI, Antigravity, Kilo, Kiro), and direct API keys (OpenRouter, Vertex AI, Synthetic, Warp, z.ai, Kimi K2).</p>
     <div class="providers-row">
       <span class="pill active">
         <svg viewBox="0 0 100 100"><path fill="currentColor" d="M25.7 63.2L41.4 54.4 41.7 53.6 41.4 53.2H40.7L38 53 29 52.8 21.3 52.5 13.7 52.1 11.8 51.7 10 49.3 10.2 48.1 11.8 47.1 14.1 47.3 19.2 47.6 26.7 48.1 32.3 48.5 40.4 49.3H41.7L41.9 48.8 41.4 48.5 41.1 48.1 33.2 42.8 24.7 37.2 20.3 34 17.9 32.3 16.7 30.8 16.1 27.4 18.3 25 21.3 25.2 22 25.4 25 27.7 31.3 32.6 39.6 38.7 40.9 39.7 41.3 39.4 41.4 39.2 40.9 38.2 36.3 30.1 31.5 21.8 29.4 18.3 28.8 16.3C28.6 15.4 28.5 14.7 28.5 13.9L31 10.5 32.3 10 35.7 10.5 37 11.7 39.1 16.4 42.5 23.8 47.6 33.9 49.2 36.9 50 39.7 50.3 40.5H50.8V40.1L51.2 34.4 52 27.4 52.8 18.4 53 15.9 54.3 12.8 56.8 11.2 58.7 12.1 60.3 14.4 60.1 15.9 59.1 22.1 57.3 31.7 56.1 38.2 56.8 38.2 57.6 37.4 60.9 33.1 66.4 26.2 68.8 23.4 71.6 20.4 73.5 19 76.9 19 79.4 22.8 78.3 26.6 74.8 31.1 71.8 34.9 67.6 40.6 65 45.1 65.2 45.5 65.8 45.4 75.4 43.4 80.5 42.5 86.6 41.4 89.4 42.7 89.7 44 88.6 46.7 82.1 48.4 74.4 49.9 62.9 52.6 62.8 52.7 62.9 52.9 68.1 53.4 70.3 53.5H75.7L85.8 54.3 88.4 56 89.9 58.1 89.7 59.8 85.7 61.8 80.2 60.5 67.5 57.5 63.1 56.4H62.5V56.8L66.1 60.3 72.8 66.4 81.1 74.1 81.6 76 80.5 77.6 79.4 77.4 72 71.9 69.2 69.4 62.8 64H62.3V64.6L63.8 66.7 71.6 78.5 72 82.1 71.5 83.2 69.5 83.9 67.2 83.5 62.6 77.1 57.9 69.9 54.1 63.4 53.7 63.7 51.4 87.9 50.4 89.1 47.9 90 45.9 88.5 44.8 86 45.9 81.1 47.2 74.7 48.3 69.6 49.2 63.2 49.8 61.1 49.7 61 49.3 61 44.5 67.6 37.2 77.4 31.5 83.6 30.1 84.1 27.7 82.9 27.9 80.7 29.3 78.7 37.2 68.6 42 62.3 45.1 58.7 45.1 58.2H44.9L23.8 71.9 20 72.4 18.4 70.9 18.6 68.4 19.4 67.6 25.7 63.2Z"/></svg>
@@ -520,14 +523,18 @@
 
   <section style="padding-top: 72px">
     <h2>Configuration</h2>
-    <p class="sub">Each button gets its own metric, colors, and thresholds. Plugin-wide defaults keep things consistent.</p>
+    <p class="sub">Settings cascade three levels deep: per-button overrides per-provider overrides plugin-wide. Tweak just the one button, or change the default for every Claude tile, or set a global default — any level wins over the one beneath it.</p>
     <div class="settings-showcase">
       <figure class="card">
-        <img src="button-settings.png" alt="Per-button settings — metric picker, authentication, text overrides, colors" width="384" height="1027" loading="lazy">
-        <figcaption>Per-button settings</figcaption>
+        <img src="button-settings.png" alt="Per-button settings — pick the metric this key shows and override any default just for this one tile" width="618" height="664" loading="lazy">
+        <figcaption>Per-button</figcaption>
       </figure>
       <figure class="card">
-        <img src="plugin-settings.png" alt="Plugin-wide settings — refresh interval, display options, text sizes" width="384" height="1084" loading="lazy">
+        <img src="provider-settings.png" alt="Per-provider settings — defaults applied to every button bound to one provider, like Claude or Codex" width="622" height="697" loading="lazy">
+        <figcaption>Per-provider defaults</figcaption>
+      </figure>
+      <figure class="card">
+        <img src="plugin-settings.png" alt="Plugin-wide settings — Helper extension status, refresh interval, global display options, dollar thresholds, text sizes" width="580" height="1066" loading="lazy">
         <figcaption>Plugin-wide defaults</figcaption>
       </figure>
     </div>

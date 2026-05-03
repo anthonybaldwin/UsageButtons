@@ -1,20 +1,20 @@
-// Package anthropicadmin implements the Anthropic Admin API usage
-// provider — the org-level cost view exposed to administrators via
-// admin API keys (sk-ant-admin-...). This is distinct from the
-// existing claude provider, which surfaces a single user's session/
-// weekly window using OAuth credentials. Admin shows aggregate
-// org-wide spend and only works for users with an Anthropic
-// organization and an admin key.
+// Package anthropic implements the Anthropic org-level cost view —
+// today / MTD / 30-day spend across the whole organization. Distinct
+// from the claude provider (which is one user's session/weekly window
+// from local OAuth credentials), and from the personal Anthropic SDK
+// flow (which has no usage endpoint at all per the Feb 2026 admin-
+// API-only policy).
 //
-// Auth: Property Inspector settings field or
-// ANTHROPIC_ADMIN_API_KEY environment variable. Personal keys
-// (sk-ant-...) won't work — the admin endpoints reject anything
-// that isn't a sk-ant-admin-... key.
+// Auth: an admin API key in the Property Inspector settings field, or
+// the ANTHROPIC_ADMIN_API_KEY environment variable. The env var is
+// deliberately namespaced with _ADMIN_ so it doesn't collide with the
+// SDK-standard ANTHROPIC_API_KEY (which won't work here — the admin
+// endpoints reject anything that isn't an sk-ant-admin-... key).
 //
 // Endpoint: GET https://api.anthropic.com/v1/organizations/cost_report
-// with x-api-key + anthropic-version headers. One call with a
-// 30-day window slices into today / month-to-date / trailing 30d.
-package anthropicadmin
+// with x-api-key + anthropic-version headers. One call with a 30-day
+// window slices into today / month-to-date / trailing 30d.
+package anthropic
 
 import (
 	"errors"
@@ -70,30 +70,31 @@ type costResult struct {
 }
 
 // getAPIKey resolves an Anthropic admin API key from user settings
-// or env vars.
+// or the deliberately-namespaced env var fallback.
 func getAPIKey() string {
 	return settings.ResolveAPIKey(
-		settings.ProviderKeysGet().AnthropicAdminKey,
+		settings.ProviderKeysGet().AnthropicKey,
 		"ANTHROPIC_ADMIN_API_KEY",
 	)
 }
 
-// Provider fetches Anthropic admin cost data.
+// Provider fetches Anthropic org cost data.
 type Provider struct{}
 
 // ID returns the provider identifier used by the registry.
-func (Provider) ID() string { return "anthropic-admin" }
+func (Provider) ID() string { return "anthropic" }
 
 // Name returns the human-readable provider name.
-func (Provider) Name() string { return "Anthropic Admin" }
+func (Provider) Name() string { return "Anthropic" }
 
-// BrandColor returns the accent color used on button faces.
-// Same terracotta as the Claude provider — they're the same brand
-// family. The visual distinction comes from the shield glyph (vs
-// Claude's star) plus the deeper black background.
+// BrandColor returns the accent color used on button faces. Same
+// terracotta the Anthropic mark uses — the icon (the eight-pointed
+// star) is the brand differentiator vs the clawd provider's claw.
 func (Provider) BrandColor() string { return "#cc7c5e" }
 
-// BrandBg returns the background color used on button faces.
+// BrandBg returns the background color used on button faces. Deeper
+// black than clawd's #1c1210 so the org-level Anthropic tile reads
+// as distinct from the per-user clawd tile in the same deck.
 func (Provider) BrandBg() string { return "#0a0807" }
 
 // MetricIDs enumerates the metrics this provider can emit.
@@ -106,9 +107,9 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	apiKey := getAPIKey()
 	if apiKey == "" {
 		return providerutil.MissingAuthSnapshot(
-			"anthropic-admin",
-			"Anthropic Admin",
-			"Enter an Anthropic admin API key (sk-ant-admin-…) in the Anthropic Admin tab, or set ANTHROPIC_ADMIN_API_KEY.",
+			"anthropic",
+			"Anthropic",
+			"Enter an Anthropic admin API key (sk-ant-admin-…) in the Anthropic tab, or set ANTHROPIC_ADMIN_API_KEY.",
 		), nil
 	}
 
@@ -126,8 +127,8 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	metrics := buildMetrics(today, mtd, last30, providerutil.NowString())
 
 	return providers.Snapshot{
-		ProviderID:   "anthropic-admin",
-		ProviderName: "Anthropic Admin",
+		ProviderID:   "anthropic",
+		ProviderName: "Anthropic",
 		Source:       "api-key",
 		Metrics:      metrics,
 		Status:       "operational",
@@ -245,7 +246,7 @@ func buildMetrics(today, mtd, last30 float64, now string) []providers.MetricValu
 	}
 }
 
-// init registers the Anthropic Admin provider with the package registry.
+// init registers the Anthropic provider with the package registry.
 func init() {
 	providers.Register(Provider{})
 }

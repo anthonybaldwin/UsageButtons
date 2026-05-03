@@ -128,7 +128,7 @@ type ProviderKeys struct {
 	OpenRouterKey     string `json:"openRouterKey,omitempty"`
 	DeepSeekKey       string `json:"deepSeekKey,omitempty"`
 	MoonshotKey       string `json:"moonshotKey,omitempty"`
-	AnthropicAdminKey string `json:"anthropicAdminKey,omitempty"`
+	AnthropicKey string `json:"anthropicKey,omitempty"`
 	WarpKey           string `json:"warpKey,omitempty"`
 	ZaiKey        string `json:"zaiKey,omitempty"`
 	KimiK2Key     string `json:"kimiK2Key,omitempty"`
@@ -608,8 +608,8 @@ func ChangedProviderIDs(prev, next ProviderKeys) []string {
 		prev.MoonshotAPIHost != next.MoonshotAPIHost {
 		out = append(out, "moonshot")
 	}
-	if prev.AnthropicAdminKey != next.AnthropicAdminKey {
-		out = append(out, "anthropic-admin")
+	if prev.AnthropicKey != next.AnthropicKey {
+		out = append(out, "anthropic")
 	}
 	if prev.WarpKey != next.WarpKey {
 		out = append(out, "warp")

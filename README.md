@@ -17,7 +17,7 @@ Runs on **Windows and macOS**.
 
 ## Settings
 
-Each provider is its own action — drag **Claude**, **Codex**, **Gemini**,
+Each provider is its own action — drag **Clawd**, **Codex**, **Gemini**,
 **Vertex AI**, etc. onto a key and configure the metric, colors, and
 thresholds from the Property Inspector.
 
@@ -61,11 +61,11 @@ UsageButtons/
 │   ├── providers/                        # provider interface, cache, mock
 │   │   ├── abacus/                       # Abacus AI (browser)
 │   │   ├── alibaba/                      # Alibaba Coding Plan (browser/API key)
-│   │   ├── anthropicadmin/               # Anthropic Admin org cost API (admin key)
+│   │   ├── anthropic/                    # Anthropic org cost API (admin key)
 │   │   ├── amp/                          # Amp (browser)
 │   │   ├── antigravity/                  # Antigravity (local language server)
 │   │   ├── augment/                      # Augment (CLI/browser)
-│   │   ├── claude/                       # Claude (OAuth + browser web API)
+│   │   ├── claude/                       # Clawd (Claude OAuth + browser web API)
 │   │   ├── codex/                        # Codex (OAuth)
 │   │   ├── cookieaux/                    # cookie-gated provider messaging helpers
 │   │   ├── copilot/                      # GitHub Copilot
@@ -118,7 +118,7 @@ Short version:
    **UsageButtons-Helper-unpacked.zip** from the same release, unzip
    it, and **Load unpacked** in `chrome://extensions`. The plugin
    auto-registers — nothing to configure.
-3. Drag a provider (**Claude**, **Codex**, **Copilot**, etc.) onto a
+3. Drag a provider (**Clawd**, **Codex**, **Copilot**, etc.) onto a
    Stream Deck key and pick a metric from the Property Inspector.
 
 ## Build from source
@@ -175,8 +175,8 @@ through your real browser session; cookies never leave Chrome.
   `chrome://extensions`, done.
 - **Providers that don't need it keep working unchanged** — Gemini,
   Vertex AI, Copilot, OpenRouter, DeepSeek, Moonshot, Warp, z.ai,
-  Kimi K2, Synthetic, Kilo, Kiro, JetBrains AI, Anthropic Admin,
-  and Antigravity never require the extension.
+  Kimi K2, Synthetic, Kilo, Kiro, JetBrains AI, Anthropic, and
+  Antigravity never require the extension.
 - **Waits patiently on cold start.** Cookie-gated buttons stay in a
   quiet "needs browser extension" state until the extension
   handshakes — so launching Stream Deck before Chrome doesn't

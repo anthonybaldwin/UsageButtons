@@ -1,4 +1,4 @@
-package anthropicadmin
+package anthropic
 
 import (
 	"testing"

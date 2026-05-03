@@ -58,7 +58,8 @@ var mapping = []entry{
 	{ProviderID: "hermes-agent", LobeName: "hermesagent", Variant: "mono"},
 	{ProviderID: "kilo", LobeName: "kilocode", Variant: "mono"},
 	{ProviderID: "kimi", LobeName: "kimi", Variant: "mono"},
-	{ProviderID: "kimi-k2", LobeName: "kimi", Variant: "mono"},
+	// Kimrel (provider ID kimi-k2) is a third-party reseller — not allowed
+	// to use Kimi's Lobe icon. Custom mark lives in internal/icons/kimrel.go.
 	{ProviderID: "minimax", LobeName: "minimax", Variant: "mono"},
 	{ProviderID: "mistral", LobeName: "mistral", Variant: "mono"},
 	{ProviderID: "moonshot", LobeName: "moonshot", Variant: "mono"},
@@ -92,7 +93,6 @@ type parsed struct {
 func main() {
 	results := make(map[string]parsed, len(mapping))
 
-	// dedupe fetches: kimi & kimi-k2 both pull kimi.svg
 	type key struct{ name, variant string }
 	cache := map[key]parsed{}
 

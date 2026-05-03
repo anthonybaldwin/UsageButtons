@@ -272,11 +272,13 @@ func (Provider) ID() string { return "kimi-k2" }
 // Name returns the human-readable provider name.
 func (Provider) Name() string { return "Kimrel" }
 
-// BrandColor returns the accent color used on button faces.
-func (Provider) BrandColor() string { return "#4c00ff" }
+// BrandColor returns the accent color used on button faces. Slate gray
+// is intentional — Kimrel is third-party and shouldn't borrow Kimi's
+// orange or Moonshot's blue, which would imply official affiliation.
+func (Provider) BrandColor() string { return "#64748b" }
 
 // BrandBg returns the background color used on button faces.
-func (Provider) BrandBg() string { return "#0c0324" }
+func (Provider) BrandBg() string { return "#1e293b" }
 
 // MetricIDs enumerates the metrics this provider can emit.
 func (Provider) MetricIDs() []string {

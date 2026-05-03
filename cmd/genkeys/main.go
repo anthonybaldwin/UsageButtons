@@ -37,7 +37,7 @@ var providerColors = map[string]string{
 	"vertexai":    "#4285f4",
 	"warp":        "#938bb4",
 	"zai":         "#e85a6a",
-	"kimi-k2":     "#4c00ff",
+	"kimi-k2":     "#64748b",
 }
 
 func main() {

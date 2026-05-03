@@ -61,6 +61,7 @@ UsageButtons/
 │   ├── providers/                        # provider interface, cache, mock
 │   │   ├── abacus/                       # Abacus AI (browser)
 │   │   ├── alibaba/                      # Alibaba Coding Plan (browser/API key)
+│   │   ├── anthropicadmin/               # Anthropic Admin org cost API (admin key)
 │   │   ├── amp/                          # Amp (browser)
 │   │   ├── antigravity/                  # Antigravity (local language server)
 │   │   ├── augment/                      # Augment (CLI/browser)
@@ -174,8 +175,8 @@ through your real browser session; cookies never leave Chrome.
   `chrome://extensions`, done.
 - **Providers that don't need it keep working unchanged** — Gemini,
   Vertex AI, Copilot, OpenRouter, DeepSeek, Moonshot, Warp, z.ai,
-  Kimi K2, Synthetic, Kilo, Kiro, JetBrains AI, and Antigravity
-  never require the extension.
+  Kimi K2, Synthetic, Kilo, Kiro, JetBrains AI, Anthropic Admin,
+  and Antigravity never require the extension.
 - **Waits patiently on cold start.** Cookie-gated buttons stay in a
   quiet "needs browser extension" state until the extension
   handshakes — so launching Stream Deck before Chrome doesn't

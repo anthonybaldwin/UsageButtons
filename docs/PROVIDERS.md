@@ -14,6 +14,7 @@ account or API response includes that quota lane.
 | Provider | Auth methods | Available metrics |
 |---|---|---|
 | Abacus AI | Usage Buttons Helper from `apps.abacus.ai`. | Monthly compute credits remaining %. |
+| Anthropic Admin | Anthropic admin API key (`sk-ant-admin-…`) from the Provider tab or `ANTHROPIC_ADMIN_API_KEY`. Org admins only — personal `sk-ant-` keys won't work. | Org spend today (UTC, $), org spend month-to-date ($), org spend last 30 days ($). Distinct from the Claude provider, which is a single user's session/weekly window from local OAuth. |
 | Alibaba | Usage Buttons Helper from the Alibaba Cloud console, or Alibaba Coding Plan API key from the Provider tab / `ALIBABA_CODING_PLAN_API_KEY`. Optional region/endpoint overrides: `ALIBABA_CODING_PLAN_REGION`, `ALIBABA_CODING_PLAN_HOST`, `ALIBABA_CODING_PLAN_QUOTA_URL`. | 5-hour quota remaining %, weekly quota remaining %, monthly quota remaining %. |
 | Amp | Usage Buttons Helper from `ampcode.com/settings`. | Amp Free remaining %. |
 | Antigravity | Local Antigravity language server. Launch Antigravity first; optional overrides include `ANTIGRAVITY_PORT` and `ANTIGRAVITY_CSRF_TOKEN`. | Claude quota remaining %, Gemini Pro quota remaining %, Gemini Flash quota remaining %. |

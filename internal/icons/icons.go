@@ -100,6 +100,14 @@ var ProviderIcons = map[string]*render.ProviderGlyph{
 			{D: "M100 45 C115 40 120 50 115 60 C110 70 100 65 95 55 C92 48 95 45 100 45Z"},
 		},
 	},
+	"anthropic-admin": {
+		// Lucide-style shield mark — denotes org/admin access. The
+		// Anthropic Admin provider intentionally uses a different
+		// glyph (not Claude's star) so admin tiles are visually
+		// distinguishable from Claude tiles in the deck.
+		ViewBox: "0 0 24 24",
+		D:       "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+	},
 	"deepseek": {
 		// DeepSeek whale mark, ported from CodexBar's
 		// ProviderIcon-deepseek.svg (MIT). 30x30 viewBox; the renderer's

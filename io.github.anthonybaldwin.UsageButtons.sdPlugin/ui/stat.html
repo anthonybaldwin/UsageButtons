@@ -420,6 +420,16 @@
       <p class="hint">Extension when connected, else OAuth from <code>~/.codex/auth.json</code>.</p>
     </div>
 
+    <!-- Anthropic Admin auth -->
+    <div id="authConfig-anthropic-admin" class="auth-config" style="display:none">
+      <label for="anthropicAdminKey">Anthropic admin API key</label>
+      <div class="key-row">
+        <input id="anthropicAdminKey" type="password" autocomplete="off" placeholder="sk-ant-admin-…" data-provider-key="anthropicAdminKey">
+        <button type="button" class="reveal-btn" data-reveal-target="anthropicAdminKey">Show</button>
+      </div>
+      <p class="hint">Admin keys only. Personal <code>sk-ant-</code> won't work. Fallback: <code>ANTHROPIC_ADMIN_API_KEY</code>.</p>
+    </div>
+
     <!-- DeepSeek auth -->
     <div id="authConfig-deepseek" class="auth-config" style="display:none">
       <label for="deepseekKey">DeepSeek API key</label>
@@ -1070,6 +1080,11 @@
         ["topped-up", "Paid balance ($)",   "ref-dollar"],
         ["granted",   "Granted balance ($)","ref-dollar"],
       ],
+      "anthropic-admin": [
+        ["cost-today", "Org spend today ($)",     "dollar-m"],
+        ["cost-mtd",   "Org spend MTD ($)",       "dollar-m"],
+        ["cost-30d",   "Org spend last 30d ($)",  "dollar-m"],
+      ],
       moonshot: [
         ["balance", "Available balance ($)", "ref-dollar"],
         ["voucher", "Voucher balance ($)",   "ref-dollar"],
@@ -1233,6 +1248,7 @@
       openrouter: "#6467f2",
       deepseek:   "#4d6bfe",
       moonshot:   "#0a84ff",
+      "anthropic-admin": "#cc7c5e",
       perplexity: "#20b2aa",
       grok:       "#ffffff",
       nousresearch: "#2563eb",
@@ -1272,6 +1288,7 @@
       openrouter: "#101028",
       deepseek:   "#0a1330",
       moonshot:   "#0c0d20",
+      "anthropic-admin": "#0a0807",
       perplexity: "#082423",
       grok:       "#000000",
       nousresearch: "#0c1a33",
@@ -1290,11 +1307,12 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "codex", "copilot", "cursor", "deepseek", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "hermes-agent", "ollama", "openclaw", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "moonshot", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "anthropic-admin", "codex", "copilot", "cursor", "deepseek", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "hermes-agent", "ollama", "openclaw", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "moonshot", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
       claude:     "Claude",
+      "anthropic-admin": "Anthropic Admin",
       codex:      "Codex",
       copilot:    "Copilot",
       cursor:     "Cursor",

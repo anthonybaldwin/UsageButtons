@@ -131,6 +131,17 @@
   <div id="providerErrorBanner" style="display:none; margin: 0 12px 10px; padding: 8px; border-radius: 4px; background: #1f2937; border: 1px solid #7f1d1d; font-size: 12px; line-height: 1.4;">
     <span id="providerErrorDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; background:#ef4444;"></span>
     <span id="providerErrorText" style="color: #fca5a5;"></span>
+    <!-- Action row appears only when the plugin emits a recoverable
+         error with a known recovery action (e.g. OpenClaw pairing-
+         required). The command preview shows the full string with
+         the token masked, so the user can audit what we'll write to
+         the clipboard before clicking Copy. The unmasked token only
+         leaves the page on Copy click. -->
+    <div id="providerErrorActions" style="display:none; margin-top: 8px;">
+      <pre id="openclawApproveCmdPreview" style="font-family: monospace; font-size: 11px; line-height: 1.4; padding: 6px 8px; margin: 0 0 6px; background: #0f172a; border: 1px solid #334155; border-radius: 3px; color: #e2e8f0; white-space: pre-wrap; word-break: break-all;"></pre>
+      <button type="button" id="copyOpenClawApproveBtn" class="reveal-btn" style="font-size: 11px;">Copy</button>
+      <span id="copyOpenClawApproveStatus" style="margin-left: 8px; color: #86efac; font-size: 11px;"></span>
+    </div>
   </div>
 
   <!-- ================== Button tab (per-key) ================== -->
@@ -459,8 +470,12 @@
       </div>
       <p class="hint"><code>http(s)://</code> URLs are auto-converted to <code>ws(s)://</code>. Fallbacks: <code>OPENCLAW_BASE_URL</code>, <code>OPENCLAW_GATEWAY_TOKEN</code>.</p>
       <p class="hint" style="margin-top:8px">
-        <strong>One-time pairing (Tailscale / remote gateway):</strong><br>
-        After you fill in the URL + token and add a button, the button face will read <strong>PAIR / Run CLI on host</strong>. SSH into your OpenClaw gateway host and run <code>openclaw devices list</code> to find the pending request, then <code>openclaw devices approve &lt;requestId&gt;</code>. The next plugin poll will pull metrics. Co-located on the same host? Use <code>ws://127.0.0.1:&lt;port&gt;</code> and pairing is skipped automatically.
+        <strong>One-time pairing — pick the easiest path:</strong>
+        <ul style="margin: 4px 0 0 16px; padding: 0;">
+          <li><strong>Tailscale Serve gateway (loopback or .ts.net URL):</strong> Press the OpenClaw button on Stream Deck — it opens the gateway dashboard, your browser auto-pairs via Tailscale identity, approve the request from the Devices panel. No CLI.</li>
+          <li><strong>Same host as plugin:</strong> Use <code>ws://127.0.0.1:&lt;port&gt;</code>; loopback auto-pairs, pairing screen never appears.</li>
+          <li><strong>Remote gateway, no Tailscale:</strong> The PAIR error banner above gets a <em>Copy approve command</em> button — paste it into a terminal that has <code>openclaw</code> CLI on PATH (token must have <code>operator.admin</code>; check <code>gateway.auth.scopes</code> if the CLI rejects).</li>
+        </ul>
       </p>
     </div>
 
@@ -2102,12 +2117,87 @@
     function setProviderError(payload) {
       const banner = document.getElementById("providerErrorBanner");
       const text = document.getElementById("providerErrorText");
-      if (payload.error) {
-        text.textContent = payload.error;
-        banner.style.display = "block";
-      } else {
+      const actions = document.getElementById("providerErrorActions");
+      const copyBtn = document.getElementById("copyOpenClawApproveBtn");
+      const copyStatus = document.getElementById("copyOpenClawApproveStatus");
+      if (!payload.error) {
         banner.style.display = "none";
+        if (actions) actions.style.display = "none";
+        return;
       }
+      text.textContent = payload.error;
+      banner.style.display = "block";
+
+      // OpenClaw pairing-required → render the full approve command
+      // with the token masked so the user can audit the exact string
+      // before copying. The unmasked token lands on the clipboard
+      // only when the user clicks Copy; it's never written to the DOM.
+      if (actions && copyBtn && copyStatus) {
+        const requestIdMatch = String(payload.error).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+        const isOpenClawPairing = /pairing required/i.test(payload.error) && requestIdMatch;
+        const preview = document.getElementById("openclawApproveCmdPreview");
+        if (isOpenClawPairing) {
+          actions.style.display = "block";
+          const requestId = requestIdMatch[0];
+          const baseURL = (document.getElementById("openclawBaseURL")?.value || "").trim();
+          const token = (document.getElementById("openclawToken")?.value || "").trim();
+          const wsURL = httpToWs(baseURL) || "ws://127.0.0.1:18789";
+          const buildCmd = (tokenStr) => ["openclaw", "devices", "approve", requestId,
+                                           "--url", quoteShell(wsURL),
+                                           "--token", quoteShell(tokenStr)].join(" ");
+          if (preview) preview.textContent = buildCmd(maskToken(token));
+          copyBtn.onclick = () => {
+            const cmd = buildCmd(token);
+            navigator.clipboard.writeText(cmd).then(() => {
+              copyStatus.style.color = "#86efac";
+              copyStatus.textContent = "Copied — paste into any terminal with openclaw CLI.";
+              setTimeout(() => { copyStatus.textContent = ""; }, 4000);
+            }, (err) => {
+              copyStatus.style.color = "#fca5a5";
+              copyStatus.textContent = "Copy failed: " + (err && err.message ? err.message : err);
+            });
+          };
+        } else {
+          actions.style.display = "none";
+          if (preview) preview.textContent = "";
+        }
+      }
+    }
+
+    // maskToken collapses a secret to first/last 4 chars joined by
+    // asterisks. Preserves length signal so the user can confirm the
+    // field is populated, without leaking the actual value into the
+    // visible PI DOM. Short tokens (<= 8 chars) collapse to all *.
+    function maskToken(tok) {
+      if (!tok) return "";
+      const s = String(tok);
+      if (s.length <= 8) return "*".repeat(s.length);
+      return s.slice(0, 4) + "*".repeat(Math.max(4, s.length - 8)) + s.slice(-4);
+    }
+
+    // httpToWs converts http(s)://host:port to ws(s)://host:port for
+    // the openclaw CLI's --url. Pass-through for ws(s) inputs and
+    // anything we can't parse.
+    function httpToWs(raw) {
+      if (!raw) return "";
+      try {
+        const u = new URL(raw);
+        if (u.protocol === "http:") u.protocol = "ws:";
+        else if (u.protocol === "https:") u.protocol = "wss:";
+        return u.toString().replace(/\/$/, "");
+      } catch {
+        return raw;
+      }
+    }
+
+    // quoteShell wraps a value in single quotes for safe paste into
+    // bash/zsh, escaping any embedded single quotes with the
+    // standard '\'' close-and-rejoin trick. Tokens with special
+    // characters (which the operator gateway token can contain) stay
+    // intact across paste.
+    function quoteShell(s) {
+      if (s === "") return "''";
+      return "'" + String(s).replace(/'/g, "'\\''") + "'";
     }
 
     // ---------- Cookie host status + register UI ----------

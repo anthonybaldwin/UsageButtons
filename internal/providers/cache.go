@@ -20,6 +20,14 @@ const (
 	// Any poll within this window reuses the snapshot.
 	MinTTL = 5 * time.Minute
 
+	// TransientTTL caps how long a snapshot in a self-resolving
+	// state (pairing-pending, bot-blocked) is reused before re-fetch.
+	// Short enough that a user who just approved a device pairing or
+	// cleared a CAPTCHA in their browser sees the state flip without
+	// having to press the Stream Deck button — long enough that we
+	// don't hammer the upstream during a stuck transient period.
+	TransientTTL = 30 * time.Second
+
 	// CooldownDuration is how long to stop hitting an API after an
 	// upstream error.
 	CooldownDuration = 10 * time.Minute
@@ -243,10 +251,22 @@ func GetSnapshot(p Provider, opts GetSnapshotOptions) Snapshot {
 	}
 
 	// 4. Cache hit: fresh-enough snapshot and not forced.
+	//
+	// Snapshots in transient states (pairing-pending, blocked) want a
+	// shorter TTL so the user doesn't have to press the button to
+	// pick up the resolved state — once a user approves a pairing on
+	// the gateway or clears a DataDome challenge in their browser, the
+	// plugin should detect that within ~30s instead of waiting up to
+	// MinTTL (5min). Operational and unknown statuses keep the full
+	// MinTTL so we don't hammer upstreams in the steady state.
+	ttl := MinTTL
+	if e.snapshot != nil && transientStatus(e.snapshot.Status) {
+		ttl = TransientTTL
+	}
 	if !opts.Force && e.snapshot != nil && !e.fetchedAt.IsZero() &&
-		now.Sub(e.fetchedAt) < MinTTL {
+		now.Sub(e.fetchedAt) < ttl {
 		age := int(now.Sub(e.fetchedAt).Seconds())
-		cacheLog("cache[%s] hit (age=%ds)", p.ID(), age)
+		cacheLog("cache[%s] hit (age=%ds, ttl=%ds, status=%q)", p.ID(), age, int(ttl.Seconds()), e.snapshot.Status)
 		s := *e.snapshot
 		e.mu.Unlock()
 		return s
@@ -450,6 +470,21 @@ func metricIDs(s Snapshot) string {
 		result += "," + id
 	}
 	return result
+}
+
+// transientStatus reports whether a Snapshot.Status indicates a
+// self-resolving state where the user is expected to take a quick
+// out-of-band action (approve pairing in the Control UI, dismiss a
+// CAPTCHA in their browser) and the plugin should re-poll fast
+// enough that they don't have to also press a Stream Deck button to
+// see the resolved state. Unknown / operational stay on the regular
+// MinTTL.
+func transientStatus(status string) bool {
+	switch status {
+	case "pairing-pending", "blocked":
+		return true
+	}
+	return false
 }
 
 // boolStr picks t when cond is true and f otherwise; a tiny helper used

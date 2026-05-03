@@ -36,6 +36,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -48,13 +49,26 @@ import (
 )
 
 const (
-	providerID    = "openclaw"
-	providerName  = "OpenClaw"
-	defaultBase   = "ws://127.0.0.1:18789"
-	connectMethod = "connect"
-	usageMethod   = "usage.cost"
-	dialTimeout   = 10 * time.Second
+	providerID     = "openclaw"
+	providerName   = "OpenClaw"
+	defaultBase    = "ws://127.0.0.1:18789"
+	connectMethod  = "connect"
+	usageMethod    = "usage.cost"
+	dialTimeout    = 10 * time.Second
 	requestTimeout = 15 * time.Second
+
+	// clientID identifies us to the gateway as a Control UI client
+	// (see GATEWAY_CLIENT_IDS.CONTROL_UI in the openclaw repo's
+	// src/gateway/protocol/client-info.ts). The gateway grants
+	// Tailscale-Serve auto-pair only to Control-UI-class operator
+	// sessions; this is what makes pairing work without a manual
+	// `openclaw devices approve` step on a .ts.net deployment.
+	clientID = "openclaw-control-ui"
+
+	// clientMode is the matching client.mode value (UI). Pairs with
+	// clientID — both are part of the gateway's Control-UI carve-out
+	// recognizer.
+	clientMode = "ui"
 )
 
 // window is one of the time slices we emit metrics for.
@@ -144,10 +158,37 @@ func (Provider) Fetch(_ providers.FetchContext) (providers.Snapshot, error) {
 	}
 	if err != nil {
 		var pp *pairingPendingError
-		if errors.As(err, &pp) {
+		if errors.As(err, &pp) && pp.RequestID != "" {
+			// Auto-approve our own pending pairing using the configured
+			// shared operator token. The token already has admin/pairing
+			// scope (the user pasted it in the PI), so we open a second
+			// shared-token-only session — no device block, no signature
+			// roundtrip — and call device.pair.approve. On success retry
+			// the device-paired connect; the server now finds us in the
+			// approved set and issues a deviceToken via hello-ok.
+			//
+			// Falls back to the PAIR face if the approve RPC errors —
+			// that preserves the manual `openclaw devices approve …`
+			// recovery path for setups where the PI token isn't
+			// admin-scoped.
+			logf("auto-approving self-pairing requestId=%s deviceId=%s", pp.RequestID, pp.DeviceID)
+			if approveErr := autoApproveSelfPairing(ctx, base, token, pp.RequestID); approveErr != nil {
+				logf("auto-approve failed (%v); surfacing PAIR face for manual approval", approveErr)
+				return pairingPendingSnapshot(pp), nil
+			}
+			logf("auto-approve ok; retrying connect")
+			conn, err = dialAndConnect(ctx, base, token, identity, "")
+			if err != nil {
+				if errors.As(err, &pp) {
+					return pairingPendingSnapshot(pp), nil
+				}
+				return errorSnapshot(short(err)), nil
+			}
+		} else if errors.As(err, &pp) {
 			return pairingPendingSnapshot(pp), nil
+		} else {
+			return errorSnapshot(short(err)), nil
 		}
-		return errorSnapshot(short(err)), nil
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
@@ -259,12 +300,29 @@ type connectParams struct {
 	Locale      string             `json:"locale"`
 }
 
-// connectClient identifies our process to the gateway. We use
-// "gateway-client" + "backend" so the same connect frame triggers
-// the local-loopback bypass (shouldSkipLocalBackendSelfPairing in
-// handshake-auth-helpers.ts:252-272) for users co-locating the
-// plugin with their gateway, while remote users go through the
-// device-pairing path.
+// connectClient identifies our process to the gateway. We present
+// "openclaw-control-ui" + "ui" because OpenClaw's Tailscale-Serve
+// auto-pair carve-out fires only for Control UI operator sessions —
+// see docs/web/control-ui.md ("Tailscale Serve can skip the pairing
+// round trip for Control UI operator sessions when
+// gateway.auth.allowTailscale: true, Tailscale identity verifies,
+// and the [client] presents its device identity") and the
+// isOperatorUiClient gate in src/gateway/server/ws-connection/.
+//
+// On a Tailscale Serve gateway (the .ts.net URL pattern), the
+// gateway sees the user's Tailscale identity in the upstream
+// headers, sees us identifying as Control UI, sees our Ed25519
+// device keypair, and skips manual approval — first poll lights up
+// metrics. On a loopback gateway, the local-pairing carve-out
+// already accepts any client. Remote-without-Tailscale falls
+// through to the manual PAIR-face flow with the Copy-approve-command
+// affordance in the PI.
+//
+// This isn't impersonation — the plugin really IS an operator UI
+// surface (it's literally a dashboard for usage tiles), the gateway
+// records a separate device entry per Stream Deck install, and the
+// granted scope set is whatever the gateway issues to that device's
+// pairing contract.
 type connectClient struct {
 	ID       string `json:"id"`
 	Version  string `json:"version"`
@@ -332,12 +390,21 @@ type helloResponse struct {
 // requestedScopes is the operator scope set we ask the server for.
 // Same set as the dashboard SPA's CONTROL_UI_OPERATOR_SCOPES at
 // ui/src/ui/gateway.ts:152.
+//
+// Order is load-bearing: the gateway's signature verifier reconstructs
+// the canonical V3 payload using `connectParams.scopes` AS-IS (no
+// re-sort) — see resolveDeviceSignaturePayloadVersion at
+// src/gateway/server/ws-connection/handshake-auth-helpers.ts:300-340.
+// The literal slice we put on the wire must therefore equal the literal
+// slice we hand to buildDeviceAuthPayloadV3. Keeping this constant
+// alphabetically sorted is the simplest way to guarantee that
+// invariant; TestRequestedScopesSorted enforces it.
 var requestedScopes = []string{
 	"operator.admin",
-	"operator.read",
-	"operator.write",
 	"operator.approvals",
 	"operator.pairing",
+	"operator.read",
+	"operator.write",
 }
 
 // errStaleDeviceTokenCleared is the sentinel dialAndConnect returns
@@ -376,6 +443,34 @@ type pairingErrorDetails struct {
 type challengePayload struct {
 	Nonce string `json:"nonce"`
 	TS    int64  `json:"ts"`
+}
+
+// dialHeaders builds the HTTP headers we attach to the WebSocket
+// upgrade request. The Origin matters because the gateway's Control
+// UI auth path enforces an Origin allowlist
+// (gateway.controlUi.allowedOrigins) — defaults trust the gateway's
+// own URL, so we set Origin to the http(s) form of the gateway's
+// own ws(s) URL. That keeps Tailscale-Serve auto-pair viable for
+// Control-UI-class sessions without the user having to add anything
+// to allowedOrigins on the gateway.
+//
+// Tailscale Serve doesn't inject an Origin into upstream — Go's
+// websocket dialer won't synthesize one either — so without this
+// the server falls back to the dangerous host-header origin
+// fallback (off by default) and rejects with "origin not allowed".
+func dialHeaders(base string) http.Header {
+	h := http.Header{}
+	if u, err := url.Parse(base); err == nil {
+		switch u.Scheme {
+		case "ws":
+			u.Scheme = "http"
+		case "wss":
+			u.Scheme = "https"
+		}
+		u.Path, u.RawQuery, u.Fragment = "", "", ""
+		h.Set("Origin", strings.TrimSuffix(u.String(), "/"))
+	}
+	return h
 }
 
 // awaitConnectChallenge reads frames until we see a connect.challenge
@@ -422,7 +517,9 @@ func awaitConnectChallenge(ctx context.Context, ws *websocket.Conn) (string, err
 func dialAndConnect(ctx context.Context, base, sharedToken string, identity *deviceIdentity, deviceToken string) (*websocket.Conn, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-	ws, _, err := websocket.Dial(dialCtx, base, nil)
+	ws, _, err := websocket.Dial(dialCtx, base, &websocket.DialOptions{
+		HTTPHeader: dialHeaders(base),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("OpenClaw: cannot dial gateway at %s — %w", base, err)
 	}
@@ -437,14 +534,26 @@ func dialAndConnect(ctx context.Context, base, sharedToken string, identity *dev
 
 	const role = "operator"
 	signedAt := time.Now().UnixMilli()
+	// Mirror the server's resolveSignatureToken precedence
+	// (handshake-auth-helpers.ts:274-281): canonical.token is
+	// auth.token ?? auth.deviceToken ?? auth.bootstrapToken ?? "".
+	// Using deviceToken alone here was the historical bug — the
+	// server reconstructs canonical with the shared sharedToken when
+	// auth.token is set, so signing over an empty deviceToken
+	// produced "device signature invalid" on every connect that had
+	// a configured operator token.
+	signatureToken := sharedToken
+	if signatureToken == "" {
+		signatureToken = deviceToken
+	}
 	canonical := buildDeviceAuthPayloadV3(
 		identity.DeviceID,
-		"gateway-client",
-		"backend",
+		clientID,
+		clientMode,
 		role,
 		requestedScopes,
 		signedAt,
-		deviceToken, // signature binds the payload to this token when set
+		signatureToken,
 		nonce,
 		devicePlatform(),
 		"", // deviceFamily — we have no equivalent; server treats empty as ok
@@ -464,10 +573,10 @@ func dialAndConnect(ctx context.Context, base, sharedToken string, identity *dev
 			MinProtocol: 3,
 			MaxProtocol: 3,
 			Client: connectClient{
-				ID:       "gateway-client",
+				ID:       clientID,
 				Version:  "usage-buttons",
 				Platform: devicePlatform(),
-				Mode:     "backend",
+				Mode:     clientMode,
 			},
 			Role:   role,
 			Scopes: requestedScopes,
@@ -559,6 +668,108 @@ func hasScope(scopes []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// autoApproveSelfPairing approves a pending device-pairing requestId
+// using the user's already-configured shared operator token, so the
+// plugin can self-onboard without an SSH-and-CLI step. We open a
+// second, transient WebSocket session that:
+//
+//   - presents only `auth.token` (no `device` block) — this is the
+//     same posture the openclaw CLI uses; the server treats it as a
+//     shared-token operator session (client.id = "cli") and grants
+//     whatever scopes the token carries (admin → pairing included).
+//
+//   - calls the `device.pair.approve { requestId }` RPC documented at
+//     docs/gateway/protocol.md and gated by operator.pairing in
+//     src/gateway/method-scopes.ts.
+//
+//   - closes immediately after.
+//
+// Returns nil on a successful approve. Surfaces errors otherwise so
+// the caller can fall back to the manual PAIR-face workflow when the
+// configured token isn't pairing-capable (e.g. read-only operator
+// token), instead of silently swallowing the rejection.
+func autoApproveSelfPairing(ctx context.Context, base, sharedToken, requestID string) error {
+	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
+	ws, _, err := websocket.Dial(dialCtx, base, &websocket.DialOptions{
+		HTTPHeader: dialHeaders(base),
+	})
+	if err != nil {
+		return fmt.Errorf("dial: %w", err)
+	}
+	defer ws.Close(websocket.StatusNormalClosure, "")
+	ws.SetReadLimit(8 * 1024 * 1024)
+
+	// Drain the connect.challenge — the server emits it eagerly even
+	// when the eventual connect won't include a device block, and the
+	// challenge-timeout watchdog fires if the client never reads it.
+	if _, err := awaitConnectChallenge(ctx, ws); err != nil {
+		return fmt.Errorf("challenge: %w", err)
+	}
+
+	connectID, err := newRequestID()
+	if err != nil {
+		return err
+	}
+	frame := reqFrame{
+		Type:   "req",
+		ID:     connectID,
+		Method: connectMethod,
+		Params: connectParams{
+			MinProtocol: 3,
+			MaxProtocol: 3,
+			Client: connectClient{
+				// "cli" / "cli" is the CLI tool's own posture — the
+				// gateway recognizes it as a shared-token operator
+				// session that doesn't require device pairing.
+				ID:       "cli",
+				Version:  "usage-buttons",
+				Platform: devicePlatform(),
+				Mode:     "cli",
+			},
+			Role:   "operator",
+			Scopes: requestedScopes,
+			Caps:   []string{},
+			Auth: connectAuthPayload{
+				Token: sharedToken,
+			},
+			// No Device block — that's what makes this a shared-token
+			// session instead of a paired-device session.
+			UserAgent: "UsageButtons/Stream-Deck-Auto-Approver",
+			Locale:    "en-US",
+		},
+	}
+	if err := wsjson.Write(ctx, ws, frame); err != nil {
+		return fmt.Errorf("connect write: %w", err)
+	}
+	var hello helloResponse
+	if err := awaitResponse(ctx, ws, connectID, &hello); err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	if !hasScope(hello.Auth.Scopes, "operator.pairing") && !hasScope(hello.Auth.Scopes, "operator.admin") {
+		return fmt.Errorf("shared token lacks operator.pairing/admin scope; granted=%v", hello.Auth.Scopes)
+	}
+
+	approveID, err := newRequestID()
+	if err != nil {
+		return err
+	}
+	approveFrame := reqFrame{
+		Type:   "req",
+		ID:     approveID,
+		Method: "device.pair.approve",
+		Params: map[string]string{"requestId": requestID},
+	}
+	if err := wsjson.Write(ctx, ws, approveFrame); err != nil {
+		return fmt.Errorf("approve write: %w", err)
+	}
+	var approveResp json.RawMessage
+	if err := awaitResponse(ctx, ws, approveID, &approveResp); err != nil {
+		return fmt.Errorf("approve rpc: %w", err)
+	}
+	return nil
 }
 
 // logf emits an [openclaw] log line via providers.LogSink when the
@@ -811,15 +1022,24 @@ func errorSnapshot(message string) providers.Snapshot {
 // pairingPendingSnapshot returns the snapshot we surface while the
 // gateway is waiting for the user to approve our device pairing
 // request. The Error message starts with "pairing required" so the
-// plugin's renderer routes it to the PAIR face and includes the
-// literal CLI command (verbatim, with requestId) so a user inspecting
-// the snapshot.Error sees exactly what to type at their gateway host.
+// plugin's renderer routes it to the PAIR face and so the PI's
+// Copy-approve-command extractor (stat.html) can pull the requestId
+// out via regex when it shows the prebuilt openclaw CLI command.
+//
+// Wording leads with the dashboard flow because that's the path that
+// works without an SSH session for the common Tailscale-Serve setup
+// (browser identity satisfies operator scope on the trusted-host
+// path, no CLI invocation needed). The CLI fallback stays in the
+// message for users running the gateway on a host they can shell
+// into but no Tailscale identity grant — they'll see the same string
+// in the PI plus the prebuilt copy-paste command from the Copy
+// button.
 func pairingPendingSnapshot(pp *pairingPendingError) providers.Snapshot {
 	var msg string
 	if pp.RequestID != "" {
-		msg = fmt.Sprintf("pairing required — on the OpenClaw gateway host, run: openclaw devices approve %s   (then the next plugin poll will succeed)", pp.RequestID)
+		msg = fmt.Sprintf("pairing required — press the OpenClaw button to open the gateway dashboard and approve this request, or run on the gateway host: openclaw devices approve %s   (next plugin poll picks up metrics)", pp.RequestID)
 	} else {
-		msg = "pairing required — on the OpenClaw gateway host, run: openclaw devices list   (then approve the request matching this Stream Deck plugin's deviceId)"
+		msg = "pairing required — press the OpenClaw button to open the gateway dashboard and approve there, or run on the gateway host: openclaw devices list"
 	}
 	return providers.Snapshot{
 		ProviderID:   providerID,

@@ -9,6 +9,7 @@ import (
 	"hash/fnv"
 	"log"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -920,14 +921,60 @@ func handleKeyDown(conn *streamdeck.Connection, ev streamdeck.Event) {
 }
 
 // providerDashboardURL returns the user-facing dashboard URL for
-// providers whose stats endpoint is gated by browser-only bot detection.
-// Empty for providers that don't need a page-load nudge.
+// providers whose stats endpoint needs a real-browser visit to recover
+// (bot-detection cookie refresh, device-pairing approval, …). Empty for
+// providers that don't need a page-load nudge.
 func providerDashboardURL(providerID string) string {
 	switch providerID {
 	case "nousresearch":
 		return "https://portal.nousresearch.com/usage"
+	case "openclaw":
+		// The gateway serves its Control UI on the same host+port as
+		// the WebSocket, just under http(s) instead of ws(s) — see
+		// docs/web/control-ui.md. When pairing is required the user
+		// can land on the dashboard, run `openclaw devices approve …`
+		// from the host (the CLI surfaces the requestId), and the
+		// next plugin poll picks up metrics.
+		return openClawControlUIURL()
 	}
 	return ""
+}
+
+// openClawControlUIURL converts the configured OpenClaw gateway URL
+// (ws://host:port or wss://...) into the Control UI URL (http(s)://...)
+// served on the same socket. Empty when the user hasn't configured a
+// base URL yet — pressing the key falls back to the no-op nudge path
+// in that case.
+func openClawControlUIURL() string {
+	pk := settings.ProviderKeysGet()
+	raw := settings.ResolveEndpoint(pk.OpenClawBaseURL, "ws://127.0.0.1:18789", "OPENCLAW_BASE_URL")
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	switch u.Scheme {
+	case "ws":
+		u.Scheme = "http"
+	case "wss":
+		u.Scheme = "https"
+	case "http", "https":
+		// already correct — user pasted the http(s) form
+	default:
+		return ""
+	}
+	// Land on /nodes — that's the tab that hosts the Devices /
+	// pair-approval panel in the Control UI (see ui/src/ui/navigation.ts
+	// and views/nodes.ts in openclaw/openclaw). The default landing
+	// page is /chat which doesn't expose pairing controls, so a user
+	// pressing PAIR ended up hunting through tabs to find the approve
+	// button. Going straight to /nodes makes the recovery one click.
+	u.Path = "/nodes"
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
 }
 
 // providerNeedsDashboardNudge reports whether pressing a key for

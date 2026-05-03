@@ -10,26 +10,46 @@ import (
 )
 
 // TestBuildDeviceAuthPayloadV3 locks in the canonical pipe-string
-// format the server validates. Source-of-truth: src/gateway/device-auth.ts:36-52
-// in openclaw/openclaw.
+// format the server validates. Source-of-truth:
+// src/gateway/device-auth.ts:buildDeviceAuthPayloadV3 in openclaw/openclaw.
+//
+// The function is now a literal field-joiner: scopes pass through in
+// the caller's order, no sort. The wire-vs-canonical scope-ordering
+// invariant is enforced at the caller (requestedScopes is the sorted
+// constant, locked by TestRequestedScopesSorted).
 func TestBuildDeviceAuthPayloadV3(t *testing.T) {
 	got := buildDeviceAuthPayloadV3(
-		"ab12",          // deviceId
+		"ab12",           // deviceId
 		"gateway-client", // clientId
 		"backend",        // clientMode
 		"operator",       // role
-		[]string{"operator.read", "operator.admin"}, // scopes (intentionally unsorted)
-		1714680000000,                              // signedAt
-		"",                                         // token (empty for first connect)
-		"5f3a",                                     // nonce
-		"win32",                                    // platform
-		"",                                         // deviceFamily
+		[]string{"operator.admin", "operator.read"}, // scopes (already sorted)
+		1714680000000, // signedAt
+		"",            // token (empty for first connect)
+		"5f3a",        // nonce
+		"win32",       // platform
+		"",            // deviceFamily
 	)
-	// Scopes must arrive sorted (server side does .toSorted() too —
-	// see normalizeDeviceAuthScopes at src/shared/device-auth.ts:20-37).
 	want := "v3|ab12|gateway-client|backend|operator|operator.admin,operator.read|1714680000000||5f3a|win32|"
 	if got != want {
 		t.Errorf("payload mismatch\n got: %q\nwant: %q", got, want)
+	}
+}
+
+// TestBuildDeviceAuthPayloadV3_PreservesScopeOrder catches the bug
+// that broke v0.7.4+ — the gateway's verifier reconstructs canonical
+// using the wire scopes array AS-IS (handshake-auth-helpers.ts:300-340),
+// so this builder must NOT silently re-sort. If a future refactor
+// reintroduces a sort here the wire-vs-canonical invariant breaks again
+// for any call site that doesn't pre-sort.
+func TestBuildDeviceAuthPayloadV3_PreservesScopeOrder(t *testing.T) {
+	got := buildDeviceAuthPayloadV3(
+		"ab12", "gateway-client", "backend", "operator",
+		[]string{"operator.read", "operator.admin"}, // intentionally unsorted
+		0, "", "n", "win32", "",
+	)
+	if !strings.Contains(got, "|operator.read,operator.admin|") {
+		t.Errorf("scopes were reordered; canonical must equal wire order. got: %q", got)
 	}
 }
 

@@ -77,7 +77,7 @@
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.anthropic",
       "Name": "Anthropic",
-      "Tooltip": "Anthropic org-level cost (admin API key required) — today, MTD, 30 days.",
+      "Tooltip": "Anthropic org-level cost (admin API key required) — today, yesterday, 7d, MTD, 30d, burn rate, projected month.",
       "Icon": "assets/action-anthropic",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
@@ -429,7 +429,7 @@
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.openai",
       "Name": "OpenAI",
-      "Tooltip": "OpenAI org-level cost (admin API key required) — today, MTD, 30 days.",
+      "Tooltip": "OpenAI org-level cost (admin API key required) — today, yesterday, 7d, MTD, 30d, burn rate, projected month.",
       "Icon": "assets/action-openai",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,

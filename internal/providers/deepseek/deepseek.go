@@ -8,6 +8,24 @@
 // as decimal strings (DeepSeek serializes amounts as strings, not
 // numbers); we parse them once and surface the spendable balance plus
 // a paid/granted breakdown caption.
+//
+// FUTURE WORK — richer metrics via platform.deepseek.com (separate
+// effort, requires extension allowlist + browser-bridge):
+//
+//   - GET /api/v0/users/get_user_summary       (account state)
+//   - GET /api/v0/usage/cost?month=M&year=Y    (per-day cost, current/prior month)
+//   - GET /api/v0/usage/amount?month=M&year=Y  (per-day token + request volume)
+//   - GET /api/v0/users/get_api_keys           (api-key staleness from last_used)
+//
+// These would unlock today/yesterday/7d/MTD/burn/projected windows and
+// monthly token volume. Auth model is a user web-token (not the
+// `sk-…` API key — confirmed via console probe: API key returns 40002
+// "Missing Token" against /api/v0/*). Plumbing requires:
+//
+//  1. chrome-extension/ allowlist entry for platform.deepseek.com
+//  2. Token extraction from page localStorage on the extension side
+//  3. A new fetch path in this package that prefers the bridge when
+//     connected, falls back to the existing /user/balance API when not.
 package deepseek
 
 import (

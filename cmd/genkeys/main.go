@@ -38,6 +38,7 @@ var providerColors = map[string]string{
 	"warp":        "#938bb4",
 	"zai":         "#e85a6a",
 	"kimi-k2":     "#64748b",
+	"moonshot":    "#0a84ff",
 }
 
 func main() {

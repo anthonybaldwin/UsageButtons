@@ -17,7 +17,7 @@ Runs on **Windows and macOS**.
 
 ## Settings
 
-Each provider is its own action — drag **Claude Code**, **Codex**, **Gemini**,
+Each provider is its own action — drag **Claude**, **Codex**, **Gemini**,
 **Vertex AI**, etc. onto a key and configure the metric, colors, and
 thresholds from the Property Inspector.
 
@@ -65,7 +65,7 @@ UsageButtons/
 │   │   ├── amp/                          # Amp (browser)
 │   │   ├── antigravity/                  # Antigravity (local language server)
 │   │   ├── augment/                      # Augment (CLI/browser)
-│   │   ├── claude/                       # Claude Code (Claude OAuth + browser web API)
+│   │   ├── claude/                       # Claude (Claude OAuth + browser web API)
 │   │   ├── codex/                        # Codex (OAuth)
 │   │   ├── cookieaux/                    # cookie-gated provider messaging helpers
 │   │   ├── copilot/                      # GitHub Copilot
@@ -119,7 +119,7 @@ Short version:
    **UsageButtons-Helper-unpacked.zip** from the same release, unzip
    it, and **Load unpacked** in `chrome://extensions`. The plugin
    auto-registers — nothing to configure.
-3. Drag a provider (**Claude Code**, **Codex**, **Copilot**, etc.) onto a
+3. Drag a provider (**Claude**, **Codex**, **Copilot**, etc.) onto a
    Stream Deck key and pick a metric from the Property Inspector.
 
 ## Build from source

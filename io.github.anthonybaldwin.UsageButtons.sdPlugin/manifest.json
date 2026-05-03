@@ -300,8 +300,8 @@
     },
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.kimi",
-      "Name": "Kimi",
-      "Tooltip": "Kimi usage stats — weekly coding quota and five-hour rate limit.",
+      "Name": "Kimi for Coding",
+      "Tooltip": "Kimi for Coding usage — weekly coding quota and 5-hour rate limit. Helper extension preferred; OAuth from `kimi login` is the fallback.",
       "Icon": "assets/action-kimi",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,

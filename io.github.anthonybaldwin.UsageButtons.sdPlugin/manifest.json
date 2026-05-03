@@ -124,7 +124,7 @@
     },
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.claude",
-      "Name": "Clawd",
+      "Name": "Claude Code",
       "Tooltip": "Claude usage stats — session %, weekly %, Sonnet %, Opus %, Design, Routines, extras, costs.",
       "Icon": "assets/action-claude",
       "PropertyInspectorPath": "ui/stat.html",

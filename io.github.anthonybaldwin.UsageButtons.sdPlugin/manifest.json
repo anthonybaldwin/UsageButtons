@@ -203,6 +203,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.deepseek",
+      "Name": "DeepSeek",
+      "Tooltip": "DeepSeek usage — balance + paid/granted; with the Helper extension on platform.deepseek.com adds today/yesterday/7d/MTD/30d/burn/projected and tokens MTD.",
+      "Icon": "assets/action-deepseek",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-deepseek-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.factory",
       "Name": "Droid",
       "Tooltip": "Droid usage stats — Standard and Premium token usage.",
@@ -461,7 +477,7 @@
     {
       "UUID": "io.github.anthonybaldwin.UsageButtons.opencode",
       "Name": "OpenCode",
-      "Tooltip": "OpenCode usage stats — five-hour and weekly usage.",
+      "Tooltip": "OpenCode usage stats — Black plan, Go (Lite) plan, and shared billing balance.",
       "Icon": "assets/action-opencode",
       "PropertyInspectorPath": "ui/stat.html",
       "SupportedInMultiActions": false,
@@ -469,38 +485,6 @@
       "States": [
         {
           "Image": "assets/action-opencode-key",
-          "ShowTitle": false,
-          "TitleAlignment": "top"
-        }
-      ]
-    },
-    {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.opencodego",
-      "Name": "OpenCode Go",
-      "Tooltip": "OpenCode Go usage stats — five-hour, weekly, and monthly usage.",
-      "Icon": "assets/action-opencodego",
-      "PropertyInspectorPath": "ui/stat.html",
-      "SupportedInMultiActions": false,
-      "UserTitleEnabled": true,
-      "States": [
-        {
-          "Image": "assets/action-opencodego-key",
-          "ShowTitle": false,
-          "TitleAlignment": "top"
-        }
-      ]
-    },
-    {
-      "UUID": "io.github.anthonybaldwin.UsageButtons.deepseek",
-      "Name": "DeepSeek",
-      "Tooltip": "DeepSeek usage — balance + paid/granted; with the Helper extension on platform.deepseek.com adds today/yesterday/7d/MTD/30d/burn/projected and tokens MTD.",
-      "Icon": "assets/action-deepseek",
-      "PropertyInspectorPath": "ui/stat.html",
-      "SupportedInMultiActions": false,
-      "UserTitleEnabled": true,
-      "States": [
-        {
-          "Image": "assets/action-deepseek-key",
           "ShowTitle": false,
           "TitleAlignment": "top"
         }

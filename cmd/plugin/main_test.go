@@ -69,6 +69,13 @@ func TestMigrateMetricID(t *testing.T) {
 		{"alibaba opus → monthly", "alibaba", "opus-percent", "monthly-percent"},
 		{"alibaba session unchanged", "alibaba", "session-percent", "session-percent"},
 		{"alibaba weekly unchanged", "alibaba", "weekly-percent", "weekly-percent"},
+		// OpenCode (opencode + opencodego folded). Pre-rename buttons
+		// land on Black/Go lanes by raw action UUID.
+		{"opencode session → black-rolling", "opencode", "session-percent", "black-rolling-percent"},
+		{"opencode weekly → black-weekly", "opencode", "weekly-percent", "black-weekly-percent"},
+		{"opencodego session → go-rolling", "opencodego", "session-percent", "go-rolling-percent"},
+		{"opencodego weekly → go-weekly", "opencodego", "weekly-percent", "go-weekly-percent"},
+		{"opencodego monthly → go-monthly", "opencodego", "monthly-percent", "go-monthly-percent"},
 		{"claude passthrough", "claude", "session-percent", "session-percent"},
 		{"claude opus passthrough", "claude", "weekly-opus-percent", "weekly-opus-percent"},
 		{"unknown provider passthrough", "unknown", "opus-percent", "opus-percent"},
@@ -80,6 +87,53 @@ func TestMigrateMetricID(t *testing.T) {
 			got := migrateMetricID(tc.provider, tc.in)
 			if got != tc.want {
 				t.Errorf("migrateMetricID(%q, %q) = %q, want %q", tc.provider, tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCanonicalProviderID locks in the action-UUID rebinding contract:
+// folded provider IDs (opencodego, removed from the manifest in v0.9)
+// must resolve to their canonical equivalents so user-pinned buttons
+// keep working without manual re-binding.
+func TestCanonicalProviderID(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"opencodego folds into opencode", "opencodego", "opencode"},
+		{"opencode passthrough", "opencode", "opencode"},
+		{"unrelated provider passthrough", "claude", "claude"},
+		{"empty passthrough", "", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := canonicalProviderID(tc.in); got != tc.want {
+				t.Errorf("canonicalProviderID(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestProviderIDForAction covers the action-UUID → registered-provider
+// path: legacy `...opencodego` UUIDs resolve to opencode, while live
+// UUIDs pass through unchanged.
+func TestProviderIDForAction(t *testing.T) {
+	tests := []struct {
+		name   string
+		action string
+		want   string
+	}{
+		{"opencodego folds", "io.github.anthonybaldwin.UsageButtons.opencodego", "opencode"},
+		{"opencode passthrough", "io.github.anthonybaldwin.UsageButtons.opencode", "opencode"},
+		{"claude passthrough", "io.github.anthonybaldwin.UsageButtons.claude", "claude"},
+		{"unknown prefix returns empty", "com.example.other.foo", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := providerIDForAction(tc.action); got != tc.want {
+				t.Errorf("providerIDForAction(%q) = %q, want %q", tc.action, got, tc.want)
 			}
 		})
 	}

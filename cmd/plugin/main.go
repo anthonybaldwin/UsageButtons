@@ -56,7 +56,6 @@ import (
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/openai"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/openclaw"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/opencode"
-	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/opencodego"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/openrouter"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/perplexity"
 	_ "github.com/anthonybaldwin/UsageButtons/internal/providers/synthetic"
@@ -97,6 +96,16 @@ var (
 	globalSettingsSeen bool
 
 	autoRegisterOnce sync.Once
+	// metricMigrationLogOnce gates the first-run summary log emitted
+	// when a saved button's metric ID is rewritten by metricIDAliases.
+	// One log per plugin launch is enough — subsequent migrations are
+	// silent.
+	metricMigrationLogOnce sync.Once
+	// actionMigrationLogOnce gates the first-run summary log emitted
+	// when a saved button's action UUID maps to a folded-in provider
+	// (opencodego → opencode). Same pacing as
+	// metricMigrationLogOnce.
+	actionMigrationLogOnce sync.Once
 )
 
 func globalSettingsLoaded() bool {
@@ -177,7 +186,7 @@ func starfieldAnimationLoop(conn *streamdeck.Connection) {
 		mu.Lock()
 		var animateCtxs []string
 		for ctx, key := range visibleKeys {
-			providerID := streamdeck.ProviderIDFromAction(key.action)
+			providerID := providerIDForAction(key.action)
 			if providerID == "" {
 				continue
 			}
@@ -210,7 +219,7 @@ func scheduleDueKeys(conn *streamdeck.Connection) {
 	now := time.Now()
 	var due []string
 	for ctx, key := range visibleKeys {
-		providerID := streamdeck.ProviderIDFromAction(key.action)
+		providerID := providerIDForAction(key.action)
 		interval := time.Duration(settings.ResolveRefreshMs(key.settings, providerID)) * time.Millisecond
 		if key.nextPollAt.IsZero() && !key.lastPollAt.IsZero() {
 			key.nextPollAt = nextPollTime(key.lastPollAt, interval, ctx, providerID)
@@ -266,7 +275,7 @@ func refreshOrRedrawVisible(conn *streamdeck.Connection) {
 	for ctx, key := range visibleKeys {
 		contexts = append(contexts, visibleContext{
 			context:    ctx,
-			providerID: streamdeck.ProviderIDFromAction(key.action),
+			providerID: providerIDForAction(key.action),
 		})
 	}
 	mu.Unlock()
@@ -331,9 +340,21 @@ func handleEvent(conn *streamdeck.Connection, ev streamdeck.Event) {
 }
 
 func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
-	providerID := streamdeck.ProviderIDFromAction(ev.Action)
-	if providerID == "" {
+	rawProviderID := streamdeck.ProviderIDFromAction(ev.Action)
+	if rawProviderID == "" {
 		return
+	}
+	// Folded-in providers (opencodego → opencode) keep their original
+	// action UUID on user-pinned buttons after the manifest entry is
+	// removed. Resolve to the canonical registered provider for fetch
+	// dispatch, but keep rawProviderID for metric-ID migration so
+	// e.g. opencodego/session-percent → go-rolling-percent (not
+	// opencode/black-rolling-percent).
+	providerID := canonicalProviderID(rawProviderID)
+	if rawProviderID != providerID {
+		actionMigrationLogOnce.Do(func() {
+			conn.Logf("action UUID migration: %s → %s (rebinding folded providers silently)", rawProviderID, providerID)
+		})
 	}
 
 	var payload streamdeck.WillAppearPayload
@@ -341,6 +362,22 @@ func handleWillAppear(conn *streamdeck.Connection, ev streamdeck.Event) {
 
 	var ks settings.KeySettings
 	json.Unmarshal(payload.Settings, &ks)
+
+	// Migrate stale metricID + persist if it changed. Reads continue
+	// to work via effectiveMetricID's alias lookup, but persisting
+	// the canonical ID keeps SetSettings round-trips clean and stops
+	// the PI dropdown from showing the old ID after a button reload.
+	if ks.MetricID != "" {
+		if migrated := migrateMetricID(rawProviderID, ks.MetricID); migrated != ks.MetricID {
+			old := ks.MetricID
+			ks.MetricID = migrated
+			raw, _ := json.Marshal(ks)
+			conn.SetSettings(ev.Context, raw)
+			metricMigrationLogOnce.Do(func() {
+				conn.Logf("metricID migration: %s/%s → %s (rebinding stale buttons silently)", rawProviderID, old, migrated)
+			})
+		}
+	}
 
 	metricID := effectiveMetricID(ks, providerID)
 	// Track this (provider, metric) pair so multi-endpoint providers
@@ -512,7 +549,7 @@ func handleWillDisappear(conn *streamdeck.Connection, ev streamdeck.Event) {
 	key, ok := visibleKeys[ev.Context]
 	var providerID, metricID string
 	if ok {
-		providerID = streamdeck.ProviderIDFromAction(key.action)
+		providerID = providerIDForAction(key.action)
 		metricID = effectiveMetricID(key.settings, providerID)
 	}
 	delete(visibleKeys, ev.Context)
@@ -536,7 +573,7 @@ func handleTitleParametersDidChange(conn *streamdeck.Connection, ev streamdeck.E
 	key, ok := visibleKeys[ev.Context]
 	if ok {
 		key.showTitle = payload.TitleParameters.ShowTitle
-		providerID := streamdeck.ProviderIDFromAction(key.action)
+		providerID := providerIDForAction(key.action)
 		key.customTitle = isCustomTitle(
 			payload.Title,
 			key.lastAutoTitle,
@@ -561,7 +598,7 @@ func handleDidReceiveSettings(conn *streamdeck.Connection, ev streamdeck.Event) 
 	key, ok := visibleKeys[ev.Context]
 	var providerID, oldMetric, newMetric string
 	if ok {
-		providerID = streamdeck.ProviderIDFromAction(key.action)
+		providerID = providerIDForAction(key.action)
 		oldMetric = effectiveMetricID(key.settings, providerID)
 		newMetric = effectiveMetricID(ks, providerID)
 		key.settings = ks
@@ -848,7 +885,7 @@ func replyUnregisterCookieHost(conn *streamdeck.Connection, ctxStr, action strin
 }
 
 func replyProviderStatus(conn *streamdeck.Connection, ctxStr, action string) {
-	providerID := streamdeck.ProviderIDFromAction(action)
+	providerID := providerIDForAction(action)
 	prov := providers.Get(providerID)
 	if prov == nil {
 		return
@@ -912,7 +949,7 @@ func handleKeyDown(conn *streamdeck.Connection, ev streamdeck.Event) {
 		conn.OpenURL(update.URL())
 		return
 	}
-	providerID := streamdeck.ProviderIDFromAction(ev.Action)
+	providerID := providerIDForAction(ev.Action)
 	// Cookie-based providers can lock up when the host's bot-detection
 	// JS (DataDome on portal.nousresearch.com) only refreshes its
 	// fingerprint cookie on page load. Whenever the cached snapshot is
@@ -1026,7 +1063,7 @@ func refreshProviderSiblings(conn *streamdeck.Connection, providerID, skipContex
 		if ctx == skipContext {
 			continue
 		}
-		if streamdeck.ProviderIDFromAction(key.action) == providerID {
+		if providerIDForAction(key.action) == providerID {
 			siblings = append(siblings, ctx)
 		}
 	}
@@ -1071,7 +1108,7 @@ func refreshKey(conn *streamdeck.Connection, context string, force bool) {
 	now := time.Now()
 	action := key.action
 	ks := key.settings
-	providerID := streamdeck.ProviderIDFromAction(action)
+	providerID := providerIDForAction(action)
 	interval := time.Duration(settings.ResolveRefreshMs(ks, providerID)) * time.Millisecond
 	key.lastPollAt = now
 	key.nextPollAt = nextPollTime(now, interval, context, providerID)
@@ -1118,7 +1155,7 @@ func redrawKeyFromCache(conn *streamdeck.Connection, context string) {
 	keyCopy := *key
 	mu.Unlock()
 
-	providerID := streamdeck.ProviderIDFromAction(keyCopy.action)
+	providerID := providerIDForAction(keyCopy.action)
 	if providerID == "" {
 		return
 	}
@@ -1701,6 +1738,57 @@ var metricIDAliases = map[string]map[string]string{
 	"alibaba": {
 		"opus-percent": "monthly-percent",
 	},
+	// OpenCode collapsed two providers (opencode + opencodego) into a
+	// single provider with three namespaced metric lanes
+	// (black-* / go-* / billing-*) in v0.9. Pre-rename buttons land
+	// here:
+	//   - opencode buttons used "session-percent" / "weekly-percent"
+	//     for what is really the Black plan's rolling/weekly windows.
+	//   - opencodego buttons used the same Claude-flavored IDs (plus
+	//     "monthly-percent") for the Lite plan; they hit the
+	//     opencodego action UUID, which migrateActionUUID rebinds to
+	//     opencode at willAppear time.
+	"opencode": {
+		"session-percent": "black-rolling-percent",
+		"weekly-percent":  "black-weekly-percent",
+	},
+	"opencodego": {
+		"session-percent": "go-rolling-percent",
+		"weekly-percent":  "go-weekly-percent",
+		"monthly-percent": "go-monthly-percent",
+	},
+}
+
+// providerIDActionAliases maps legacy action-UUID-derived provider IDs
+// to their current canonical equivalents. Stream Deck identifies a key
+// by its action UUID, which lower-cases to a provider ID via
+// streamdeck.ProviderIDFromAction. When a UUID is removed from the
+// manifest (e.g. opencodego folded into opencode), buttons pinned by
+// users still surface the old UUID at willAppear time. Resolving via
+// this alias lets the unified provider handle them — combined with
+// metricIDAliases ("opencodego" entry) and SetSettings persistence,
+// the rebinding sticks across plugin restarts.
+var providerIDActionAliases = map[string]string{
+	"opencodego": "opencode",
+}
+
+// canonicalProviderID returns the registered provider ID a saved
+// button should resolve to, applying any legacy action-UUID aliases.
+// Pass the raw output of streamdeck.ProviderIDFromAction here.
+func canonicalProviderID(providerID string) string {
+	if alias, ok := providerIDActionAliases[providerID]; ok {
+		return alias
+	}
+	return providerID
+}
+
+// providerIDForAction extracts the canonical registered provider ID
+// from an action UUID — equivalent to canonicalProviderID composed
+// with streamdeck.ProviderIDFromAction. Folded providers (opencodego
+// → opencode) resolve transparently for fetch dispatch, while
+// metric-ID migration uses the raw form.
+func providerIDForAction(action string) string {
+	return canonicalProviderID(streamdeck.ProviderIDFromAction(action))
 }
 
 // migrateMetricID returns the current metric ID for a (provider,

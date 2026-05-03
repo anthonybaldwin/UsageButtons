@@ -175,11 +175,18 @@ exhaustive provider coverage. Restore a dropped topic via
 
 Cookie-gated providers (Claude web extras, Codex web extras, Cursor,
 Ollama, Abacus AI, Alibaba, Augment, Amp, Droid, Grok, Nous Research,
-Kimi, MiniMax, Mistral, OpenCode, OpenCode Go, and Perplexity) route
-requests through the companion Chrome extension in
-`chrome-extension/` (Usage Buttons Helper), which proxies `fetch()`
-for a narrow allowlist of origins. Cookies never leave the browser —
-the plugin only sees API response bodies.
+Kimi, MiniMax, Mistral, OpenCode, OpenCode Go, Perplexity, and
+DeepSeek's platform-bridge path) route requests through the companion
+Chrome extension in `chrome-extension/` (Usage Buttons Helper), which
+proxies `fetch()` for a narrow allowlist of origins. Cookies never
+leave the browser — the plugin only sees API response bodies.
+
+DeepSeek's platform path also auto-attaches an `Authorization: Bearer
+<token>` header read from `localStorage["userToken"]` in any open
+`platform.deepseek.com` tab (via `chrome.scripting.executeScript`) and
+a static `x-app-version` header. This is the only allowlist host today
+that needs explicit non-cookie auth — see `augmentHeadersForOrigin` in
+the service worker for the pattern if another provider needs it later.
 
 Architecture:
 

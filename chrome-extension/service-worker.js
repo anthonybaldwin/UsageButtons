@@ -38,7 +38,14 @@ const ALLOWED = [
   "minimax.io",
   "minimaxi.com",
   "mistral.ai",
+  "deepseek.com",
 ];
+
+// Static x-app-version header expected by platform.deepseek.com's
+// internal API. Captured from the live web client; if DeepSeek bumps
+// this, the platform endpoints will start returning 4xxxx — update
+// here and ship a new extension release.
+const DEEPSEEK_PLATFORM_APP_VERSION = "20240425.0";
 
 function originAllowed(rawURL) {
   let u;
@@ -177,6 +184,85 @@ function fromBase64(b64) {
   return bytes;
 }
 
+// readDeepSeekPlatformToken reads localStorage["userToken"] from any
+// open platform.deepseek.com tab and returns the inner JWT-ish string,
+// or null when no tab is open / no token is stored. The page persists
+// the token via an appKit wrapper:
+//
+//   localStorage["userToken"] = '{"value":"<TOKEN>","__version":"0"}'
+//
+// If the user is signed out (or has no platform tab open), we can't
+// read the token — the Go side then falls back to the public /user/balance
+// API for the basic balance metric.
+async function readDeepSeekPlatformToken() {
+  let tabs;
+  try {
+    tabs = await chrome.tabs.query({ url: "*://platform.deepseek.com/*" });
+  } catch (_e) {
+    return null;
+  }
+  if (!tabs || tabs.length === 0) return null;
+  for (const t of tabs) {
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: t.id },
+        // Runs in MAIN world to reach window.localStorage that the
+        // platform's bundle has populated. Returns the raw JSON value
+        // so we can parse it on this side.
+        world: "MAIN",
+        func: () => localStorage.getItem("userToken") || "",
+      });
+      const raw = results && results[0] && results[0].result;
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.value === "string" && parsed.value.length > 0) {
+          return parsed.value;
+        }
+      } catch (_e) {
+        // Older builds may store the token raw, not JSON-wrapped.
+        if (typeof raw === "string" && raw.length > 0) return raw;
+      }
+    } catch (_e) {
+      // executeScript can fail if the tab is loading or in a special state;
+      // try the next one.
+      continue;
+    }
+  }
+  return null;
+}
+
+// augmentHeadersForOrigin attaches site-specific auth/version headers
+// for hosts whose internal APIs require explicit non-cookie auth.
+// Returns the final headers object to pass to fetch(). For everything
+// outside this branch we just relay the caller-supplied headers.
+async function augmentHeadersForOrigin(url, callerHeaders) {
+  const headers = { ...(callerHeaders || {}) };
+  let host;
+  try { host = new URL(url).hostname.toLowerCase(); } catch { return headers; }
+
+  if (host === "platform.deepseek.com" || host.endsWith(".platform.deepseek.com")) {
+    if (!hasHeader(headers, "authorization")) {
+      const tok = await readDeepSeekPlatformToken();
+      if (tok) {
+        headers["Authorization"] = "Bearer " + tok;
+      }
+    }
+    if (!hasHeader(headers, "x-app-version")) {
+      headers["x-app-version"] = DEEPSEEK_PLATFORM_APP_VERSION;
+    }
+  }
+  return headers;
+}
+
+function hasHeader(h, name) {
+  const target = name.toLowerCase();
+  for (const k of Object.keys(h)) {
+    if (k.toLowerCase() === target) return true;
+  }
+  return false;
+}
+
 async function handleFetch(msg) {
   const base = { id: msg.id, userAgent: navigator.userAgent };
   if (!originAllowed(msg.url)) {
@@ -184,6 +270,7 @@ async function handleFetch(msg) {
     return;
   }
   try {
+    const headers = await augmentHeadersForOrigin(msg.url, msg.headers);
     const init = {
       method: msg.method || "GET",
       credentials: "include",
@@ -193,11 +280,7 @@ async function handleFetch(msg) {
       // that silently pins pre-reset values when claude.ai resets a
       // usage window earlier than the cached resets_at claimed.
       cache: "no-store",
-      // Only pass user-declared headers. The browser refuses to set
-      // forbidden headers (Cookie, Host, Origin, Referer, ...); we
-      // rely on credentials:"include" and the browser's own defaults
-      // to get auth + a realistic UA.
-      headers: msg.headers || {},
+      headers,
     };
     if (msg.body) {
       init.body = fromBase64(msg.body);

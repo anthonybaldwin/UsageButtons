@@ -28,6 +28,11 @@ var Allowed = []string{
 	"minimax.io",
 	"minimaxi.com",
 	"mistral.ai",
+	// deepseek.com covers platform.deepseek.com (web-token bridge for
+	// usage/cost + usage/amount endpoints — Authorization Bearer token
+	// is read from localStorage["userToken"] in the platform tab by the
+	// extension's service worker; see chrome-extension/service-worker.js).
+	"deepseek.com",
 }
 
 // IsAllowed reports whether host is covered by the allowlist. A host

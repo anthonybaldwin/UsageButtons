@@ -85,6 +85,7 @@ UsageButtons/
 │   │   ├── mistral/                      # Mistral (browser)
 │   │   ├── moonshot/                     # Moonshot / Kimi platform (API key)
 │   │   ├── ollama/                       # Ollama (browser)
+│   │   ├── openai/                       # OpenAI org cost API (admin key)
 │   │   ├── openclaw/                     # OpenClaw (self-hosted gateway, WS)
 │   │   ├── opencode/                     # OpenCode (browser)
 │   │   ├── opencodego/                   # OpenCode Go (browser)
@@ -175,8 +176,8 @@ through your real browser session; cookies never leave Chrome.
   `chrome://extensions`, done.
 - **Providers that don't need it keep working unchanged** — Gemini,
   Vertex AI, Copilot, OpenRouter, DeepSeek, Moonshot, Warp, z.ai,
-  Kimi K2, Synthetic, Kilo, Kiro, JetBrains AI, Anthropic, and
-  Antigravity never require the extension.
+  Kimi K2, Synthetic, Kilo, Kiro, JetBrains AI, Anthropic, OpenAI,
+  and Antigravity never require the extension.
 - **Waits patiently on cold start.** Cookie-gated buttons stay in a
   quiet "needs browser extension" state until the extension
   handshakes — so launching Stream Deck before Chrome doesn't

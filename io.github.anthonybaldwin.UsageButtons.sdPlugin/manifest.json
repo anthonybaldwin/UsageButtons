@@ -427,6 +427,22 @@
       ]
     },
     {
+      "UUID": "io.github.anthonybaldwin.UsageButtons.openai",
+      "Name": "OpenAI",
+      "Tooltip": "OpenAI org-level cost (admin API key required) — today, MTD, 30 days.",
+      "Icon": "assets/action-openai",
+      "PropertyInspectorPath": "ui/stat.html",
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "assets/action-openai-key",
+          "ShowTitle": false,
+          "TitleAlignment": "top"
+        }
+      ]
+    },
+    {
       "UUID": "io.github.anthonybaldwin.UsageButtons.openclaw",
       "Name": "OpenClaw",
       "Tooltip": "OpenClaw self-hosted gateway usage stats — input/output/cached/total tokens and cost across daily/weekly/monthly windows.",

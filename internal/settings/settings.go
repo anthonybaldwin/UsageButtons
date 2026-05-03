@@ -128,7 +128,8 @@ type ProviderKeys struct {
 	OpenRouterKey     string `json:"openRouterKey,omitempty"`
 	DeepSeekKey       string `json:"deepSeekKey,omitempty"`
 	MoonshotKey       string `json:"moonshotKey,omitempty"`
-	AnthropicKey string `json:"anthropicKey,omitempty"`
+	AnthropicKey      string `json:"anthropicKey,omitempty"`
+	OpenAIKey         string `json:"openAIKey,omitempty"`
 	WarpKey           string `json:"warpKey,omitempty"`
 	ZaiKey        string `json:"zaiKey,omitempty"`
 	KimiK2Key     string `json:"kimiK2Key,omitempty"`
@@ -610,6 +611,9 @@ func ChangedProviderIDs(prev, next ProviderKeys) []string {
 	}
 	if prev.AnthropicKey != next.AnthropicKey {
 		out = append(out, "anthropic")
+	}
+	if prev.OpenAIKey != next.OpenAIKey {
+		out = append(out, "openai")
 	}
 	if prev.WarpKey != next.WarpKey {
 		out = append(out, "warp")

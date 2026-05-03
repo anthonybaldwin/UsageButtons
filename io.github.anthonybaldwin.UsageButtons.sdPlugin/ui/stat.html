@@ -428,7 +428,16 @@
         <button type="button" class="reveal-btn" data-reveal-target="anthropicKey">Show</button>
       </div>
       <p class="hint">Admin keys only. Personal <code>sk-ant-</code> won't work. Fallback: <code>ANTHROPIC_ADMIN_API_KEY</code>.</p>
-    </div>
+    </div>    </div>
+
+    <!-- OpenAI auth -->
+    <div id="authConfig-openai" class="auth-config" style="display:none">
+      <label for="openaiKey">OpenAI admin API key</label>
+      <div class="key-row">
+        <input id="openaiKey" type="password" autocomplete="off" placeholder="sk-admin-…" data-provider-key="openAIKey">
+        <button type="button" class="reveal-btn" data-reveal-target="openaiKey">Show</button>
+      </div>
+      <p class="hint">Admin keys only. Personal <code>sk-</code> won't work. Fallback: <code>OPENAI_ADMIN_API_KEY</code>.</p>
 
     <!-- DeepSeek auth -->
     <div id="authConfig-deepseek" class="auth-config" style="display:none">
@@ -1085,6 +1094,11 @@
         ["cost-mtd",   "Org spend MTD ($)",       "dollar-m"],
         ["cost-30d",   "Org spend last 30d ($)",  "dollar-m"],
       ],
+      openai: [
+        ["cost-today", "Org spend today ($)",     "dollar-m"],
+        ["cost-mtd",   "Org spend MTD ($)",       "dollar-m"],
+        ["cost-30d",   "Org spend last 30d ($)",  "dollar-m"],
+      ],
       moonshot: [
         ["balance", "Available balance ($)", "ref-dollar"],
         ["voucher", "Voucher balance ($)",   "ref-dollar"],
@@ -1249,6 +1263,7 @@
       deepseek:   "#4d6bfe",
       moonshot:   "#0a84ff",
       anthropic: "#cc7c5e",
+      openai:    "#10a37f",
       perplexity: "#20b2aa",
       grok:       "#ffffff",
       nousresearch: "#2563eb",
@@ -1289,6 +1304,7 @@
       deepseek:   "#0a1330",
       moonshot:   "#0c0d20",
       anthropic: "#0a0807",
+      openai:    "#06180f",
       perplexity: "#082423",
       grok:       "#000000",
       nousresearch: "#0c1a33",
@@ -1307,12 +1323,13 @@
     };
 
     // Providers that have auth config panels
-    const AUTH_PROVIDERS = ["claude", "anthropic", "codex", "copilot", "cursor", "deepseek", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "hermes-agent", "ollama", "openclaw", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "moonshot", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
+    const AUTH_PROVIDERS = ["claude", "anthropic", "codex", "openai", "copilot", "cursor", "deepseek", "factory", "gemini", "vertexai", "abacus", "alibaba", "antigravity", "augment", "amp", "grok", "nousresearch", "hermes-agent", "ollama", "openclaw", "opencode", "opencodego", "openrouter", "perplexity", "warp", "zai", "kimi", "minimax", "moonshot", "kimi-k2", "jetbrains", "kilo", "kiro", "mistral", "synthetic"];
 
     // Display name shown on the per-provider tab.
     const PROVIDER_DISPLAY_NAMES = {
       claude:     "Clawd",
       anthropic: "Anthropic",
+      openai:    "OpenAI",
       codex:      "Codex",
       copilot:    "Copilot",
       cursor:     "Cursor",
